@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <circle cx="32" cy="32" r="30" fill="#2D323B"/>
+  <circle cx="32" cy="32" r="30" fill="none" stroke="#F0A82E" stroke-width="3"/>
+  <path d="M32 14 L46 22 V40 L32 50 L18 40 V22 Z" fill="none" stroke="#AEB4BB" stroke-width="2.5"/>
+  <text x="32" y="38" font-family="Arial, Helvetica, sans-serif" font-size="20" font-weight="700" fill="#F0A82E" text-anchor="middle">JAG</text>
+</svg>

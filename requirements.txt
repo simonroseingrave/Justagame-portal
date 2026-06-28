@@ -1,0 +1,8 @@
+# No third-party packages are required to run this app -- it only uses
+# the Python 3 standard library (sqlite3, wsgiref, http.cookies, hashlib).
+#
+# Optional, for production deployment only (recommended on a real host so
+# you get a multi-threaded, production-grade server instead of the basic
+# dev server built into app.py):
+#
+# gunicorn
