@@ -51,7 +51,9 @@ I'll give you the persistent-disk config for `render.yaml`.
 4. Fill in:
    - **Name:** `justagame-portal` (or whatever you like — this becomes part of your `.onrender.com` URL)
    - **Language/Runtime:** Python 3
-   - **Build Command:** *(leave blank — there's nothing to install)*
+   - **Build Command:** `pip install -r requirements.txt` (Render requires
+     something here even though this app has no real dependencies — this
+     is safe, pip just finds nothing to install and exits immediately)
    - **Start Command:** `python3 app.py`
    - **Instance Type:** Free
 5. Click **Create Web Service**. First deploy takes a couple of minutes.
@@ -62,10 +64,9 @@ I'll give you the persistent-disk config for `render.yaml`.
 ## Step 3 — Change the demo coach password
 
 The seeded demo coach login (`coach@justagame.co.nz` / `CoachDemo123!`)
-will work on the live site too. Log in and, for now, just use "Add
-Participant" to set up real athletes — there's no in-app password
-change yet, so treat the live URL as not-quite-public until you're
-ready (or tell me and I'll add a "change my password" page).
+will work on the live site too. Log in, click **Change password** in the
+top bar, and set a real password before sharing the link with anyone.
+Do this first — treat the live URL as not-quite-public until you have.
 
 ## Later: adding a persistent disk (removes the data-wipe risk)
 

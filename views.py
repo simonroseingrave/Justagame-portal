@@ -5,7 +5,20 @@ placed in markup to avoid HTML/script injection.
 """
 from html import escape as esc
 
-from constants import CATEGORIES, CATEGORY_ICONS, CATEGORY_BLURBS, get_level_info
+from constants import (
+    CATEGORIES,
+    CATEGORY_ICONS,
+    CATEGORY_BLURBS,
+    get_level_info,
+    ordered_categories,
+)
+
+
+def category_datalist(categories, list_id="category-suggestions"):
+    """A <datalist> of category suggestions for a text input, so coaches can
+    pick an existing category or just type a brand-new one."""
+    options = "".join(f"<option value=\"{esc(c)}\"></option>" for c in categories)
+    return f'<datalist id="{list_id}">{options}</datalist>'
 
 
 def layout(title, body, user=None, flash=None, active_nav=None):
@@ -15,6 +28,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             links = [
                 ("/coach", "Dashboard", "dashboard"),
                 ("/coach/participants/new", "Add Participant", "new_participant"),
+                ("/coach/achievements", "Achievements", "achievements"),
             ]
         else:
             links = [("/dashboard", "My Portal", "dashboard")]
@@ -32,6 +46,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             <nav class="nav">{nav_items}</nav>
             <div class="user-pill">
               <span>{esc(user['name'])}</span>
+              <a href="/account/password" class="btn btn-ghost btn-sm">Change password</a>
               <a href="/logout" class="btn btn-ghost btn-sm">Log out</a>
             </div>
           </div>
@@ -145,7 +160,7 @@ def participant_dashboard(user, activities, awards, all_achievements, total_poin
         by_category.setdefault(ach["category"], []).append(ach)
 
     category_sections = []
-    for cat in CATEGORIES + ["Milestone"]:
+    for cat in ordered_categories(by_category.keys()):
         items = by_category.get(cat, [])
         if not items:
             continue
@@ -292,7 +307,8 @@ def new_participant_form(user, error=None):
     return layout("Add Participant", body, user=user, active_nav="new_participant")
 
 
-def coach_participant_detail(coach, participant, activities, awards, all_achievements, total_points, message=None):
+def coach_participant_detail(coach, participant, activities, awards, all_achievements, total_points,
+                              available_categories=None, message=None):
     level_info = get_level_info(total_points)
     earned_ids = {a["achievement_id"]: a["date_awarded"] for a in awards}
 
@@ -300,7 +316,7 @@ def coach_participant_detail(coach, participant, activities, awards, all_achieve
         f'<option value="{a["id"]}">{esc(a["name"])} ({esc(a["category"])}, +{a["points_value"]} pts)</option>'
         for a in all_achievements if a["id"] not in earned_ids
     )
-    category_options = "".join(f'<option value="{esc(c)}">{esc(c)}</option>' for c in CATEGORIES)
+    category_suggestions = category_datalist(available_categories or CATEGORIES)
 
     activity_rows = "".join(
         f"""<tr>
@@ -345,7 +361,8 @@ def coach_participant_detail(coach, participant, activities, awards, all_achieve
           <label>Session title</label>
           <input type="text" name="title" placeholder="e.g. Week 6 - Adaptability Programme Session" required />
           <label>Focus area</label>
-          <select name="category">{category_options}</select>
+          <input type="text" name="category" list="category-suggestions" placeholder="e.g. Physical Capability" />
+          {category_suggestions}
           <label>Coach notes</label>
           <textarea name="notes" rows="3" placeholder="What did they work on / show?"></textarea>
           <label>Points</label>
@@ -383,3 +400,106 @@ def coach_participant_detail(coach, participant, activities, awards, all_achieve
 def simple_message_page(title, message, user=None):
     body = f'<div class="card"><p>{esc(message)}</p></div>'
     return layout(title, body, user=user)
+
+
+def change_password_page(user, error=None, success=None):
+    error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
+    success_html = f'<div class="flash">{esc(success)}</div>' if success else ""
+    body = f"""
+    <div class="page-head"><h1>Change Password</h1></div>
+    {error_html}
+    {success_html}
+    <div class="card form-card" style="max-width:420px">
+      <form method="post" action="/account/password">
+        <label for="current_password">Current password</label>
+        <input type="password" id="current_password" name="current_password" required autofocus />
+        <label for="new_password">New password</label>
+        <input type="password" id="new_password" name="new_password" required minlength="8" />
+        <label for="confirm_password">Confirm new password</label>
+        <input type="password" id="confirm_password" name="confirm_password" required minlength="8" />
+        <button type="submit" class="btn btn-primary btn-block">Update Password</button>
+      </form>
+    </div>
+    """
+    return layout("Change Password", body, user=user, active_nav=None)
+
+
+def coach_achievements_list(coach, achievements_by_category, award_counts, message=None):
+    message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
+    sections = []
+    for cat, items in achievements_by_category:
+        icon = CATEGORY_ICONS.get(cat, "⭐")
+        rows = "".join(f"""
+        <tr>
+          <td>{esc(a['name'])}</td>
+          <td>{esc(a['description'] or '')}</td>
+          <td>+{a['points_value']} pts</td>
+          <td>{award_counts.get(a['id'], 0)}</td>
+          <td>
+            <a class="btn btn-sm btn-secondary" href="/coach/achievements/{a['id']}/edit">Edit</a>
+            <form method="post" action="/coach/achievements/{a['id']}/delete" style="display:inline"
+                  onsubmit="return confirm('Delete this achievement?');">
+              <button type="submit" class="btn btn-sm btn-ghost">Delete</button>
+            </form>
+          </td>
+        </tr>
+        """ for a in items)
+        sections.append(f"""
+        <section class="category-block">
+          <div class="category-head">
+            <span class="cat-icon">{icon}</span>
+            <div><h3>{esc(cat)}</h3></div>
+          </div>
+          <div class="card">
+            <table class="table">
+              <thead><tr><th>Name</th><th>Description</th><th>Points</th><th>Awarded to</th><th></th></tr></thead>
+              <tbody>{rows}</tbody>
+            </table>
+          </div>
+        </section>
+        """)
+
+    body = f"""
+    <div class="page-head">
+      <div>
+        <h1>Achievements</h1>
+        <p class="muted">Add, edit or retire badges and categories &mdash; changes appear for every participant immediately.</p>
+      </div>
+      <a class="btn btn-primary" href="/coach/achievements/new">+ Add Achievement</a>
+    </div>
+    {message_html}
+    {''.join(sections) or '<p class="muted">No achievements yet.</p>'}
+    """
+    return layout("Achievements", body, user=coach, active_nav="achievements")
+
+
+def achievement_form(coach, available_categories, achievement=None, error=None):
+    is_edit = achievement is not None
+    action = f"/coach/achievements/{achievement['id']}/edit" if is_edit else "/coach/achievements/new"
+    name = esc(achievement["name"]) if is_edit else ""
+    category = esc(achievement["category"]) if is_edit else ""
+    description = esc(achievement["description"] or "") if is_edit else ""
+    points = achievement["points_value"] if is_edit else 25
+    error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
+    suggestions = category_datalist(available_categories)
+
+    body = f"""
+    <div class="page-head"><h1>{"Edit" if is_edit else "Add"} Achievement</h1></div>
+    {error_html}
+    <div class="card form-card" style="max-width:520px">
+      <form method="post" action="{action}">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" value="{name}" required />
+        <label for="category">Category</label>
+        <input type="text" id="category" name="category" list="category-suggestions" value="{category}"
+               placeholder="Pick an existing one or type a new category" required />
+        {suggestions}
+        <label for="description">Description</label>
+        <textarea id="description" name="description" rows="3">{description}</textarea>
+        <label for="points_value">Points value</label>
+        <input type="number" id="points_value" name="points_value" value="{points}" min="0" max="500" required />
+        <button type="submit" class="btn btn-primary">{"Save Changes" if is_edit else "Create Achievement"}</button>
+      </form>
+    </div>
+    """
+    return layout(("Edit" if is_edit else "Add") + " Achievement", body, user=coach, active_nav="achievements")

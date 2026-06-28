@@ -233,3 +233,52 @@ def seed_demo_data():
         return True
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------- achievement CRUD
+# Supports the in-app "Manage Achievements" coach page, so categories,
+# badges and point values can be changed any time without editing code.
+
+
+def distinct_achievement_categories(conn):
+    rows = conn.execute(
+        "SELECT DISTINCT category FROM achievements WHERE category IS NOT NULL AND category != ''"
+    ).fetchall()
+    return [r["category"] for r in rows]
+
+
+def award_counts_by_achievement(conn):
+    rows = conn.execute(
+        "SELECT achievement_id, COUNT(*) AS c FROM awards GROUP BY achievement_id"
+    ).fetchall()
+    return {r["achievement_id"]: r["c"] for r in rows}
+
+
+def create_achievement(conn, name, category, description, points_value):
+    cur = conn.execute(
+        "INSERT INTO achievements (name, category, description, points_value) VALUES (?, ?, ?, ?)",
+        (name, category, description, points_value),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def update_achievement(conn, achievement_id, name, category, description, points_value):
+    conn.execute(
+        "UPDATE achievements SET name = ?, category = ?, description = ?, points_value = ? WHERE id = ?",
+        (name, category, description, points_value, achievement_id),
+    )
+    conn.commit()
+
+
+def delete_achievement(conn, achievement_id):
+    conn.execute("DELETE FROM achievements WHERE id = ?", (achievement_id,))
+    conn.commit()
+
+
+def update_password(conn, user_id, new_password):
+    conn.execute(
+        "UPDATE users SET password_hash = ? WHERE id = ?",
+        (hash_password(new_password), user_id),
+    )
+    conn.commit()

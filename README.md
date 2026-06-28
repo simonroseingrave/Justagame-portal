@@ -12,9 +12,11 @@ it easy to run almost anywhere Python 3 is available.
 
 - Coach login → dashboard listing every participant, with points, level, badge and session counts.
 - "Add Participant" form to create new athlete logins.
-- Per-participant page to log activity sessions (date, focus area, coach notes, points) and award badges.
+- Per-participant page to log activity sessions (date, focus area, coach notes, points) and award badges. Focus area is free text with autocomplete suggestions, so a coach can type a brand-new category any time — no code changes needed.
+- "Achievements" admin page (coach nav bar) to add, edit, or delete badges/categories at any time — points values, descriptions and categories are all editable in the UI. A badge can't be deleted once it's been awarded to someone, to protect already-earned points.
+- "Change password" page (top bar, any logged-in user) to set a new password in-app — no email/reset-link flow needed.
 - Participant login → personal dashboard: total points, level progress bar, badges earned by category, and a full activity log.
-- 15 pre-built achievement badges across the four pillars from Just A Game's coaching philosophy (Physical Capability, Game Understanding, Skill Adaptability, Confidence & Resilience), plus 3 milestone badges.
+- 15 pre-built achievement badges across the four pillars from Just A Game's coaching philosophy (Physical Capability, Game Understanding, Skill Adaptability, Confidence & Resilience), plus 3 milestone badges — all editable/extendable via the Achievements admin page.
 - A 5-level points system (Rookie → Elite Adaptor) — thresholds are configurable in `constants.py`.
 - Sample/demo data (1 coach + 3 demo athletes) pre-loaded so you can see it working immediately.
 
@@ -36,8 +38,9 @@ demo data are created automatically on first run.
 | Coach | `coach@justagame.co.nz` | `CoachDemo123!` |
 | Participant | `alex.demo@example.com` | `Athlete123!` |
 
-Change the coach password (and remove/replace the demo participants) before
-giving real people access — see "Going live" below.
+Change the coach password (use the **Change password** link in the top bar
+once logged in) and remove/replace the demo participants before giving real
+people access — see "Going live" below.
 
 ## Project structure
 
@@ -62,15 +65,20 @@ so any future colour tweaks only need changing in one place.
 
 ## Customising it further
 
-1. **Achievement badges** — edit the `achievements` list in `db.py`'s
-   `seed_demo_data()` function, or just award/manage badges as a coach
-   through the UI once it's running (the seed list only runs once, on an
-   empty database).
+1. **Achievement badges & categories** — manage these entirely in the UI
+   now: log in as a coach, open **Achievements** in the top bar, and
+   add/edit/delete badges, point values, descriptions and categories any
+   time. New categories you type there immediately show up as "Focus area"
+   options when logging activity, and as new sections on athletes'
+   dashboards — no code changes needed. (The hardcoded list in `db.py`'s
+   `seed_demo_data()` only matters for the very first run, to seed demo data.)
 2. **Levels & points** — thresholds live in `constants.py` (`LEVELS`).
 3. **Real participants** — once live, log in as the coach and use
    "Add Participant" to create accounts one at a time. There's no bulk
    import yet; if you have a long roster, tell me and I can add a CSV
    import.
+4. **Passwords** — every user (coach or athlete) can change their own
+   password from the **Change password** link in the top bar.
 
 ## Going live on Render
 

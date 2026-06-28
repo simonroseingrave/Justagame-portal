@@ -25,6 +25,30 @@ CATEGORY_ICONS = {
 
 SPORTS = ["Cricket", "Football", "Hockey", "Multi-sport"]
 
+
+def ordered_categories(present):
+    """Display order for a set of category names actually in use: the four
+    known coaching pillars first (in their usual order), then any custom
+    categories a coach has added (alphabetically), then "Milestone" last.
+
+    This lets coaches add brand-new categories (via the achievements admin
+    page) without editing code -- new ones just show up, in a sensible
+    place, with a default icon/blurb (see views.py)."""
+    present = set(present)
+    ordered = [c for c in CATEGORIES if c in present]
+    extra = sorted(c for c in present if c not in CATEGORIES and c != "Milestone")
+    ordered.extend(extra)
+    if "Milestone" in present:
+        ordered.append("Milestone")
+    return ordered
+
+
+def all_known_categories(extra=()):
+    """CATEGORIES plus any extra category names (e.g. from the database),
+    de-duplicated, in display order. Used to populate the category
+    suggestion list on the achievement/activity forms."""
+    return ordered_categories(set(CATEGORIES) | set(extra) | {"Milestone"})
+
 # Points thresholds -> level name. Must stay sorted ascending by points.
 LEVELS = [
     (0, "Rookie"),

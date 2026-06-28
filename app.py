@@ -13,6 +13,7 @@ See README.md for deployment options and customisation notes.
 import os
 import sys
 import datetime
+from wsgiref.simple_server import WSGIRequestHandler
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -20,6 +21,7 @@ from core import Router, Response, App, redirect
 from urllib.parse import urlencode
 import db
 from auth import verify_password, hash_password, new_session_token
+from constants import all_known_categories
 import views
 
 router = Router()
@@ -230,9 +232,11 @@ def coach_participant_detail(req, participant_id):
             return Response(views.simple_message_page("Not found", "Participant not found.", user=coach), status=404)
         activities, awards, achievements, total_points = participant_summary(conn, participant_id)
         message = req.get_query("flash")
+        available_categories = all_known_categories(db.distinct_achievement_categories(conn))
         return Response(views.coach_participant_detail(
             coach, dict(participant), [dict(a) for a in activities], [dict(a) for a in awards],
-            [dict(a) for a in achievements], total_points, message=message,
+            [dict(a) for a in achievements], total_points,
+            available_categories=available_categories, message=message,
         ))
     finally:
         conn.close()
@@ -294,9 +298,189 @@ def award_badge(req, participant_id):
     return flash_redirect(f"/coach/participants/{participant_id}", "Badge awarded!")
 
 
+# --------------------------------------------------------------- account / auth
+
+
+@router.get("/account/password")
+def change_password_get(req):
+    user = get_current_user(req)
+    if not user:
+        return redirect("/login")
+    return Response(views.change_password_page(user))
+
+
+@router.post("/account/password")
+def change_password_post(req):
+    user = get_current_user(req)
+    if not user:
+        return redirect("/login")
+
+    current_password = req.form_get("current_password")
+    new_password = req.form_get("new_password")
+    confirm_password = req.form_get("confirm_password")
+
+    conn = db.get_conn()
+    try:
+        row = conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
+        if not row or not verify_password(current_password, row["password_hash"]):
+            return Response(views.change_password_page(user, error="Current password is incorrect."), status=400)
+        if not new_password or len(new_password) < 8:
+            return Response(views.change_password_page(user, error="New password must be at least 8 characters."), status=400)
+        if new_password != confirm_password:
+            return Response(views.change_password_page(user, error="New password and confirmation don't match."), status=400)
+
+        db.update_password(conn, user["id"], new_password)
+        return Response(views.change_password_page(user, success="Password updated."))
+    finally:
+        conn.close()
+
+
+# ----------------------------------------------------------- achievement admin
+
+
+@router.get("/coach/achievements")
+def achievements_list(req):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        achievements = [dict(a) for a in conn.execute(
+            "SELECT * FROM achievements ORDER BY category, name"
+        ).fetchall()]
+        award_counts = db.award_counts_by_achievement(conn)
+        categories = all_known_categories(db.distinct_achievement_categories(conn))
+        by_category = []
+        for cat in categories:
+            items = [a for a in achievements if a["category"] == cat]
+            if items:
+                by_category.append((cat, items))
+        message = req.get_query("flash")
+        return Response(views.coach_achievements_list(coach, by_category, award_counts, message=message))
+    finally:
+        conn.close()
+
+
+@router.get("/coach/achievements/new")
+def achievement_new_get(req):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        categories = all_known_categories(db.distinct_achievement_categories(conn))
+        return Response(views.achievement_form(coach, categories))
+    finally:
+        conn.close()
+
+
+@router.post("/coach/achievements/new")
+def achievement_new_post(req):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    name = req.form_get("name").strip()
+    category = req.form_get("category").strip()
+    description = req.form_get("description").strip()
+    try:
+        points_value = int(req.form_get("points_value") or 25)
+    except ValueError:
+        points_value = 25
+
+    conn = db.get_conn()
+    try:
+        categories = all_known_categories(db.distinct_achievement_categories(conn))
+        if not name or not category:
+            return Response(views.achievement_form(coach, categories, error="Name and category are required."), status=400)
+        db.create_achievement(conn, name, category, description, points_value)
+        return flash_redirect("/coach/achievements", f"Added achievement: {name}")
+    finally:
+        conn.close()
+
+
+@router.get("/coach/achievements/<int:achievement_id>/edit")
+def achievement_edit_get(req, achievement_id):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        achievement = conn.execute("SELECT * FROM achievements WHERE id = ?", (achievement_id,)).fetchone()
+        if not achievement:
+            return Response(views.simple_message_page("Not found", "Achievement not found.", user=coach), status=404)
+        categories = all_known_categories(db.distinct_achievement_categories(conn))
+        return Response(views.achievement_form(coach, categories, achievement=dict(achievement)))
+    finally:
+        conn.close()
+
+
+@router.post("/coach/achievements/<int:achievement_id>/edit")
+def achievement_edit_post(req, achievement_id):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    name = req.form_get("name").strip()
+    category = req.form_get("category").strip()
+    description = req.form_get("description").strip()
+    try:
+        points_value = int(req.form_get("points_value") or 25)
+    except ValueError:
+        points_value = 25
+
+    conn = db.get_conn()
+    try:
+        achievement = conn.execute("SELECT * FROM achievements WHERE id = ?", (achievement_id,)).fetchone()
+        if not achievement:
+            return Response(views.simple_message_page("Not found", "Achievement not found.", user=coach), status=404)
+        categories = all_known_categories(db.distinct_achievement_categories(conn))
+        if not name or not category:
+            return Response(
+                views.achievement_form(coach, categories, achievement=dict(achievement), error="Name and category are required."),
+                status=400,
+            )
+        db.update_achievement(conn, achievement_id, name, category, description, points_value)
+        return flash_redirect("/coach/achievements", f"Updated achievement: {name}")
+    finally:
+        conn.close()
+
+
+@router.post("/coach/achievements/<int:achievement_id>/delete")
+def achievement_delete_post(req, achievement_id):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        awarded = conn.execute(
+            "SELECT COUNT(*) AS c FROM awards WHERE achievement_id = ?", (achievement_id,)
+        ).fetchone()["c"]
+        if awarded:
+            return flash_redirect(
+                "/coach/achievements",
+                "Can't delete - this badge has already been awarded to one or more athletes.",
+            )
+        db.delete_achievement(conn, achievement_id)
+        return flash_redirect("/coach/achievements", "Achievement deleted.")
+    finally:
+        conn.close()
+
+
 # ------------------------------------------------------------------- bootstrap
 
 application = App(router, STATIC_DIR)
+
+
+class _FastRequestHandler(WSGIRequestHandler):
+    """Skip the reverse-DNS lookup wsgiref normally does on every request.
+
+    On cloud hosts (Render, Railway, etc.) that lookup has no PTR record to
+    resolve and can hang for a long time - and since this dev server is
+    single-threaded, one hung lookup blocks every other request behind it,
+    which looks exactly like the whole app being stuck loading.
+    """
+
+    def address_string(self):
+        return self.client_address[0]
 
 
 def main():
@@ -310,7 +494,7 @@ def main():
     port = int(os.environ.get("PORT", 8000))
     host = os.environ.get("HOST", "0.0.0.0")
     print(f"Just A Game Portal running at http://localhost:{port}  (Ctrl+C to stop)")
-    with make_server(host, port, application) as httpd:
+    with make_server(host, port, application, handler_class=_FastRequestHandler) as httpd:
         httpd.serve_forever()
 
 
