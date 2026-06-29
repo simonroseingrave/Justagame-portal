@@ -278,3 +278,45 @@ def update_password(conn, user_id, new_password):
         (hash_password(new_password), user_id),
     )
     conn.commit()
+
+
+def maybe_reset_coach_password():
+    """Recovery hatch for a forgotten coach password on a host (like
+    Render's free tier) with no shell access. If the RESET_COACH_PASSWORD
+    environment variable is set at startup, update the matching coach
+    account's password to that value and clear their existing sessions.
+    Matches on the COACH_EMAIL env var if set, otherwise the first coach
+    account found (there is normally only one). Touches nothing else --
+    no activities, Measurement Games results, or other accounts.
+
+    To use: set RESET_COACH_PASSWORD (and COACH_EMAIL, if you have more
+    than one coach account) in your host's environment variables and
+    redeploy/restart. Once you've confirmed you can log in with the new
+    password, remove the RESET_COACH_PASSWORD variable -- it would
+    otherwise re-apply on every restart.
+    """
+    new_password = os.environ.get("RESET_COACH_PASSWORD")
+    if not new_password:
+        return
+    email = os.environ.get("COACH_EMAIL")
+    conn = get_conn()
+    try:
+        if email:
+            row = conn.execute(
+                "SELECT id, email FROM users WHERE role = 'coach' AND lower(email) = ?",
+                (email.strip().lower(),),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT id, email FROM users WHERE role = 'coach' ORDER BY id LIMIT 1"
+            ).fetchone()
+        if not row:
+            print("RESET_COACH_PASSWORD is set, but no matching coach account was found -- nothing changed.", flush=True)
+            return
+        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(new_password), row["id"]))
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (row["id"],))
+        conn.commit()
+        print(f"RESET_COACH_PASSWORD: password updated for {row['email']}. "
+              f"Log in with the new password, then remove the RESET_COACH_PASSWORD env var.", flush=True)
+    finally:
+        conn.close()

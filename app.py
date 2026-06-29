@@ -380,6 +380,7 @@ def main():
     seeded = db.seed_demo_data()
     if seeded:
         print("Seeded demo data (coach + 3 demo participants). See README.md for credentials.")
+    db.maybe_reset_coach_password()
 
     port = int(os.environ.get("PORT", 8000))
     host = os.environ.get("HOST", "0.0.0.0")
