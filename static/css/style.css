@@ -1,4 +1,4 @@
-/* Just A Game - Activity & Achievement Portal
+/* Just A Game - Athlete Adaptability Tracking
    ---------------------------------------------------------------
    Swap the values below for your real brand colours/fonts - every
    colour in this file is a CSS variable defined here in one place. */
@@ -159,24 +159,36 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
 .progress-bar { background: linear-gradient(90deg, var(--jag-green), var(--jag-green-dark)); height: 100%; border-radius: 999px; transition: width 0.3s; }
 .progress-label { font-size: 13px; color: var(--jag-muted); margin-top: 6px; }
 
-/* ---- Achievements ---- */
-.category-block { margin-bottom: 26px; }
-.category-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-.category-head h3 { margin: 0; font-size: 16px; }
-.category-head .muted { font-size: 13px; }
-.cat-icon { font-size: 24px; }
-.cat-count { margin-left: auto; font-weight: 700; color: var(--jag-navy); background: var(--jag-border); padding: 4px 10px; border-radius: 999px; font-size: 13px; }
-.badge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
-.badge-card { display: flex; gap: 12px; align-items: flex-start; background: #fff; border: 1px solid var(--jag-border); border-radius: var(--radius); padding: 14px; }
-.badge-card.earned { border-color: var(--jag-green); background: #FFF8EB; }
-.badge-card.locked { opacity: 0.6; }
-.badge-icon { font-size: 22px; line-height: 1; }
-.badge-name { font-weight: 700; font-size: 14px; }
-.badge-desc { font-size: 13px; color: var(--jag-muted); margin: 4px 0; }
-.badge-meta { font-size: 12px; display: flex; gap: 10px; align-items: center; }
-.badge-meta .pts { font-weight: 700; color: var(--jag-green-dark); }
-.badge-date { color: var(--jag-muted); }
-.badge-locked-tag { color: var(--jag-muted); }
+/* ---- Measurement Games (entry form) ---- */
+.mg-section h4 {
+  margin: 22px 0 10px;
+  font-size: 13px;
+  color: var(--jag-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.mg-section:first-of-type h4 { margin-top: 18px; }
+.mg-game {
+  border: 1px solid var(--jag-border);
+  border-radius: var(--radius);
+  padding: 12px 16px 16px;
+  margin-bottom: 14px;
+}
+.mg-game legend { font-weight: 700; font-size: 14px; padding: 0 4px; }
+.mg-field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-top: 6px; }
+.mg-field label { font-size: 12px; margin: 0 0 4px; font-weight: 600; }
+.mg-field input { padding: 8px 10px; }
+
+/* ---- Measurement Games (results history) ---- */
+.mg-session-card { margin-bottom: 14px; }
+.mg-session-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.mg-result-game { margin-bottom: 10px; }
+.mg-result-game:last-child { margin-bottom: 0; }
+.mg-result-game-name { font-weight: 700; font-size: 13px; margin-bottom: 6px; }
+.mg-result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.mg-result { background: var(--jag-bg); border-radius: 8px; padding: 6px 10px; font-size: 13px; display: flex; justify-content: space-between; gap: 8px; }
+.mg-result-label { color: var(--jag-muted); }
+.mg-result-value { font-weight: 700; color: var(--jag-navy); }
 
 /* ---- Tables ---- */
 .table { width: 100%; border-collapse: collapse; font-size: 14px; }

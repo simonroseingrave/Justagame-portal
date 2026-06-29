@@ -6,11 +6,11 @@ placed in markup to avoid HTML/script injection.
 from html import escape as esc
 
 from constants import (
+    APP_NAME,
     CATEGORIES,
-    CATEGORY_ICONS,
-    CATEGORY_BLURBS,
+    MEASUREMENT_GAMES,
+    all_measurement_games,
     get_level_info,
-    ordered_categories,
 )
 
 
@@ -28,10 +28,9 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             links = [
                 ("/coach", "Dashboard", "dashboard"),
                 ("/coach/participants/new", "Add Participant", "new_participant"),
-                ("/coach/achievements", "Achievements", "achievements"),
             ]
         else:
-            links = [("/dashboard", "My Portal", "dashboard")]
+            links = [("/dashboard", "My Dashboard", "dashboard")]
         nav_items = "".join(
             f'<a class="nav-link{" active" if active_nav == key else ""}" href="{href}">{label}</a>'
             for href, label, key in links
@@ -41,7 +40,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
           <div class="topbar-inner">
             <a class="brand" href="/">
               <img src="/static/img/logo.png" alt="Just A Game" class="brand-logo" />
-              <span>Just A Game <small>Portal</small></span>
+              <span>Just A Game <small>{APP_NAME}</small></span>
             </a>
             <nav class="nav">{nav_items}</nav>
             <div class="user-pill">
@@ -53,12 +52,12 @@ def layout(title, body, user=None, flash=None, active_nav=None):
         </header>
         """
     else:
-        nav = """
+        nav = f"""
         <header class="topbar">
           <div class="topbar-inner">
             <a class="brand" href="/">
               <img src="/static/img/logo.png" alt="Just A Game" class="brand-logo" />
-              <span>Just A Game <small>Portal</small></span>
+              <span>Just A Game <small>{APP_NAME}</small></span>
             </a>
           </div>
         </header>
@@ -71,7 +70,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{esc(title)} - Just A Game Portal</title>
+  <title>{esc(title)} - {APP_NAME}</title>
   <link rel="stylesheet" href="/static/css/style.css" />
 </head>
 <body>
@@ -81,7 +80,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
     {body}
   </main>
   <footer class="footer">
-    <p>Just A Game &middot; Activity &amp; Achievement Portal &middot; <a href="https://www.justagame.co.nz" target="_blank" rel="noopener">justagame.co.nz</a></p>
+    <p>Just A Game &middot; {APP_NAME} &middot; <a href="https://www.justagame.co.nz" target="_blank" rel="noopener">justagame.co.nz</a></p>
   </footer>
 </body>
 </html>"""
@@ -93,7 +92,7 @@ def login_page(error=None, prefill_email=""):
     <div class="login-wrap">
       <div class="card login-card">
         <img src="/static/img/logo.png" alt="Just A Game" class="login-logo" />
-        <h1>Activity &amp; Achievement Portal</h1>
+        <h1>{APP_NAME}</h1>
         <p class="muted">Log in to view your progress, or manage athletes as a coach.</p>
         {error_html}
         <form method="post" action="/login">
@@ -124,67 +123,128 @@ def progress_bar(fraction, label=""):
     """
 
 
-TROPHY_ICON = "\U0001F3C6"
-LOCK_ICON = "\U0001F512"
-
-
-def badge_card(name, description, points, earned, date_awarded=None):
-    cls = "badge-card earned" if earned else "badge-card locked"
-    icon = TROPHY_ICON if earned else LOCK_ICON
-    sub = f'<span class="badge-date">Earned {esc(date_awarded)}</span>' if earned and date_awarded else (
-        '<span class="badge-locked-tag">Not yet earned</span>' if not earned else ""
-    )
+def _measurement_field_input(game_key, field):
+    """One labelled number input for a single Measurement Games field."""
+    ftype = field["type"]
+    step = "0.01" if ftype == "time" else "1"
+    suffix = " (seconds)" if ftype == "time" else (f" ({field['unit']})" if field.get("unit") else "")
+    input_name = f"mg__{game_key}__{field['key']}"
     return f"""
-    <div class="{cls}">
-      <div class="badge-icon">{icon}</div>
-      <div class="badge-body">
-        <div class="badge-name">{esc(name)}</div>
-        <div class="badge-desc">{esc(description)}</div>
-        <div class="badge-meta"><span class="pts">+{points} pts</span>{sub}</div>
-      </div>
+    <div class="mg-field">
+      <label for="{input_name}">{esc(field['label'])}{esc(suffix)}</label>
+      <input type="number" step="{step}" min="0" id="{input_name}" name="{input_name}" />
     </div>
     """
 
 
-def participant_dashboard(user, activities, awards, all_achievements, total_points):
+def _measurement_game_fieldset(game):
+    fields_html = "".join(_measurement_field_input(game["key"], f) for f in game["fields"])
+    return f"""
+    <fieldset class="mg-game">
+      <legend>{esc(game['name'])}</legend>
+      <div class="mg-field-grid">{fields_html}</div>
+    </fieldset>
+    """
+
+
+def measurement_games_form(participant_id):
+    """The coach-facing entry form for recording a Measurement Games test
+    session -- one date, with a fieldset per game grouped under each
+    section. Coaches can leave any game blank if it wasn't tested that
+    day; only filled-in fields get saved (see app.py)."""
+    sections_html = "".join(f"""
+    <div class="mg-section">
+      <h4>{esc(section['section'])}</h4>
+      {''.join(_measurement_game_fieldset(g) for g in section['games'])}
+    </div>
+    """ for section in MEASUREMENT_GAMES)
+
+    return f"""
+    <div class="card form-card">
+      <h3>Record Measurement Games</h3>
+      <p class="muted">Fill in whichever games were tested this session &mdash; leave the rest blank.
+      The Skipping Rope Sprint average is calculated automatically from Time 1/2/3.</p>
+      <form method="post" action="/coach/participants/{participant_id}/measurement">
+        <label for="mg-date">Date</label>
+        <input type="date" id="mg-date" name="date" required />
+        {sections_html}
+        <button type="submit" class="btn btn-primary">Save Results</button>
+      </form>
+    </div>
+    """
+
+
+def _format_measurement_value(field_type, value):
+    if value is None:
+        return "-"
+    text = f"{value:g}"  # strips trailing .0 from whole numbers, keeps decimals otherwise
+    return f"{text}s" if field_type == "time" else text
+
+
+def _measurement_session_card(session, show_delete=False, participant_id=None):
+    by_game = {}
+    for (game_key, field_key), value in session["results"].items():
+        by_game.setdefault(game_key, {})[field_key] = value
+
+    game_blocks = []
+    for game in all_measurement_games():
+        values = by_game.get(game["key"])
+        if not values:
+            continue
+        rows = [
+            (f["label"], _format_measurement_value(f["type"], values.get(f["key"])))
+            for f in game["fields"] if f["key"] in values
+        ]
+        for computed in game.get("computed", []):
+            if computed["key"] in values:
+                rows.append((computed["label"], _format_measurement_value(computed["type"], values[computed["key"]])))
+        rows_html = "".join(
+            f'<div class="mg-result"><span class="mg-result-label">{esc(label)}</span>'
+            f'<span class="mg-result-value">{esc(val)}</span></div>'
+            for label, val in rows
+        )
+        game_blocks.append(f"""
+        <div class="mg-result-game">
+          <div class="mg-result-game-name">{esc(game['name'])}</div>
+          <div class="mg-result-grid">{rows_html}</div>
+        </div>
+        """)
+
+    delete_html = ""
+    if show_delete:
+        delete_html = f"""
+        <form method="post" action="/coach/participants/{participant_id}/measurement/{session['id']}/delete"
+              style="display:inline" onsubmit="return confirm('Delete this Measurement Games session?');">
+          <button type="submit" class="btn btn-ghost btn-sm">Delete</button>
+        </form>
+        """
+
+    return f"""
+    <div class="card mg-session-card">
+      <div class="mg-session-head">
+        <strong>{esc(session['date'])}</strong>
+        {delete_html}
+      </div>
+      {''.join(game_blocks)}
+    </div>
+    """
+
+
+def measurement_games_history(sessions, show_delete=False, participant_id=None):
+    if not sessions:
+        return '<p class="muted">No Measurement Games results recorded yet.</p>'
+    return "".join(
+        _measurement_session_card(s, show_delete=show_delete, participant_id=participant_id)
+        for s in sessions
+    )
+
+
+def participant_dashboard(user, activities, total_points, measurement_sessions):
     level_info = get_level_info(total_points)
     if level_info["next_name"]:
         level_label = f"{level_info['current_name']} &rarr; {level_info['points_to_next']} pts to {level_info['next_name']}"
     else:
         level_label = f"{level_info['current_name']} (top level reached!)"
-
-    # group achievements by category, mark earned ones
-    earned_ids = {a["achievement_id"]: a["date_awarded"] for a in awards}
-    by_category = {}
-    for ach in all_achievements:
-        by_category.setdefault(ach["category"], []).append(ach)
-
-    category_sections = []
-    for cat in ordered_categories(by_category.keys()):
-        items = by_category.get(cat, [])
-        if not items:
-            continue
-        earned_count = sum(1 for a in items if a["id"] in earned_ids)
-        icon = CATEGORY_ICONS.get(cat, "⭐")
-        blurb = CATEGORY_BLURBS.get(cat, "Milestones earned along the way.")
-        cards = "".join(
-            badge_card(a["name"], a["description"], a["points_value"], a["id"] in earned_ids, earned_ids.get(a["id"]))
-            for a in items
-        )
-        cat_title = "Milestones" if cat == "Milestone" else cat
-        category_sections.append(f"""
-        <section class="category-block">
-          <div class="category-head">
-            <span class="cat-icon">{icon}</span>
-            <div>
-              <h3>{esc(cat_title)}</h3>
-              <p class="muted">{esc(blurb)}</p>
-            </div>
-            <div class="cat-count">{earned_count}/{len(items)}</div>
-          </div>
-          <div class="badge-grid">{cards}</div>
-        </section>
-        """)
 
     activity_rows = "".join(
         f"""<tr>
@@ -211,8 +271,8 @@ def participant_dashboard(user, activities, awards, all_achievements, total_poin
         <div class="stat-label">Total Points</div>
       </div>
       <div class="card stat-card">
-        <div class="stat-number">{len(earned_ids)}</div>
-        <div class="stat-label">Badges Earned</div>
+        <div class="stat-number">{len(measurement_sessions)}</div>
+        <div class="stat-label">Test Sessions</div>
       </div>
       <div class="card stat-card">
         <div class="stat-number">{len(activities)}</div>
@@ -225,8 +285,8 @@ def participant_dashboard(user, activities, awards, all_achievements, total_poin
       {progress_bar(level_info['progress'], level_label)}
     </section>
 
-    <h2 class="section-title">Achievements</h2>
-    {''.join(category_sections)}
+    <h2 class="section-title">Measurement Games Results</h2>
+    {measurement_games_history(measurement_sessions)}
 
     <h2 class="section-title">Activity Log</h2>
     <div class="card">
@@ -236,7 +296,7 @@ def participant_dashboard(user, activities, awards, all_achievements, total_poin
       </table>
     </div>
     """
-    return layout("My Portal", body, user=user, active_nav="dashboard")
+    return layout("My Dashboard", body, user=user, active_nav="dashboard")
 
 
 def coach_dashboard(participants):
@@ -250,7 +310,7 @@ def coach_dashboard(participants):
           <td>{esc(p['programme'] or '-')}</td>
           <td>{p['total_points']}</td>
           <td>{esc(level_info['current_name'])}</td>
-          <td>{p['badge_count']}</td>
+          <td>{p['test_count']}</td>
           <td>{p['activity_count']}</td>
           <td><a class="btn btn-sm btn-secondary" href="/coach/participants/{p['id']}">Manage</a></td>
         </tr>
@@ -261,13 +321,13 @@ def coach_dashboard(participants):
     <div class="page-head">
       <div>
         <h1>Coach Dashboard</h1>
-        <p class="muted">Log activity, award achievements and track every athlete's progress.</p>
+        <p class="muted">Log activity, record Measurement Games results and track every athlete's progress.</p>
       </div>
       <a class="btn btn-primary" href="/coach/participants/new">+ Add Participant</a>
     </div>
     <div class="card">
       <table class="table">
-        <thead><tr><th>Name</th><th>Sport</th><th>Programme</th><th>Points</th><th>Level</th><th>Badges</th><th>Sessions</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Sport</th><th>Programme</th><th>Points</th><th>Level</th><th>Tests</th><th>Sessions</th><th></th></tr></thead>
         <tbody>{rows_html}</tbody>
       </table>
     </div>
@@ -307,16 +367,9 @@ def new_participant_form(user, error=None):
     return layout("Add Participant", body, user=user, active_nav="new_participant")
 
 
-def coach_participant_detail(coach, participant, activities, awards, all_achievements, total_points,
-                              available_categories=None, message=None):
+def coach_participant_detail(coach, participant, activities, total_points, measurement_sessions, message=None):
     level_info = get_level_info(total_points)
-    earned_ids = {a["achievement_id"]: a["date_awarded"] for a in awards}
-
-    achievement_options = "".join(
-        f'<option value="{a["id"]}">{esc(a["name"])} ({esc(a["category"])}, +{a["points_value"]} pts)</option>'
-        for a in all_achievements if a["id"] not in earned_ids
-    )
-    category_suggestions = category_datalist(available_categories or CATEGORIES)
+    category_suggestions = category_datalist(CATEGORIES)
 
     activity_rows = "".join(
         f"""<tr>
@@ -328,11 +381,6 @@ def coach_participant_detail(coach, participant, activities, awards, all_achieve
             </tr>"""
         for a in activities
     ) or '<tr><td colspan="5" class="muted">No activity logged yet.</td></tr>'
-
-    earned_badges = "".join(
-        badge_card(a["name"], a["description"], a["points_value"], True, earned_ids.get(a["id"]))
-        for a in all_achievements if a["id"] in earned_ids
-    ) or '<p class="muted">No badges awarded yet.</p>'
 
     message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
 
@@ -348,43 +396,32 @@ def coach_participant_detail(coach, participant, activities, awards, all_achieve
 
     <section class="stat-row">
       <div class="card stat-card"><div class="stat-number">{total_points}</div><div class="stat-label">Total Points</div></div>
-      <div class="card stat-card"><div class="stat-number">{len(earned_ids)}</div><div class="stat-label">Badges Earned</div></div>
+      <div class="card stat-card"><div class="stat-number">{len(measurement_sessions)}</div><div class="stat-label">Test Sessions</div></div>
       <div class="card stat-card"><div class="stat-number">{esc(level_info['current_name'])}</div><div class="stat-label">Current Level</div></div>
     </section>
 
-    <div class="two-col">
-      <div class="card form-card">
-        <h3>Log an Activity</h3>
-        <form method="post" action="/coach/participants/{participant['id']}/activity">
-          <label>Date</label>
-          <input type="date" name="date" required />
-          <label>Session title</label>
-          <input type="text" name="title" placeholder="e.g. Week 6 - Adaptability Programme Session" required />
-          <label>Focus area</label>
-          <input type="text" name="category" list="category-suggestions" placeholder="e.g. Physical Capability" />
-          {category_suggestions}
-          <label>Coach notes</label>
-          <textarea name="notes" rows="3" placeholder="What did they work on / show?"></textarea>
-          <label>Points</label>
-          <input type="number" name="points" value="10" min="0" max="100" />
-          <button type="submit" class="btn btn-primary">Log Activity</button>
-        </form>
-      </div>
-
-      <div class="card form-card">
-        <h3>Award a Badge</h3>
-        <form method="post" action="/coach/participants/{participant['id']}/award">
-          <label>Achievement</label>
-          <select name="achievement_id" required>{achievement_options or '<option value="">All badges already earned</option>'}</select>
-          <label>Date awarded</label>
-          <input type="date" name="date_awarded" required />
-          <button type="submit" class="btn btn-secondary">Award Badge</button>
-        </form>
-      </div>
+    <div class="card form-card">
+      <h3>Log an Activity</h3>
+      <form method="post" action="/coach/participants/{participant['id']}/activity">
+        <label>Date</label>
+        <input type="date" name="date" required />
+        <label>Session title</label>
+        <input type="text" name="title" placeholder="e.g. Week 6 - Adaptability Programme Session" required />
+        <label>Focus area</label>
+        <input type="text" name="category" list="category-suggestions" placeholder="e.g. Physical Capability" />
+        {category_suggestions}
+        <label>Coach notes</label>
+        <textarea name="notes" rows="3" placeholder="What did they work on / show?"></textarea>
+        <label>Points</label>
+        <input type="number" name="points" value="10" min="0" max="100" />
+        <button type="submit" class="btn btn-primary">Log Activity</button>
+      </form>
     </div>
 
-    <h2 class="section-title">Earned Badges</h2>
-    <div class="badge-grid">{earned_badges}</div>
+    {measurement_games_form(participant['id'])}
+
+    <h2 class="section-title">Measurement Games History</h2>
+    {measurement_games_history(measurement_sessions, show_delete=True, participant_id=participant['id'])}
 
     <h2 class="section-title">Activity Log</h2>
     <div class="card">
@@ -424,82 +461,3 @@ def change_password_page(user, error=None, success=None):
     return layout("Change Password", body, user=user, active_nav=None)
 
 
-def coach_achievements_list(coach, achievements_by_category, award_counts, message=None):
-    message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
-    sections = []
-    for cat, items in achievements_by_category:
-        icon = CATEGORY_ICONS.get(cat, "⭐")
-        rows = "".join(f"""
-        <tr>
-          <td>{esc(a['name'])}</td>
-          <td>{esc(a['description'] or '')}</td>
-          <td>+{a['points_value']} pts</td>
-          <td>{award_counts.get(a['id'], 0)}</td>
-          <td>
-            <a class="btn btn-sm btn-secondary" href="/coach/achievements/{a['id']}/edit">Edit</a>
-            <form method="post" action="/coach/achievements/{a['id']}/delete" style="display:inline"
-                  onsubmit="return confirm('Delete this achievement?');">
-              <button type="submit" class="btn btn-sm btn-ghost">Delete</button>
-            </form>
-          </td>
-        </tr>
-        """ for a in items)
-        sections.append(f"""
-        <section class="category-block">
-          <div class="category-head">
-            <span class="cat-icon">{icon}</span>
-            <div><h3>{esc(cat)}</h3></div>
-          </div>
-          <div class="card">
-            <table class="table">
-              <thead><tr><th>Name</th><th>Description</th><th>Points</th><th>Awarded to</th><th></th></tr></thead>
-              <tbody>{rows}</tbody>
-            </table>
-          </div>
-        </section>
-        """)
-
-    body = f"""
-    <div class="page-head">
-      <div>
-        <h1>Achievements</h1>
-        <p class="muted">Add, edit or retire badges and categories &mdash; changes appear for every participant immediately.</p>
-      </div>
-      <a class="btn btn-primary" href="/coach/achievements/new">+ Add Achievement</a>
-    </div>
-    {message_html}
-    {''.join(sections) or '<p class="muted">No achievements yet.</p>'}
-    """
-    return layout("Achievements", body, user=coach, active_nav="achievements")
-
-
-def achievement_form(coach, available_categories, achievement=None, error=None):
-    is_edit = achievement is not None
-    action = f"/coach/achievements/{achievement['id']}/edit" if is_edit else "/coach/achievements/new"
-    name = esc(achievement["name"]) if is_edit else ""
-    category = esc(achievement["category"]) if is_edit else ""
-    description = esc(achievement["description"] or "") if is_edit else ""
-    points = achievement["points_value"] if is_edit else 25
-    error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
-    suggestions = category_datalist(available_categories)
-
-    body = f"""
-    <div class="page-head"><h1>{"Edit" if is_edit else "Add"} Achievement</h1></div>
-    {error_html}
-    <div class="card form-card" style="max-width:520px">
-      <form method="post" action="{action}">
-        <label for="name">Name</label>
-        <input type="text" id="name" name="name" value="{name}" required />
-        <label for="category">Category</label>
-        <input type="text" id="category" name="category" list="category-suggestions" value="{category}"
-               placeholder="Pick an existing one or type a new category" required />
-        {suggestions}
-        <label for="description">Description</label>
-        <textarea id="description" name="description" rows="3">{description}</textarea>
-        <label for="points_value">Points value</label>
-        <input type="number" id="points_value" name="points_value" value="{points}" min="0" max="500" required />
-        <button type="submit" class="btn btn-primary">{"Save Changes" if is_edit else "Create Achievement"}</button>
-      </form>
-    </div>
-    """
-    return layout(("Edit" if is_edit else "Add") + " Achievement", body, user=coach, active_nav="achievements")

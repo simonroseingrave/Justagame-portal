@@ -1,8 +1,9 @@
-"""Just A Game - Activity & Achievement Portal.
+"""Just A Game - Athlete Adaptability Tracking.
 
 A small, dependency-free web app (Python standard library only) that gives
-coaches a place to log athlete activity and award achievement badges, and
-gives participants a portal to see their own progress, badges and points.
+coaches a place to log athlete activity and record Measurement Games test
+results, and gives participants a portal to see their own progress, test
+results and points.
 
 Run locally:
     python3 app.py
@@ -21,7 +22,7 @@ from core import Router, Response, App, redirect
 from urllib.parse import urlencode
 import db
 from auth import verify_password, hash_password, new_session_token
-from constants import all_known_categories
+from constants import APP_NAME, all_measurement_games
 import views
 
 router = Router()
@@ -64,16 +65,8 @@ def participant_summary(conn, participant_id):
         "SELECT * FROM activities WHERE participant_id = ? ORDER BY date DESC, id DESC",
         (participant_id,),
     ).fetchall()
-    awards = conn.execute(
-        "SELECT * FROM awards WHERE participant_id = ? ORDER BY date_awarded DESC",
-        (participant_id,),
-    ).fetchall()
-    achievements = conn.execute("SELECT * FROM achievements").fetchall()
-    activity_points = sum(a["points"] for a in activities)
-    achievement_by_id = {a["id"]: a for a in achievements}
-    award_points = sum(achievement_by_id[a["achievement_id"]]["points_value"] for a in awards if a["achievement_id"] in achievement_by_id)
-    total_points = activity_points + award_points
-    return activities, awards, achievements, total_points
+    total_points = sum(a["points"] for a in activities)
+    return activities, total_points
 
 
 # --------------------------------------------------------------- auth routes
@@ -143,13 +136,13 @@ def dashboard(req):
         return redirect("/login")
     conn = db.get_conn()
     try:
-        activities, awards, achievements, total_points = participant_summary(conn, user["id"])
+        activities, total_points = participant_summary(conn, user["id"])
+        measurement_sessions = db.measurement_sessions_for(conn, user["id"])
         return Response(views.participant_dashboard(
             user,
             [dict(a) for a in activities],
-            [dict(a) for a in awards],
-            [dict(a) for a in achievements],
             total_points,
+            measurement_sessions,
         ))
     finally:
         conn.close()
@@ -170,10 +163,11 @@ def coach_dashboard(req):
         ).fetchall()
         summaries = []
         for p in participants:
-            activities, awards, achievements, total_points = participant_summary(conn, p["id"])
+            activities, total_points = participant_summary(conn, p["id"])
+            test_count = db.count_measurement_sessions(conn, p["id"])
             summaries.append({
                 "id": p["id"], "name": p["name"], "sport": p["sport"], "programme": p["programme"],
-                "total_points": total_points, "badge_count": len(awards), "activity_count": len(activities),
+                "total_points": total_points, "test_count": test_count, "activity_count": len(activities),
             })
         return Response(views.coach_dashboard_for(coach, summaries))
     finally:
@@ -230,13 +224,12 @@ def coach_participant_detail(req, participant_id):
         ).fetchone()
         if not participant:
             return Response(views.simple_message_page("Not found", "Participant not found.", user=coach), status=404)
-        activities, awards, achievements, total_points = participant_summary(conn, participant_id)
+        activities, total_points = participant_summary(conn, participant_id)
+        measurement_sessions = db.measurement_sessions_for(conn, participant_id)
         message = req.get_query("flash")
-        available_categories = all_known_categories(db.distinct_achievement_categories(conn))
         return Response(views.coach_participant_detail(
-            coach, dict(participant), [dict(a) for a in activities], [dict(a) for a in awards],
-            [dict(a) for a in achievements], total_points,
-            available_categories=available_categories, message=message,
+            coach, dict(participant), [dict(a) for a in activities], total_points,
+            measurement_sessions, message=message,
         ))
     finally:
         conn.close()
@@ -269,33 +262,60 @@ def log_activity(req, participant_id):
     return flash_redirect(f"/coach/participants/{participant_id}", "Activity logged.")
 
 
-@router.post("/coach/participants/<int:participant_id>/award")
-def award_badge(req, participant_id):
+@router.post("/coach/participants/<int:participant_id>/measurement")
+def log_measurement_session(req, participant_id):
     coach = require_role(req, "coach")
     if not coach:
         return redirect("/login")
-    try:
-        achievement_id = int(req.form_get("achievement_id"))
-    except (TypeError, ValueError):
-        return flash_redirect(f"/coach/participants/{participant_id}", "Please choose a valid achievement.")
-    date_awarded = req.form_get("date_awarded") or db.today()
+    date = req.form_get("date") or db.today()
+
+    results = []
+    for game in all_measurement_games():
+        field_values = {}
+        for field in game["fields"]:
+            raw = req.form_get(f"mg__{game['key']}__{field['key']}").strip()
+            if not raw:
+                continue
+            try:
+                value = float(raw)
+            except ValueError:
+                continue
+            field_values[field["key"]] = value
+            results.append((game["key"], field["key"], value))
+
+        # Computed fields (e.g. the Skipping Rope Sprint average) -- only
+        # calculated once every field they depend on has a value.
+        for computed in game.get("computed", []):
+            inputs = [field_values.get(k) for k in computed["of"]]
+            if all(v is not None for v in inputs):
+                avg = round(sum(inputs) / len(inputs), 2)
+                results.append((game["key"], computed["key"], avg))
+
+    if not results:
+        return flash_redirect(
+            f"/coach/participants/{participant_id}",
+            "No results entered -- fill in at least one field before saving.",
+        )
 
     conn = db.get_conn()
     try:
-        already = conn.execute(
-            "SELECT id FROM awards WHERE participant_id = ? AND achievement_id = ?",
-            (participant_id, achievement_id),
-        ).fetchone()
-        if already:
-            return flash_redirect(f"/coach/participants/{participant_id}", "That badge has already been awarded.")
-        conn.execute(
-            "INSERT INTO awards (participant_id, achievement_id, date_awarded, awarded_by) VALUES (?, ?, ?, ?)",
-            (participant_id, achievement_id, date_awarded, coach["id"]),
-        )
-        conn.commit()
+        db.create_measurement_session(conn, participant_id, date, coach["id"], results)
     finally:
         conn.close()
-    return flash_redirect(f"/coach/participants/{participant_id}", "Badge awarded!")
+    return flash_redirect(f"/coach/participants/{participant_id}", "Measurement Games results saved.")
+
+
+@router.post("/coach/participants/<int:participant_id>/measurement/<int:session_id>/delete")
+def delete_measurement_session(req, participant_id, session_id):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        db.delete_measurement_session(conn, session_id)
+    finally:
+        conn.close()
+    return flash_redirect(f"/coach/participants/{participant_id}", "Measurement Games session deleted.")
 
 
 # --------------------------------------------------------------- account / auth
@@ -335,136 +355,6 @@ def change_password_post(req):
         conn.close()
 
 
-# ----------------------------------------------------------- achievement admin
-
-
-@router.get("/coach/achievements")
-def achievements_list(req):
-    coach = require_role(req, "coach")
-    if not coach:
-        return redirect("/login")
-    conn = db.get_conn()
-    try:
-        achievements = [dict(a) for a in conn.execute(
-            "SELECT * FROM achievements ORDER BY category, name"
-        ).fetchall()]
-        award_counts = db.award_counts_by_achievement(conn)
-        categories = all_known_categories(db.distinct_achievement_categories(conn))
-        by_category = []
-        for cat in categories:
-            items = [a for a in achievements if a["category"] == cat]
-            if items:
-                by_category.append((cat, items))
-        message = req.get_query("flash")
-        return Response(views.coach_achievements_list(coach, by_category, award_counts, message=message))
-    finally:
-        conn.close()
-
-
-@router.get("/coach/achievements/new")
-def achievement_new_get(req):
-    coach = require_role(req, "coach")
-    if not coach:
-        return redirect("/login")
-    conn = db.get_conn()
-    try:
-        categories = all_known_categories(db.distinct_achievement_categories(conn))
-        return Response(views.achievement_form(coach, categories))
-    finally:
-        conn.close()
-
-
-@router.post("/coach/achievements/new")
-def achievement_new_post(req):
-    coach = require_role(req, "coach")
-    if not coach:
-        return redirect("/login")
-    name = req.form_get("name").strip()
-    category = req.form_get("category").strip()
-    description = req.form_get("description").strip()
-    try:
-        points_value = int(req.form_get("points_value") or 25)
-    except ValueError:
-        points_value = 25
-
-    conn = db.get_conn()
-    try:
-        categories = all_known_categories(db.distinct_achievement_categories(conn))
-        if not name or not category:
-            return Response(views.achievement_form(coach, categories, error="Name and category are required."), status=400)
-        db.create_achievement(conn, name, category, description, points_value)
-        return flash_redirect("/coach/achievements", f"Added achievement: {name}")
-    finally:
-        conn.close()
-
-
-@router.get("/coach/achievements/<int:achievement_id>/edit")
-def achievement_edit_get(req, achievement_id):
-    coach = require_role(req, "coach")
-    if not coach:
-        return redirect("/login")
-    conn = db.get_conn()
-    try:
-        achievement = conn.execute("SELECT * FROM achievements WHERE id = ?", (achievement_id,)).fetchone()
-        if not achievement:
-            return Response(views.simple_message_page("Not found", "Achievement not found.", user=coach), status=404)
-        categories = all_known_categories(db.distinct_achievement_categories(conn))
-        return Response(views.achievement_form(coach, categories, achievement=dict(achievement)))
-    finally:
-        conn.close()
-
-
-@router.post("/coach/achievements/<int:achievement_id>/edit")
-def achievement_edit_post(req, achievement_id):
-    coach = require_role(req, "coach")
-    if not coach:
-        return redirect("/login")
-    name = req.form_get("name").strip()
-    category = req.form_get("category").strip()
-    description = req.form_get("description").strip()
-    try:
-        points_value = int(req.form_get("points_value") or 25)
-    except ValueError:
-        points_value = 25
-
-    conn = db.get_conn()
-    try:
-        achievement = conn.execute("SELECT * FROM achievements WHERE id = ?", (achievement_id,)).fetchone()
-        if not achievement:
-            return Response(views.simple_message_page("Not found", "Achievement not found.", user=coach), status=404)
-        categories = all_known_categories(db.distinct_achievement_categories(conn))
-        if not name or not category:
-            return Response(
-                views.achievement_form(coach, categories, achievement=dict(achievement), error="Name and category are required."),
-                status=400,
-            )
-        db.update_achievement(conn, achievement_id, name, category, description, points_value)
-        return flash_redirect("/coach/achievements", f"Updated achievement: {name}")
-    finally:
-        conn.close()
-
-
-@router.post("/coach/achievements/<int:achievement_id>/delete")
-def achievement_delete_post(req, achievement_id):
-    coach = require_role(req, "coach")
-    if not coach:
-        return redirect("/login")
-    conn = db.get_conn()
-    try:
-        awarded = conn.execute(
-            "SELECT COUNT(*) AS c FROM awards WHERE achievement_id = ?", (achievement_id,)
-        ).fetchone()["c"]
-        if awarded:
-            return flash_redirect(
-                "/coach/achievements",
-                "Can't delete - this badge has already been awarded to one or more athletes.",
-            )
-        db.delete_achievement(conn, achievement_id)
-        return flash_redirect("/coach/achievements", "Achievement deleted.")
-    finally:
-        conn.close()
-
-
 # ------------------------------------------------------------------- bootstrap
 
 application = App(router, STATIC_DIR)
@@ -493,7 +383,7 @@ def main():
 
     port = int(os.environ.get("PORT", 8000))
     host = os.environ.get("HOST", "0.0.0.0")
-    print(f"Just A Game Portal running at http://localhost:{port}  (Ctrl+C to stop)")
+    print(f"{APP_NAME} running at http://localhost:{port}  (Ctrl+C to stop)")
     with make_server(host, port, application, handler_class=_FastRequestHandler) as httpd:
         httpd.serve_forever()
 

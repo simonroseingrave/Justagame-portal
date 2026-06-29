@@ -55,6 +55,22 @@ CREATE TABLE IF NOT EXISTS sessions (
     user_id INTEGER NOT NULL,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS measurement_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id INTEGER NOT NULL REFERENCES users(id),
+    date TEXT NOT NULL,
+    logged_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS measurement_results (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    session_id INTEGER NOT NULL REFERENCES measurement_sessions(id),
+    game_key TEXT NOT NULL,
+    field_key TEXT NOT NULL,
+    value REAL NOT NULL
+);
 """
 
 
@@ -116,49 +132,6 @@ def seed_demo_data():
             ("Coach Admin", "coach@justagame.co.nz", hash_password("CoachDemo123!"), now()),
         ).lastrowid
 
-        # --- Achievements (3 per pillar + 3 milestone badges) -----------
-        achievements = [
-            # Physical Capability
-            ("Movement Foundations", "Physical Capability",
-             "Demonstrated solid athletic movement fundamentals in session.", 25),
-            ("Athletic Engine", "Physical Capability",
-             "Showed strong conditioning and work-rate across a full session.", 40),
-            ("Power & Agility", "Physical Capability",
-             "Stood out for explosive power or agility in game-based drills.", 50),
-            # Game Understanding
-            ("Game Reader", "Game Understanding",
-             "Read the play and anticipated the right option under pressure.", 30),
-            ("Tactical Thinker", "Game Understanding",
-             "Applied tactical understanding to solve a game challenge.", 40),
-            ("Pressure Performer", "Game Understanding",
-             "Made good decisions consistently under match-like pressure.", 50),
-            # Skill Adaptability
-            ("Skill Explorer", "Skill Adaptability",
-             "Explored new movement solutions during constraints-led drills.", 25),
-            ("Adaptive Athlete", "Skill Adaptability",
-             "Adapted a skill successfully to a new or changing constraint.", 40),
-            ("Constraint Solver", "Skill Adaptability",
-             "Consistently solved game problems through skill adaptability.", 60),
-            # Confidence & Resilience
-            ("Confidence Builder", "Confidence & Resilience",
-             "Showed growing confidence taking on new challenges.", 25),
-            ("Resilience Badge", "Confidence & Resilience",
-             "Bounced back well after a setback or mistake in session.", 40),
-            ("Growth Mindset", "Confidence & Resilience",
-             "Embraced a tough challenge with a positive, growth-focused attitude.", 50),
-            # Milestones (no single pillar)
-            ("First Session Logged", "Milestone", "Completed your first logged session.", 15),
-            ("5 Sessions Logged", "Milestone", "Reached 5 logged sessions.", 30),
-            ("Programme Graduate", "Milestone", "Completed a full Just A Game programme.", 100),
-        ]
-        achievement_ids = {}
-        for name, category, desc, pts in achievements:
-            aid = conn.execute(
-                "INSERT INTO achievements (name, category, description, points_value) VALUES (?, ?, ?, ?)",
-                (name, category, desc, pts),
-            ).lastrowid
-            achievement_ids[name] = aid
-
         # --- Demo participants ------------------------------------------
         participants = [
             ("Alex Taylor", "alex.demo@example.com", "Cricket",
@@ -196,16 +169,25 @@ def seed_demo_data():
                 (alex, date, title, category, notes, pts, coach_id, now()),
             )
 
-        for ach_name, award_date in [
-            ("First Session Logged", "2026-05-26"),
-            ("Movement Foundations", "2026-05-26"),
-            ("Skill Explorer", "2026-06-02"),
-            ("Game Reader", "2026-06-09"),
-            ("5 Sessions Logged", "2026-06-23"),
-        ]:
+        # --- Sample Measurement Games session for Alex (demo) -----------
+        mg_session_id = conn.execute(
+            "INSERT INTO measurement_sessions (participant_id, date, logged_by, created_at) VALUES (?, ?, ?, ?)",
+            (alex, "2026-06-23", coach_id, now()),
+        ).lastrowid
+        t1, t2, t3 = 5.21, 5.05, 4.98
+        sample_results = [
+            ("skipping_rope_sprint", "time_1", t1),
+            ("skipping_rope_sprint", "time_2", t2),
+            ("skipping_rope_sprint", "time_3", t3),
+            ("skipping_rope_sprint", "average", round((t1 + t2 + t3) / 3, 2)),
+            ("balance_ball_catching", "small_ball", 14),
+            ("balance_ball_catching", "large_ball", 22),
+            ("diamond_games", "running", 8),
+        ]
+        for game_key, field_key, value in sample_results:
             conn.execute(
-                "INSERT INTO awards (participant_id, achievement_id, date_awarded, awarded_by) VALUES (?, ?, ?, ?)",
-                (alex, achievement_ids[ach_name], award_date, coach_id),
+                "INSERT INTO measurement_results (session_id, game_key, field_key, value) VALUES (?, ?, ?, ?)",
+                (mg_session_id, game_key, field_key, value),
             )
 
         # --- Lighter sample data for Jess and Sam ------------------------
@@ -215,10 +197,6 @@ def seed_demo_data():
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (jess, "2026-06-18", "1-on-1 Session with Patrick", "Skill Adaptability",
              "Worked on first-touch adaptability under pressure from different angles.", 10, coach_id, now()),
-        )
-        conn.execute(
-            "INSERT INTO awards (participant_id, achievement_id, date_awarded, awarded_by) VALUES (?, ?, ?, ?)",
-            (jess, achievement_ids["First Session Logged"], "2026-06-18", coach_id),
         )
 
         sam = participant_ids["Sam Wilson"]
@@ -235,44 +213,62 @@ def seed_demo_data():
         conn.close()
 
 
-# ---------------------------------------------------------- achievement CRUD
-# Supports the in-app "Manage Achievements" coach page, so categories,
-# badges and point values can be changed any time without editing code.
+# ------------------------------------------------------ Measurement Games
+# A "session" is one test day for one athlete; it can include results for
+# any number of the games defined in constants.MEASUREMENT_GAMES (a coach
+# doesn't have to fill in every game every time). Each individual field
+# result is stored as its own row in measurement_results so the schema
+# never needs to change if games/fields are added or removed later.
 
 
-def distinct_achievement_categories(conn):
-    rows = conn.execute(
-        "SELECT DISTINCT category FROM achievements WHERE category IS NOT NULL AND category != ''"
-    ).fetchall()
-    return [r["category"] for r in rows]
-
-
-def award_counts_by_achievement(conn):
-    rows = conn.execute(
-        "SELECT achievement_id, COUNT(*) AS c FROM awards GROUP BY achievement_id"
-    ).fetchall()
-    return {r["achievement_id"]: r["c"] for r in rows}
-
-
-def create_achievement(conn, name, category, description, points_value):
-    cur = conn.execute(
-        "INSERT INTO achievements (name, category, description, points_value) VALUES (?, ?, ?, ?)",
-        (name, category, description, points_value),
-    )
+def create_measurement_session(conn, participant_id, date, logged_by, results):
+    """results: an iterable of (game_key, field_key, value) tuples, already
+    filtered down to just the fields the coach actually filled in."""
+    session_id = conn.execute(
+        "INSERT INTO measurement_sessions (participant_id, date, logged_by, created_at) VALUES (?, ?, ?, ?)",
+        (participant_id, date, logged_by, now()),
+    ).lastrowid
+    for game_key, field_key, value in results:
+        conn.execute(
+            "INSERT INTO measurement_results (session_id, game_key, field_key, value) VALUES (?, ?, ?, ?)",
+            (session_id, game_key, field_key, value),
+        )
     conn.commit()
-    return cur.lastrowid
+    return session_id
 
 
-def update_achievement(conn, achievement_id, name, category, description, points_value):
-    conn.execute(
-        "UPDATE achievements SET name = ?, category = ?, description = ?, points_value = ? WHERE id = ?",
-        (name, category, description, points_value, achievement_id),
-    )
-    conn.commit()
+def measurement_sessions_for(conn, participant_id):
+    """All Measurement Games sessions for a participant, most recent first,
+    each with its field results nested in a {(game_key, field_key): value}
+    dict for easy lookup when rendering."""
+    sessions = conn.execute(
+        "SELECT * FROM measurement_sessions WHERE participant_id = ? ORDER BY date DESC, id DESC",
+        (participant_id,),
+    ).fetchall()
+    out = []
+    for s in sessions:
+        rows = conn.execute(
+            "SELECT game_key, field_key, value FROM measurement_results WHERE session_id = ?",
+            (s["id"],),
+        ).fetchall()
+        out.append({
+            "id": s["id"],
+            "date": s["date"],
+            "results": {(r["game_key"], r["field_key"]): r["value"] for r in rows},
+        })
+    return out
 
 
-def delete_achievement(conn, achievement_id):
-    conn.execute("DELETE FROM achievements WHERE id = ?", (achievement_id,))
+def count_measurement_sessions(conn, participant_id):
+    row = conn.execute(
+        "SELECT COUNT(*) AS c FROM measurement_sessions WHERE participant_id = ?", (participant_id,)
+    ).fetchone()
+    return row["c"]
+
+
+def delete_measurement_session(conn, session_id):
+    conn.execute("DELETE FROM measurement_results WHERE session_id = ?", (session_id,))
+    conn.execute("DELETE FROM measurement_sessions WHERE id = ?", (session_id,))
     conn.commit()
 
 

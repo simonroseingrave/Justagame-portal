@@ -1,7 +1,12 @@
-"""Shared constants for the Just A Game Activity & Achievement Portal."""
+"""Shared constants for Just A Game's Athlete Adaptability Tracking app."""
+
+# Display name for the app -- change this in one place to rebrand everywhere
+# (browser tab title, header, login page, footer, startup message).
+APP_NAME = "Athlete Adaptability Tracking"
 
 # The four development pillars used across Just A Game's coaching philosophy
-# (constraints-led / athlete adaptability approach).
+# (constraints-led / athlete adaptability approach). Used as "Focus area"
+# suggestions when a coach logs an activity session.
 CATEGORIES = [
     "Physical Capability",
     "Game Understanding",
@@ -9,45 +14,137 @@ CATEGORIES = [
     "Confidence & Resilience",
 ]
 
-CATEGORY_BLURBS = {
-    "Physical Capability": "Athletic movement, conditioning and physical foundations.",
-    "Game Understanding": "Decision-making, game-reading and tactical awareness.",
-    "Skill Adaptability": "Adapting technique and skills to dynamic, game-like situations.",
-    "Confidence & Resilience": "Confidence, resilience and personal growth.",
-}
-
-CATEGORY_ICONS = {
-    "Physical Capability": "\U0001F3C3",       # runner
-    "Game Understanding": "\U0001F9E0",        # brain
-    "Skill Adaptability": "\U0001F504",        # adapt/refresh
-    "Confidence & Resilience": "\U0001F525",   # fire
-}
-
 SPORTS = ["Cricket", "Football", "Hockey", "Multi-sport"]
 
 
-def ordered_categories(present):
-    """Display order for a set of category names actually in use: the four
-    known coaching pillars first (in their usual order), then any custom
-    categories a coach has added (alphabetically), then "Milestone" last.
+# ----------------------------------------------------------------------
+# Measurement Games -- the structured physical-test battery coaches run
+# with athletes (replaces the old achievement-badge system). Add, remove
+# or change games/fields here any time; the results-entry form and the
+# results history on every athlete's page are both generated from this
+# list automatically, so no other code changes are needed for that.
+#
+# Each field has a "type" that controls how it's entered/displayed:
+#   "time"   -> a stopwatch time in seconds, e.g. 4.52
+#   "number" -> a plain count, e.g. catches out of attempts
+#   "points" -> a scored count (entered the same way as "number", kept as
+#               its own type so the on-screen wording matches the games
+#               that are scored as "points" rather than raw counts)
+#
+# A game can also list "computed" fields -- ones a coach never types in
+# directly, calculated automatically from the other fields when a session
+# is saved. Right now there's one: the Skipping Rope Sprint average, which
+# is the mean of Time 1/2/3 (only calculated once all three are filled in).
+MEASUREMENT_GAMES = [
+    {
+        "section": "Timed Events",
+        "games": [
+            {
+                "key": "skipping_rope_sprint",
+                "name": "Skipping Rope Sprint (25 metres)",
+                "fields": [
+                    {"key": "time_1", "label": "Time 1", "type": "time"},
+                    {"key": "time_2", "label": "Time 2", "type": "time"},
+                    {"key": "time_3", "label": "Time 3", "type": "time"},
+                ],
+                "computed": [
+                    {"key": "average", "label": "Average", "type": "time",
+                     "formula": "average_of", "of": ["time_1", "time_2", "time_3"]},
+                ],
+            },
+            {
+                "key": "slalom_running_dribbling",
+                "name": "Slalom Running / Dribbling (15 metres)",
+                "fields": [
+                    {"key": "time_1", "label": "Time 1", "type": "time"},
+                    {"key": "time_2", "label": "Time 2", "type": "time"},
+                    {"key": "time_3", "label": "Time 3", "type": "time"},
+                ],
+                "computed": [
+                    {"key": "average", "label": "Average", "type": "time",
+                     "formula": "average_of", "of": ["time_1", "time_2", "time_3"]},
+                ],
+            },
+        ],
+    },
+    {
+        "section": "Points Events",
+        "games": [
+            {
+                "key": "balance_ball_catching",
+                "name": "Balance Ball Catching - 1 minute",
+                "fields": [
+                    {"key": "small_ball", "label": "Small Ball", "type": "number"},
+                    {"key": "large_ball", "label": "Large Ball", "type": "number"},
+                ],
+            },
+            {
+                "key": "leap_catching_throwing",
+                "name": "Leap Catching & Throwing - 20 attempts",
+                "fields": [
+                    {"key": "stationary_small_ball", "label": "Stationary Small Ball", "type": "number"},
+                    {"key": "stationary_large_ball", "label": "Stationary Large Ball", "type": "number"},
+                    {"key": "short_run_small_ball", "label": "Short Run Small Ball", "type": "number"},
+                    {"key": "short_run_large_ball", "label": "Short Run Large Ball", "type": "number"},
+                ],
+            },
+            {
+                "key": "reaction_catching",
+                "name": "Reaction Catching - 20 attempts",
+                "fields": [
+                    {"key": "very_small_ball", "label": "Very Small Ball", "type": "number"},
+                    {"key": "tape_ball", "label": "Tape Ball", "type": "number"},
+                    {"key": "ball_drop", "label": "Ball Drop", "type": "number"},
+                ],
+            },
+            {
+                "key": "gate_dive",
+                "name": "Gate Dive - 10 attempts for each",
+                "fields": [
+                    {"key": "walk_through_small_ball", "label": "Walk through small ball", "type": "points"},
+                    {"key": "walk_through_large_ball", "label": "Walk through large ball", "type": "points"},
+                    {"key": "step_over_gate_small_ball", "label": "Step Over Gate Small Ball", "type": "points"},
+                    {"key": "step_over_gate_large_ball", "label": "Step Over Gate Large Ball", "type": "points"},
+                ],
+            },
+            {
+                "key": "target_shooting_passing",
+                "name": "Target Shooting / Passing",
+                "fields": [
+                    {"key": "distance_1", "label": "Distance 1", "type": "points"},
+                    {"key": "distance_2", "label": "Distance 2", "type": "points"},
+                    {"key": "distance_3", "label": "Distance 3", "type": "points"},
+                ],
+            },
+            {
+                "key": "diamond_games",
+                "name": "Diamond Games - 1 minute",
+                "fields": [
+                    {"key": "walking", "label": "Walking", "type": "number", "unit": "Number of Gates"},
+                    {"key": "running", "label": "Running", "type": "number", "unit": "Number of Gates"},
+                    {"key": "walking_numbers", "label": "Walking Numbers", "type": "number", "unit": "Number of Gates"},
+                    {"key": "running_numbers", "label": "Running Numbers", "type": "number", "unit": "Number of Gates"},
+                ],
+            },
+        ],
+    },
+]
 
-    This lets coaches add brand-new categories (via the achievements admin
-    page) without editing code -- new ones just show up, in a sensible
-    place, with a default icon/blurb (see views.py)."""
-    present = set(present)
-    ordered = [c for c in CATEGORIES if c in present]
-    extra = sorted(c for c in present if c not in CATEGORIES and c != "Milestone")
-    ordered.extend(extra)
-    if "Milestone" in present:
-        ordered.append("Milestone")
-    return ordered
+
+def all_measurement_games():
+    """Flat list of every game dict, in display order, regardless of section."""
+    games = []
+    for section in MEASUREMENT_GAMES:
+        games.extend(section["games"])
+    return games
 
 
-def all_known_categories(extra=()):
-    """CATEGORIES plus any extra category names (e.g. from the database),
-    de-duplicated, in display order. Used to populate the category
-    suggestion list on the achievement/activity forms."""
-    return ordered_categories(set(CATEGORIES) | set(extra) | {"Milestone"})
+def find_measurement_game(key):
+    for game in all_measurement_games():
+        if game["key"] == key:
+            return game
+    return None
+
 
 # Points thresholds -> level name. Must stay sorted ascending by points.
 LEVELS = [
