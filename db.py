@@ -243,6 +243,25 @@ def update_password(conn, user_id, new_password):
     conn.commit()
 
 
+def update_profile(conn, user_id, name, email):
+    conn.execute(
+        "UPDATE users SET name = ?, email = ? WHERE id = ?",
+        (name, email, user_id),
+    )
+    conn.commit()
+
+
+def list_coaches(conn):
+    return conn.execute(
+        "SELECT * FROM users WHERE role = 'coach' ORDER BY name"
+    ).fetchall()
+
+
+def set_active(conn, user_id, active):
+    conn.execute("UPDATE users SET active = ? WHERE id = ?", (1 if active else 0, user_id))
+    conn.commit()
+
+
 def maybe_reset_coach_password():
     """Recovery hatch for a forgotten coach password on a host (like
     Render's free tier) with no shell access. If the RESET_COACH_PASSWORD
