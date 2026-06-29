@@ -63,6 +63,19 @@ def layout(title, body, user=None, flash=None, active_nav=None):
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{esc(title)} - {APP_NAME}</title>
   <link rel="stylesheet" href="/static/css/style.css" />
+
+  <!-- Add to Home Screen / PWA -->
+  <link rel="manifest" href="/static/manifest.json" />
+  <meta name="theme-color" content="#2D323B" />
+  <link rel="apple-touch-icon" href="/static/img/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Just A Game" />
+  <script>
+    if ("serviceWorker" in navigator) {{
+      window.addEventListener("load", () => navigator.serviceWorker.register("/sw.js"));
+    }}
+  </script>
 </head>
 <body>
   {nav}

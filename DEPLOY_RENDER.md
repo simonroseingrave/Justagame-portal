@@ -70,11 +70,44 @@ Do this first — treat the live URL as not-quite-public until you have.
 
 ## Later: adding a persistent disk (removes the data-wipe risk)
 
-When you're ready to move off the free tier, upgrade the service to
-**Starter** in the Render dashboard, then add a disk:
+When you're ready to move off the free tier:
 
-- Mount path: `/app/data`
-- Size: 1 GB is far more than enough
+1. Open your service in the Render dashboard → **Settings** → change
+   **Instance Type** from Free to **Starter** ($7/month). Render will
+   ask for a payment method at this point — that's a billing step only
+   you can complete.
+2. Go to the service's **Disks** tab → **Add Disk**:
+   - Mount path: `/opt/render/project/src/data`
+   - Size: 1 GB is far more than enough (~$0.25/month extra)
+3. Click **Add Disk**. Render redeploys automatically; the disk is live
+   once that finishes.
 
-Tell me when you've done this and I'll double check the app's `db.py`
-path lines up with the mount path you chose.
+The mount path above already matches exactly where this app stores its
+database (`data/justagame.db`, relative to the code), so no code changes
+are needed — the disk just needs to be mounted at that exact path.
+
+## Connecting it to athletes.justagame.co.nz
+
+This makes the portal live at `athletes.justagame.co.nz` instead of the
+`onrender.com` address, and adds a link to it from the main site.
+
+**1. Add the domain in Render**
+- Service → **Settings** → **Custom Domains** → **+ Add Custom Domain**
+- Enter `athletes.justagame.co.nz` → **Save**
+
+**2. Add a DNS record in Squarespace**
+- Squarespace account → **Settings** → **Domains** → click `justagame.co.nz`
+- **DNS Settings** → **Custom Records** → **Add Record**
+- Type: `CNAME` · Host: `athletes` · Data: `justagame-portal.onrender.com`
+- Save
+
+**3. Verify**
+- Back in Render, click **Verify** next to the domain (DNS can take a
+  few minutes to a few hours to propagate — if it fails at first, wait
+  and retry). Render issues the HTTPS certificate automatically once
+  verified.
+
+**4. Link it from the main site**
+- Edit the Coaching / Programmes page in Squarespace → add a **Button**
+  block → URL `https://athletes.justagame.co.nz` → label it (e.g.
+  "Athlete Portal Login") → save and publish.

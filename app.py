@@ -60,6 +60,56 @@ def flash_redirect(path, message):
     return redirect(f"{path}?{qs}")
 
 
+# ------------------------------------------------------------ PWA / app-on-phone
+#
+# Served from a dedicated root-level route (not under /static/) so the
+# service worker's default scope is "/" and covers every page route in
+# this app. If it were served from /static/sw.js instead, its scope would
+# default to /static/ and would NOT control /, /login, /dashboard, etc.
+
+SERVICE_WORKER_JS = """
+const CACHE_NAME = "jag-portal-v1";
+const ASSETS_TO_CACHE = [
+  "/static/css/style.css",
+  "/static/img/logo.png",
+  "/static/img/icon-192.png",
+  "/static/img/icon-512.png",
+];
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS_TO_CACHE))
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k)))
+    )
+  );
+  self.clients.claim();
+});
+
+self.addEventListener("fetch", (event) => {
+  // Only ever cache static assets (CSS/images). Pages and form posts always
+  // go to the network so logins, results and sessions are never stale.
+  const url = new URL(event.request.url);
+  if (event.request.method === "GET" && url.pathname.startsWith("/static/")) {
+    event.respondWith(
+      caches.match(event.request).then((cached) => cached || fetch(event.request))
+    );
+  }
+});
+""".strip()
+
+
+@router.get("/sw.js")
+def service_worker(req):
+    return Response(SERVICE_WORKER_JS, content_type="text/javascript; charset=utf-8")
+
+
 # --------------------------------------------------------------- auth routes
 
 

@@ -15,6 +15,7 @@ it easy to run almost anywhere Python 3 is available.
 - "Change password" page (top bar, any logged-in user) to set a new password in-app — no email/reset-link flow needed.
 - Participant login → personal dashboard with their Measurement Games results history.
 - Sample/demo data (1 coach + 3 demo athletes, including a sample Measurement Games session) pre-loaded so you can see it working immediately.
+- Installable as a home-screen app on phones (Add to Home Screen / PWA) — athletes and coaches get an app icon and a full-screen view, no app store needed. See "Using it as an app on your phone" below.
 
 **Paused for now:** the Activity Log (logging session activity with notes/points) and the points/level system have been removed from the UI, since they aren't needed at this stage. The underlying code hasn't been deleted — the `activities` table (`db.py`) and the level thresholds (`LEVELS`/`get_level_info` in `constants.py`) are still there, unused, ready to be wired back in later if you want them.
 
@@ -50,7 +51,7 @@ justagame-portal/
   auth.py       password hashing, sessions
   views.py      page templates (plain Python functions, not Jinja)
   constants.py  Measurement Games structure (plus unused levels/points thresholds, paused for now)
-  static/       CSS + logo
+  static/       CSS, logo, PWA icons + manifest.json (sw.js is served from app.py, not static/)
   data/         SQLite database (created on first run, not in git)
 ```
 
@@ -92,6 +93,29 @@ no code.
 
 Outstanding: let me know how many coaches need real logins (there's
 currently one demo coach account) and I'll set those up.
+
+## Using it as an app on your phone
+
+The portal can be added to a phone's home screen like a regular app — a
+real icon, a full-screen window (no browser address bar), and the static
+parts (CSS, icons) cached so it opens instantly. This needs the site to
+be served over **HTTPS** (already the case once it's live on Render or
+on `athletes.justagame.co.nz`) — it won't show the install option over
+plain `http://localhost`.
+
+**On iPhone (Safari):**
+1. Open the portal URL in Safari.
+2. Tap the **Share** icon (square with an arrow) → **Add to Home Screen**.
+3. Tap **Add**. The "Just A Game" icon now opens full-screen, like an app.
+
+**On Android (Chrome):**
+1. Open the portal URL in Chrome.
+2. Tap the **⋮** menu → **Add to Home screen** (or **Install app**, if
+   Chrome offers it directly).
+3. Tap **Add** / **Install**.
+
+Worth passing this on to athletes and coaches once the portal is live —
+it's the easiest way for them to get to it day-to-day.
 
 ### Deploying with gunicorn (optional, for real traffic)
 

@@ -1,0 +1,15 @@
+{
+  "name": "Just A Game - Athlete Adaptability Tracking",
+  "short_name": "Just A Game",
+  "description": "Track Measurement Games test results for Just A Game athletes.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#F3F4F5",
+  "theme_color": "#2D323B",
+  "icons": [
+    { "src": "/static/img/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/static/img/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/static/img/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
