@@ -19,6 +19,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             links = [
                 ("/coach", "Dashboard", "dashboard"),
                 ("/coach/participants/new", "Add Participant", "new_participant"),
+                ("/coach/coaches", "Coaches", "coaches"),
             ]
         else:
             links = [("/dashboard", "My Dashboard", "dashboard")]
@@ -36,7 +37,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             <nav class="nav">{nav_items}</nav>
             <div class="user-pill">
               <span>{esc(user['name'])}</span>
-              <a href="/account/password" class="btn btn-ghost btn-sm">Change password</a>
+              <a href="/account/password" class="btn btn-ghost btn-sm">My Account</a>
               <a href="/logout" class="btn btn-ghost btn-sm">Log out</a>
             </div>
           </div>
@@ -106,6 +107,7 @@ def login_page(error=None, prefill_email=""):
           <input type="password" id="password" name="password" required />
           <button type="submit" class="btn btn-primary btn-block">Log in</button>
         </form>
+        <p class="forgot-link"><a href="/forgot-password">Forgot your password?</a></p>
         <details class="demo-creds">
           <summary>Demo login details</summary>
           <p><strong>Coach:</strong> coach@justagame.co.nz / CoachDemo123!</p>
@@ -115,6 +117,25 @@ def login_page(error=None, prefill_email=""):
     </div>
     """
     return layout("Log in", body)
+
+
+def forgot_password_page():
+    body = f"""
+    <div class="login-wrap">
+      <div class="card login-card">
+        <img src="/static/img/logo.png" alt="Just A Game" class="login-logo" />
+        <h1>Forgot your password?</h1>
+        <p class="muted">
+          This app doesn't send reset emails — instead, your coach can issue
+          you a new password directly. Get in touch with them (or with Just
+          A Game) and ask for a password reset; they'll send you a new
+          temporary password to log in with.
+        </p>
+        <a class="btn btn-primary btn-block" href="/login">Back to login</a>
+      </div>
+    </div>
+    """
+    return layout("Forgot Password", body)
 
 
 def _measurement_field_input(game_key, field):
@@ -328,7 +349,13 @@ def coach_participant_detail(coach, participant, measurement_sessions, message=N
         <h1>{esc(participant['name'])}</h1>
         <p class="muted">{esc(participant['sport'] or '')} &middot; {esc(participant['programme'] or '')} &middot; {esc(participant['email'])}</p>
       </div>
-      <a class="btn btn-ghost" href="/coach">&larr; Back to all participants</a>
+      <div style="display:flex; gap:8px;">
+        <form method="post" action="/coach/participants/{participant['id']}/reset-password"
+              onsubmit="return confirm('Reset {esc(participant['name'])}&#39;s password? They will need the new one to log in again.');">
+          <button type="submit" class="btn btn-ghost">Reset Password</button>
+        </form>
+        <a class="btn btn-ghost" href="/coach">&larr; Back to all participants</a>
+      </div>
     </div>
     {message_html}
 
@@ -349,13 +376,30 @@ def simple_message_page(title, message, user=None):
     return layout(title, body, user=user)
 
 
-def change_password_page(user, error=None, success=None):
-    error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
-    success_html = f'<div class="flash">{esc(success)}</div>' if success else ""
+def account_page(user, profile_error=None, profile_success=None, password_error=None, password_success=None):
+    profile_error_html = f'<div class="alert">{esc(profile_error)}</div>' if profile_error else ""
+    profile_success_html = f'<div class="flash">{esc(profile_success)}</div>' if profile_success else ""
+    password_error_html = f'<div class="alert">{esc(password_error)}</div>' if password_error else ""
+    password_success_html = f'<div class="flash">{esc(password_success)}</div>' if password_success else ""
     body = f"""
-    <div class="page-head"><h1>Change Password</h1></div>
-    {error_html}
-    {success_html}
+    <div class="page-head"><h1>My Account</h1></div>
+
+    <h2 class="section-title">Your Details</h2>
+    {profile_error_html}
+    {profile_success_html}
+    <div class="card form-card" style="max-width:420px">
+      <form method="post" action="/account/profile">
+        <label for="name">Full name</label>
+        <input type="text" id="name" name="name" required value="{esc(user['name'])}" />
+        <label for="email">Email</label>
+        <input type="email" id="email" name="email" required value="{esc(user['email'])}" />
+        <button type="submit" class="btn btn-primary btn-block">Save Details</button>
+      </form>
+    </div>
+
+    <h2 class="section-title">Change Password</h2>
+    {password_error_html}
+    {password_success_html}
     <div class="card form-card" style="max-width:420px">
       <form method="post" action="/account/password">
         <label for="current_password">Current password</label>
@@ -368,6 +412,65 @@ def change_password_page(user, error=None, success=None):
       </form>
     </div>
     """
-    return layout("Change Password", body, user=user, active_nav=None)
+    return layout("My Account", body, user=user, active_nav=None)
+
+
+def coach_list_page(user, coaches):
+    rows = []
+    for c in coaches:
+        is_self = c["id"] == user["id"]
+        status = "Active" if c["active"] else "Inactive"
+        status_class = "tag-active" if c["active"] else "tag-inactive"
+        if is_self:
+            action_html = '<span class="muted">(you)</span>'
+        else:
+            action_label = "Deactivate" if c["active"] else "Reactivate"
+            action_html = f"""<form method="post" action="/coach/coaches/{c['id']}/reset-password" style="display:inline"
+                  onsubmit="return confirm('Reset {esc(c['name'])}&#39;s password? They will need the new one to log in again.');">
+              <button type="submit" class="btn btn-ghost btn-sm">Reset Password</button>
+            </form>
+            <form method="post" action="/coach/coaches/{c['id']}/toggle" style="display:inline">
+              <button type="submit" class="btn btn-ghost btn-sm">{action_label}</button>
+            </form>"""
+        rows.append(f"""<tr>
+          <td>{esc(c['name'])}</td>
+          <td>{esc(c['email'])}</td>
+          <td><span class="tag {status_class}">{status}</span></td>
+          <td>{action_html}</td>
+        </tr>""")
+    rows_html = "".join(rows)
+    body = f"""
+    <div class="page-head">
+      <h1>Coaches</h1>
+      <a class="btn btn-primary" href="/coach/coaches/new">Add Coach</a>
+    </div>
+    <div class="card">
+      <table class="table">
+        <thead><tr><th>Name</th><th>Email</th><th>Status</th><th></th></tr></thead>
+        <tbody>{rows_html}</tbody>
+      </table>
+    </div>
+    """
+    return layout("Coaches", body, user=user, active_nav="coaches")
+
+
+def new_coach_form(user, error=None):
+    error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
+    body = f"""
+    <div class="page-head"><h1>Add Coach</h1></div>
+    {error_html}
+    <div class="card form-card">
+      <form method="post" action="/coach/coaches/new">
+        <label for="name">Full name</label>
+        <input type="text" id="name" name="name" required />
+        <label for="email">Email (used to log in)</label>
+        <input type="email" id="email" name="email" required />
+        <label for="password">Temporary password</label>
+        <input type="text" id="password" name="password" required value="CoachTemp123!" />
+        <button type="submit" class="btn btn-primary">Create Coach</button>
+      </form>
+    </div>
+    """
+    return layout("Add Coach", body, user=user, active_nav="coaches")
 
 

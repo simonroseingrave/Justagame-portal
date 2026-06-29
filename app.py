@@ -21,7 +21,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from core import Router, Response, App, redirect
 from urllib.parse import urlencode
 import db
-from auth import verify_password, hash_password, new_session_token
+from auth import verify_password, hash_password, new_session_token, generate_temp_password
 from constants import APP_NAME, all_measurement_games
 import views
 
@@ -150,6 +150,11 @@ def login_post(req):
         return resp
     finally:
         conn.close()
+
+
+@router.get("/forgot-password")
+def forgot_password(req):
+    return Response(views.forgot_password_page())
 
 
 @router.get("/logout")
@@ -310,6 +315,31 @@ def log_measurement_session(req, participant_id):
     return flash_redirect(f"/coach/participants/{participant_id}", "Measurement Games results saved.")
 
 
+@router.post("/coach/participants/<int:participant_id>/reset-password")
+def reset_participant_password(req, participant_id):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        participant = conn.execute(
+            "SELECT * FROM users WHERE id = ? AND role = 'participant'", (participant_id,)
+        ).fetchone()
+        if not participant:
+            return flash_redirect("/coach", "Participant not found.")
+        temp_password = generate_temp_password()
+        db.update_password(conn, participant_id, temp_password)
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (participant_id,))
+        conn.commit()
+        return flash_redirect(
+            f"/coach/participants/{participant_id}",
+            f"Password reset for {participant['name']}. New password: {temp_password} "
+            f"-- share this with them now, it won't be shown again.",
+        )
+    finally:
+        conn.close()
+
+
 @router.post("/coach/participants/<int:participant_id>/measurement/<int:session_id>/delete")
 def delete_measurement_session(req, participant_id, session_id):
     coach = require_role(req, "coach")
@@ -327,11 +357,38 @@ def delete_measurement_session(req, participant_id, session_id):
 
 
 @router.get("/account/password")
-def change_password_get(req):
+def account_get(req):
     user = get_current_user(req)
     if not user:
         return redirect("/login")
-    return Response(views.change_password_page(user))
+    return Response(views.account_page(user))
+
+
+@router.post("/account/profile")
+def account_profile_post(req):
+    user = get_current_user(req)
+    if not user:
+        return redirect("/login")
+
+    name = req.form_get("name").strip()
+    email = req.form_get("email").strip().lower()
+
+    if not name or not email:
+        return Response(views.account_page(user, profile_error="Name and email are required."), status=400)
+
+    conn = db.get_conn()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM users WHERE lower(email) = ? AND id != ?", (email, user["id"]),
+        ).fetchone()
+        if existing:
+            return Response(views.account_page(user, profile_error="That email is already used by another account."), status=400)
+
+        db.update_profile(conn, user["id"], name, email)
+        updated_user = get_current_user(req)
+        return Response(views.account_page(updated_user, profile_success="Details updated."))
+    finally:
+        conn.close()
 
 
 @router.post("/account/password")
@@ -348,14 +405,113 @@ def change_password_post(req):
     try:
         row = conn.execute("SELECT * FROM users WHERE id = ?", (user["id"],)).fetchone()
         if not row or not verify_password(current_password, row["password_hash"]):
-            return Response(views.change_password_page(user, error="Current password is incorrect."), status=400)
+            return Response(views.account_page(user, password_error="Current password is incorrect."), status=400)
         if not new_password or len(new_password) < 8:
-            return Response(views.change_password_page(user, error="New password must be at least 8 characters."), status=400)
+            return Response(views.account_page(user, password_error="New password must be at least 8 characters."), status=400)
         if new_password != confirm_password:
-            return Response(views.change_password_page(user, error="New password and confirmation don't match."), status=400)
+            return Response(views.account_page(user, password_error="New password and confirmation don't match."), status=400)
 
         db.update_password(conn, user["id"], new_password)
-        return Response(views.change_password_page(user, success="Password updated."))
+        return Response(views.account_page(user, password_success="Password updated."))
+    finally:
+        conn.close()
+
+
+# --------------------------------------------------------------- manage coaches
+
+
+@router.get("/coach/coaches")
+def list_coaches(req):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        coaches = db.list_coaches(conn)
+        return Response(views.coach_list_page(coach, coaches))
+    finally:
+        conn.close()
+
+
+@router.get("/coach/coaches/new")
+def new_coach_get(req):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    return Response(views.new_coach_form(coach))
+
+
+@router.post("/coach/coaches/new")
+def new_coach_post(req):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    name = req.form_get("name").strip()
+    email = req.form_get("email").strip().lower()
+    password = req.form_get("password") or "CoachTemp123!"
+
+    if not name or not email:
+        return Response(views.new_coach_form(coach, error="Name and email are required."), status=400)
+
+    conn = db.get_conn()
+    try:
+        existing = conn.execute("SELECT id FROM users WHERE lower(email) = ?", (email,)).fetchone()
+        if existing:
+            return Response(views.new_coach_form(coach, error="A user with that email already exists."), status=400)
+        conn.execute(
+            "INSERT INTO users (name, email, password_hash, role, sport, programme, created_at) "
+            "VALUES (?, ?, ?, 'coach', NULL, NULL, ?)",
+            (name, email, hash_password(password), db.now()),
+        )
+        conn.commit()
+        return flash_redirect("/coach/coaches", f"Added coach {name}. Share their login: {email} / {password}")
+    finally:
+        conn.close()
+
+
+@router.post("/coach/coaches/<int:coach_id>/reset-password")
+def reset_coach_password(req, coach_id):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        target = conn.execute("SELECT * FROM users WHERE id = ? AND role = 'coach'", (coach_id,)).fetchone()
+        if not target:
+            return flash_redirect("/coach/coaches", "Coach not found.")
+        temp_password = generate_temp_password()
+        db.update_password(conn, coach_id, temp_password)
+        conn.execute("DELETE FROM sessions WHERE user_id = ?", (coach_id,))
+        conn.commit()
+        return flash_redirect(
+            "/coach/coaches",
+            f"Password reset for {target['name']}. New password: {temp_password} "
+            f"-- share this with them now, it won't be shown again.",
+        )
+    finally:
+        conn.close()
+
+
+@router.post("/coach/coaches/<int:coach_id>/toggle")
+def toggle_coach(req, coach_id):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    # core.py's router passes path params as strings even for <int:...>
+    # patterns (the "int:" prefix only restricts the URL's regex match to
+    # digits) -- compare as ints here or this always evaluates False.
+    if int(coach_id) == coach["id"]:
+        return flash_redirect("/coach/coaches", "You can't deactivate your own account.")
+
+    conn = db.get_conn()
+    try:
+        target = conn.execute("SELECT * FROM users WHERE id = ? AND role = 'coach'", (coach_id,)).fetchone()
+        if not target:
+            return flash_redirect("/coach/coaches", "Coach not found.")
+        new_active = 0 if target["active"] else 1
+        db.set_active(conn, coach_id, new_active)
+        action = "reactivated" if new_active else "deactivated"
+        return flash_redirect("/coach/coaches", f"{target['name']} {action}.")
     finally:
         conn.close()
 

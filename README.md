@@ -12,7 +12,9 @@ it easy to run almost anywhere Python 3 is available.
 - Coach login → dashboard listing every participant, with a test session count.
 - "Add Participant" form to create new athlete logins.
 - **Measurement Games** — a structured physical-test battery, entered per athlete, per dated session: Timed Events (Skipping Rope Sprint and Slalom Running/Dribbling, each with the average of three times calculated automatically) and Points Events (Balance Ball Catching, Leap Catching & Throwing, Reaction Catching, Gate Dive, Target Shooting/Passing, Diamond Games, Leap & Land). A coach can fill in just the games tested that day and leave the rest blank — every previous session is kept on record (and can be deleted if entered by mistake), so progress over time is visible on both the coach's participant page and the athlete's own dashboard.
-- "Change password" page (top bar, any logged-in user) to set a new password in-app — no email/reset-link flow needed.
+- "My Account" page (top bar, any logged-in user) to edit your own name/email and change your password in-app — no email/reset-link flow needed.
+- "Coaches" page (coach nav) to add other coaches and deactivate/reactivate their accounts — each coach gets their own named login.
+- "Forgot your password?" link on login — no email setup needed; a coach resets the person's password for them with one click (works for participants and other coaches).
 - Participant login → personal dashboard with their Measurement Games results history.
 - Sample/demo data (1 coach + 3 demo athletes, including a sample Measurement Games session) pre-loaded so you can see it working immediately.
 - Installable as a home-screen app on phones (Add to Home Screen / PWA) — athletes and coaches get an app icon and a full-screen view, no app store needed. See "Using it as an app on your phone" below.
@@ -37,9 +39,34 @@ demo data are created automatically on first run.
 | Coach | `coach@justagame.co.nz` | `CoachDemo123!` |
 | Participant | `alex.demo@example.com` | `Athlete123!` |
 
-Change the coach password (use the **Change password** link in the top bar
-once logged in) and remove/replace the demo participants before giving real
-people access — see "Going live" below.
+Before giving real people access: log in as the demo coach, open **My
+Account** in the top bar, and update the name/email to your own (e.g.
+Simon / `simon@justagame.co.nz`), then set a real password in the same
+page. If other people will coach too, use the **Coaches** link to give
+each of them their own named login rather than sharing one account.
+
+## Coach accounts
+
+- **My Account** (top bar) — edit your own name/email, and change your
+  password. Works for the seeded demo coach account too, so you can turn
+  it into a real one without anyone touching the database directly.
+- **Coaches** (top bar, coach nav) — lists every coach account. **Add
+  Coach** creates a new one (you set a temporary password, same as
+  adding a participant); **Deactivate** disables a coach's login without
+  deleting their account or anything they've logged (consistent with
+  this app's "never delete, just deactivate" approach elsewhere). You
+  can't deactivate your own account from here — have another coach do it,
+  or just stop sharing the login.
+- **Forgot password** — there's no email/reset-link flow (no email
+  sending is set up). Instead, the **Forgot your password?** link on the
+  login page tells the person to contact their coach, and any coach can
+  issue a fresh password with one click: a **Reset Password** button on
+  a participant's page, or on another coach's row in **Coaches**. The new
+  password is shown once in a flash message right after — copy it and
+  send it to them straight away (by text, email, in person, whatever's
+  easiest), since it won't be shown again. This also signs them out of
+  any device they were already logged in on, so the old password stops
+  working immediately.
 
 ## Project structure
 
@@ -76,8 +103,10 @@ so any future colour tweaks only need changing in one place.
    "Add Participant" to create accounts one at a time. There's no bulk
    import yet; if you have a long roster, tell me and I can add a CSV
    import.
-4. **Passwords** — every user (coach or athlete) can change their own
-   password from the **Change password** link in the top bar.
+4. **Passwords & details** — every user (coach or athlete) can update their
+   own name, email and password from **My Account** in the top bar.
+5. **Other coaches** — use **Coaches** in the top bar to add a login for
+   each coach, or deactivate one that shouldn't have access any more.
 
 ## Going live on Render
 

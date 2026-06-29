@@ -33,3 +33,11 @@ def verify_password(password: str, stored_hash: str) -> bool:
 
 def new_session_token() -> str:
     return secrets.token_urlsafe(32)
+
+
+def generate_temp_password(length: int = 10) -> str:
+    """A short random password for coach-issued resets ("forgot password").
+    Avoids visually ambiguous characters (0/O, 1/l/I) since it's typically
+    read aloud or typed out from a text message."""
+    alphabet = "ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(length))

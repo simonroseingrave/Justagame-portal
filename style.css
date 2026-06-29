@@ -141,6 +141,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
 .login-card form { text-align: left; margin-top: 16px; }
 .demo-creds { margin-top: 18px; font-size: 13px; color: var(--jag-muted); text-align: left; }
 .demo-creds summary { cursor: pointer; }
+.forgot-link { text-align: center; font-size: 13px; margin: 14px 0 0; }
 
 /* ---- Alerts / flash ---- */
 .alert { background: #fdecea; color: #9b1c1c; border: 1px solid #f5c6c0; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
@@ -195,6 +196,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
 .table th { text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--jag-border); color: var(--jag-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
 .table td { padding: 10px 12px; border-bottom: 1px solid var(--jag-border); vertical-align: top; }
 .tag { background: var(--jag-border); padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+.tag-active { background: #e9faf6; color: #0f6e62; }
+.tag-inactive { background: #fdecea; color: #9b1c1c; }
 .pts-cell { font-weight: 700; color: var(--jag-green-dark); white-space: nowrap; }
 
 /* ---- Footer ---- */
