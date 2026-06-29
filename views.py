@@ -7,18 +7,9 @@ from html import escape as esc
 
 from constants import (
     APP_NAME,
-    CATEGORIES,
     MEASUREMENT_GAMES,
     all_measurement_games,
-    get_level_info,
 )
-
-
-def category_datalist(categories, list_id="category-suggestions"):
-    """A <datalist> of category suggestions for a text input, so coaches can
-    pick an existing category or just type a brand-new one."""
-    options = "".join(f"<option value=\"{esc(c)}\"></option>" for c in categories)
-    return f'<datalist id="{list_id}">{options}</datalist>'
 
 
 def layout(title, body, user=None, flash=None, active_nav=None):
@@ -113,16 +104,6 @@ def login_page(error=None, prefill_email=""):
     return layout("Log in", body)
 
 
-def progress_bar(fraction, label=""):
-    pct = max(0, min(100, round(fraction * 100)))
-    return f"""
-    <div class="progress">
-      <div class="progress-bar" style="width:{pct}%"></div>
-    </div>
-    <div class="progress-label">{label}</div>
-    """
-
-
 def _measurement_field_input(game_key, field):
     """One labelled number input for a single Measurement Games field."""
     ftype = field["type"]
@@ -161,7 +142,7 @@ def measurement_games_form(participant_id):
 
     return f"""
     <div class="card form-card">
-      <h3>Record Measurement Games</h3>
+      <h3>Measurement Games</h3>
       <p class="muted">Fill in whichever games were tested this session &mdash; leave the rest blank.
       The Skipping Rope Sprint average is calculated automatically from Time 1/2/3.</p>
       <form method="post" action="/coach/participants/{participant_id}/measurement">
@@ -239,24 +220,7 @@ def measurement_games_history(sessions, show_delete=False, participant_id=None):
     )
 
 
-def participant_dashboard(user, activities, total_points, measurement_sessions):
-    level_info = get_level_info(total_points)
-    if level_info["next_name"]:
-        level_label = f"{level_info['current_name']} &rarr; {level_info['points_to_next']} pts to {level_info['next_name']}"
-    else:
-        level_label = f"{level_info['current_name']} (top level reached!)"
-
-    activity_rows = "".join(
-        f"""<tr>
-              <td>{esc(a['date'])}</td>
-              <td>{esc(a['title'])}</td>
-              <td><span class="tag">{esc(a['category'] or '-')}</span></td>
-              <td>{esc(a['notes'] or '')}</td>
-              <td class="pts-cell">+{a['points']}</td>
-            </tr>"""
-        for a in activities
-    ) or '<tr><td colspan="5" class="muted">No activity logged yet.</td></tr>'
-
+def participant_dashboard(user, measurement_sessions):
     body = f"""
     <div class="page-head">
       <div>
@@ -267,34 +231,13 @@ def participant_dashboard(user, activities, total_points, measurement_sessions):
 
     <section class="stat-row">
       <div class="card stat-card">
-        <div class="stat-number">{total_points}</div>
-        <div class="stat-label">Total Points</div>
-      </div>
-      <div class="card stat-card">
         <div class="stat-number">{len(measurement_sessions)}</div>
         <div class="stat-label">Test Sessions</div>
       </div>
-      <div class="card stat-card">
-        <div class="stat-number">{len(activities)}</div>
-        <div class="stat-label">Sessions Logged</div>
-      </div>
-    </section>
-
-    <section class="card level-card">
-      <h3>Level: {esc(level_info['current_name'])}</h3>
-      {progress_bar(level_info['progress'], level_label)}
     </section>
 
     <h2 class="section-title">Measurement Games Results</h2>
     {measurement_games_history(measurement_sessions)}
-
-    <h2 class="section-title">Activity Log</h2>
-    <div class="card">
-      <table class="table">
-        <thead><tr><th>Date</th><th>Session</th><th>Focus</th><th>Coach notes</th><th>Points</th></tr></thead>
-        <tbody>{activity_rows}</tbody>
-      </table>
-    </div>
     """
     return layout("My Dashboard", body, user=user, active_nav="dashboard")
 
@@ -302,32 +245,28 @@ def participant_dashboard(user, activities, total_points, measurement_sessions):
 def coach_dashboard(participants):
     rows = []
     for p in participants:
-        level_info = get_level_info(p["total_points"])
         rows.append(f"""
         <tr>
           <td><a href="/coach/participants/{p['id']}">{esc(p['name'])}</a></td>
           <td>{esc(p['sport'] or '-')}</td>
           <td>{esc(p['programme'] or '-')}</td>
-          <td>{p['total_points']}</td>
-          <td>{esc(level_info['current_name'])}</td>
           <td>{p['test_count']}</td>
-          <td>{p['activity_count']}</td>
           <td><a class="btn btn-sm btn-secondary" href="/coach/participants/{p['id']}">Manage</a></td>
         </tr>
         """)
-    rows_html = "".join(rows) or '<tr><td colspan="8" class="muted">No participants yet. Add one to get started.</td></tr>'
+    rows_html = "".join(rows) or '<tr><td colspan="5" class="muted">No participants yet. Add one to get started.</td></tr>'
 
     body = f"""
     <div class="page-head">
       <div>
         <h1>Coach Dashboard</h1>
-        <p class="muted">Log activity, record Measurement Games results and track every athlete's progress.</p>
+        <p class="muted">Record Measurement Games results and track every athlete's progress.</p>
       </div>
       <a class="btn btn-primary" href="/coach/participants/new">+ Add Participant</a>
     </div>
     <div class="card">
       <table class="table">
-        <thead><tr><th>Name</th><th>Sport</th><th>Programme</th><th>Points</th><th>Level</th><th>Tests</th><th>Sessions</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Sport</th><th>Programme</th><th>Tests</th><th></th></tr></thead>
         <tbody>{rows_html}</tbody>
       </table>
     </div>
@@ -367,21 +306,7 @@ def new_participant_form(user, error=None):
     return layout("Add Participant", body, user=user, active_nav="new_participant")
 
 
-def coach_participant_detail(coach, participant, activities, total_points, measurement_sessions, message=None):
-    level_info = get_level_info(total_points)
-    category_suggestions = category_datalist(CATEGORIES)
-
-    activity_rows = "".join(
-        f"""<tr>
-              <td>{esc(a['date'])}</td>
-              <td>{esc(a['title'])}</td>
-              <td><span class="tag">{esc(a['category'] or '-')}</span></td>
-              <td>{esc(a['notes'] or '')}</td>
-              <td class="pts-cell">+{a['points']}</td>
-            </tr>"""
-        for a in activities
-    ) or '<tr><td colspan="5" class="muted">No activity logged yet.</td></tr>'
-
+def coach_participant_detail(coach, participant, measurement_sessions, message=None):
     message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
 
     body = f"""
@@ -395,41 +320,13 @@ def coach_participant_detail(coach, participant, activities, total_points, measu
     {message_html}
 
     <section class="stat-row">
-      <div class="card stat-card"><div class="stat-number">{total_points}</div><div class="stat-label">Total Points</div></div>
       <div class="card stat-card"><div class="stat-number">{len(measurement_sessions)}</div><div class="stat-label">Test Sessions</div></div>
-      <div class="card stat-card"><div class="stat-number">{esc(level_info['current_name'])}</div><div class="stat-label">Current Level</div></div>
     </section>
-
-    <div class="card form-card">
-      <h3>Log an Activity</h3>
-      <form method="post" action="/coach/participants/{participant['id']}/activity">
-        <label>Date</label>
-        <input type="date" name="date" required />
-        <label>Session title</label>
-        <input type="text" name="title" placeholder="e.g. Week 6 - Adaptability Programme Session" required />
-        <label>Focus area</label>
-        <input type="text" name="category" list="category-suggestions" placeholder="e.g. Physical Capability" />
-        {category_suggestions}
-        <label>Coach notes</label>
-        <textarea name="notes" rows="3" placeholder="What did they work on / show?"></textarea>
-        <label>Points</label>
-        <input type="number" name="points" value="10" min="0" max="100" />
-        <button type="submit" class="btn btn-primary">Log Activity</button>
-      </form>
-    </div>
 
     {measurement_games_form(participant['id'])}
 
     <h2 class="section-title">Measurement Games History</h2>
     {measurement_games_history(measurement_sessions, show_delete=True, participant_id=participant['id'])}
-
-    <h2 class="section-title">Activity Log</h2>
-    <div class="card">
-      <table class="table">
-        <thead><tr><th>Date</th><th>Session</th><th>Focus</th><th>Coach notes</th><th>Points</th></tr></thead>
-        <tbody>{activity_rows}</tbody>
-      </table>
-    </div>
     """
     return layout(participant["name"], body, user=coach, active_nav="dashboard")
 
