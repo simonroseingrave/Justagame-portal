@@ -124,6 +124,18 @@ MEASUREMENT_GAMES = [
                     {"key": "running", "label": "Running", "type": "number", "unit": "Number of Gates"},
                     {"key": "walking_numbers", "label": "Walking Numbers", "type": "number", "unit": "Number of Gates"},
                     {"key": "running_numbers", "label": "Running Numbers", "type": "number", "unit": "Number of Gates"},
+                    {"key": "dribbling_walking", "label": "Dribbling Walking", "type": "number", "unit": "Number of Gates"},
+                    {"key": "dribbling_running", "label": "Dribbling Running", "type": "number", "unit": "Number of Gates"},
+                    {"key": "dribbling_walking_numbers", "label": "Dribbling Walking Numbers", "type": "number", "unit": "Number of Gates"},
+                    {"key": "dribbling_running_numbers", "label": "Dribbling Running Numbers", "type": "number", "unit": "Number of Gates"},
+                ],
+            },
+            {
+                "key": "leap_and_land",
+                "name": "Leap & Land",
+                "fields": [
+                    {"key": "attempt_1", "label": "Attempt 1", "type": "number", "unit": "10 Tries"},
+                    {"key": "attempt_2", "label": "Attempt 2", "type": "number", "unit": "20 Tries"},
                 ],
             },
         ],

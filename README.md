@@ -1,8 +1,7 @@
 # Just A Game — Athlete Adaptability Tracking
 
-A web app for Just A Game athletes: coaches log session activity and record
-Measurement Games test results, and each athlete logs in to see their own
-activity history, Measurement Games results, and points/level progress.
+A web app for Just A Game athletes: coaches record Measurement Games test
+results, and each athlete logs in to see their own results history.
 
 It has **zero external dependencies** — it only uses the Python standard
 library (no Flask, Django, or `pip install` needed to run it). That makes
@@ -10,14 +9,14 @@ it easy to run almost anywhere Python 3 is available.
 
 ## What's included
 
-- Coach login → dashboard listing every participant, with points, level, test session and activity counts.
+- Coach login → dashboard listing every participant, with a test session count.
 - "Add Participant" form to create new athlete logins.
-- Per-participant page to log activity sessions (date, focus area, coach notes, points). Focus area is free text with autocomplete suggestions, so a coach can type a brand-new category any time — no code changes needed.
-- **Measurement Games** — a structured physical-test battery, entered per athlete, per dated session: Timed Events (Skipping Rope Sprint and Slalom Running/Dribbling, each with the average of three times calculated automatically) and Points Events (Balance Ball Catching, Leap Catching & Throwing, Reaction Catching, Gate Dive, Target Shooting/Passing, Diamond Games). A coach can fill in just the games tested that day and leave the rest blank — every previous session is kept on record (and can be deleted if entered by mistake), so progress over time is visible on both the coach's participant page and the athlete's own dashboard.
+- **Measurement Games** — a structured physical-test battery, entered per athlete, per dated session: Timed Events (Skipping Rope Sprint and Slalom Running/Dribbling, each with the average of three times calculated automatically) and Points Events (Balance Ball Catching, Leap Catching & Throwing, Reaction Catching, Gate Dive, Target Shooting/Passing, Diamond Games, Leap & Land). A coach can fill in just the games tested that day and leave the rest blank — every previous session is kept on record (and can be deleted if entered by mistake), so progress over time is visible on both the coach's participant page and the athlete's own dashboard.
 - "Change password" page (top bar, any logged-in user) to set a new password in-app — no email/reset-link flow needed.
-- Participant login → personal dashboard: total points, level progress bar, Measurement Games results history, and a full activity log.
-- A 5-level points system (Rookie → Elite Adaptor) — thresholds are configurable in `constants.py`.
+- Participant login → personal dashboard with their Measurement Games results history.
 - Sample/demo data (1 coach + 3 demo athletes, including a sample Measurement Games session) pre-loaded so you can see it working immediately.
+
+**Paused for now:** the Activity Log (logging session activity with notes/points) and the points/level system have been removed from the UI, since they aren't needed at this stage. The underlying code hasn't been deleted — the `activities` table (`db.py`) and the level thresholds (`LEVELS`/`get_level_info` in `constants.py`) are still there, unused, ready to be wired back in later if you want them.
 
 ## Running it locally
 
@@ -50,7 +49,7 @@ justagame-portal/
   db.py         SQLite schema + seed data
   auth.py       password hashing, sessions
   views.py      page templates (plain Python functions, not Jinja)
-  constants.py  Measurement Games structure, focus-area categories, levels/points thresholds
+  constants.py  Measurement Games structure (plus unused levels/points thresholds, paused for now)
   static/       CSS + logo
   data/         SQLite database (created on first run, not in git)
 ```
@@ -71,7 +70,7 @@ so any future colour tweaks only need changing in one place.
    changes needed. (The result values themselves are fully editable in the
    UI: a coach can log a new dated session any time, and delete a session
    if it was entered by mistake.)
-2. **Levels & points** — thresholds live in `constants.py` (`LEVELS`).
+2. **Levels & points (paused)** — the threshold logic still lives in `constants.py` (`LEVELS`/`get_level_info`) and the `activities` table is still in `db.py`, just not wired into any page right now. Say the word if you want the Activity Log and points/level system back.
 3. **Real participants** — once live, log in as the coach and use
    "Add Participant" to create accounts one at a time. There's no bulk
    import yet; if you have a long roster, tell me and I can add a CSV

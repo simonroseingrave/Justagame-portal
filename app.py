@@ -60,15 +60,6 @@ def flash_redirect(path, message):
     return redirect(f"{path}?{qs}")
 
 
-def participant_summary(conn, participant_id):
-    activities = conn.execute(
-        "SELECT * FROM activities WHERE participant_id = ? ORDER BY date DESC, id DESC",
-        (participant_id,),
-    ).fetchall()
-    total_points = sum(a["points"] for a in activities)
-    return activities, total_points
-
-
 # --------------------------------------------------------------- auth routes
 
 
@@ -136,14 +127,8 @@ def dashboard(req):
         return redirect("/login")
     conn = db.get_conn()
     try:
-        activities, total_points = participant_summary(conn, user["id"])
         measurement_sessions = db.measurement_sessions_for(conn, user["id"])
-        return Response(views.participant_dashboard(
-            user,
-            [dict(a) for a in activities],
-            total_points,
-            measurement_sessions,
-        ))
+        return Response(views.participant_dashboard(user, measurement_sessions))
     finally:
         conn.close()
 
@@ -163,11 +148,10 @@ def coach_dashboard(req):
         ).fetchall()
         summaries = []
         for p in participants:
-            activities, total_points = participant_summary(conn, p["id"])
             test_count = db.count_measurement_sessions(conn, p["id"])
             summaries.append({
                 "id": p["id"], "name": p["name"], "sport": p["sport"], "programme": p["programme"],
-                "total_points": total_points, "test_count": test_count, "activity_count": len(activities),
+                "test_count": test_count,
             })
         return Response(views.coach_dashboard_for(coach, summaries))
     finally:
@@ -224,42 +208,13 @@ def coach_participant_detail(req, participant_id):
         ).fetchone()
         if not participant:
             return Response(views.simple_message_page("Not found", "Participant not found.", user=coach), status=404)
-        activities, total_points = participant_summary(conn, participant_id)
         measurement_sessions = db.measurement_sessions_for(conn, participant_id)
         message = req.get_query("flash")
         return Response(views.coach_participant_detail(
-            coach, dict(participant), [dict(a) for a in activities], total_points,
-            measurement_sessions, message=message,
+            coach, dict(participant), measurement_sessions, message=message,
         ))
     finally:
         conn.close()
-
-
-@router.post("/coach/participants/<int:participant_id>/activity")
-def log_activity(req, participant_id):
-    coach = require_role(req, "coach")
-    if not coach:
-        return redirect("/login")
-    date = req.form_get("date") or db.today()
-    title = req.form_get("title").strip()
-    category = req.form_get("category")
-    notes = req.form_get("notes").strip()
-    try:
-        points = int(req.form_get("points") or 0)
-    except ValueError:
-        points = 0
-
-    conn = db.get_conn()
-    try:
-        conn.execute(
-            "INSERT INTO activities (participant_id, date, title, category, notes, points, logged_by, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (participant_id, date, title, category, notes, points, coach["id"], db.now()),
-        )
-        conn.commit()
-    finally:
-        conn.close()
-    return flash_redirect(f"/coach/participants/{participant_id}", "Activity logged.")
 
 
 @router.post("/coach/participants/<int:participant_id>/measurement")

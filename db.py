@@ -117,8 +117,8 @@ def is_seeded(conn):
 
 
 def seed_demo_data():
-    """Populate the database with a coach account, demo participants, the
-    Just A Game achievement set, and a few sample activity log entries.
+    """Populate the database with a coach account, demo participants, and a
+    sample Measurement Games session for Alex.
     Safe to call repeatedly -- only seeds if the users table is empty."""
     conn = get_conn()
     try:
@@ -148,28 +148,8 @@ def seed_demo_data():
             ).lastrowid
             participant_ids[name] = pid
 
-        # --- Sample activity log + awards for Alex (full demo timeline) -
-        alex = participant_ids["Alex Taylor"]
-        sample_sessions = [
-            ("2026-05-26", "Week 1 - Adaptability Programme Session", "Physical Capability",
-             "Strong start, focused on athletic movement foundations under game constraints.", 10),
-            ("2026-06-02", "Week 2 - Adaptability Programme Session", "Skill Adaptability",
-             "Explored new ways to adapt batting technique to bowling variations.", 10),
-            ("2026-06-09", "Week 3 - Adaptability Programme Session", "Game Understanding",
-             "Good decision-making reading the field placements under pressure.", 10),
-            ("2026-06-16", "Week 4 - Adaptability Programme Session", "Confidence & Resilience",
-             "Bounced back well after a tough start to the session.", 10),
-            ("2026-06-23", "Week 5 - Adaptability Programme Session", "Physical Capability",
-             "Noticeable improvement in agility and footwork under fatigue.", 10),
-        ]
-        for date, title, category, notes, pts in sample_sessions:
-            conn.execute(
-                "INSERT INTO activities (participant_id, date, title, category, notes, points, logged_by, created_at) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                (alex, date, title, category, notes, pts, coach_id, now()),
-            )
-
         # --- Sample Measurement Games session for Alex (demo) -----------
+        alex = participant_ids["Alex Taylor"]
         mg_session_id = conn.execute(
             "INSERT INTO measurement_sessions (participant_id, date, logged_by, created_at) VALUES (?, ?, ?, ?)",
             (alex, "2026-06-23", coach_id, now()),
@@ -189,23 +169,6 @@ def seed_demo_data():
                 "INSERT INTO measurement_results (session_id, game_key, field_key, value) VALUES (?, ?, ?, ?)",
                 (mg_session_id, game_key, field_key, value),
             )
-
-        # --- Lighter sample data for Jess and Sam ------------------------
-        jess = participant_ids["Jess Nguyen"]
-        conn.execute(
-            "INSERT INTO activities (participant_id, date, title, category, notes, points, logged_by, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (jess, "2026-06-18", "1-on-1 Session with Patrick", "Skill Adaptability",
-             "Worked on first-touch adaptability under pressure from different angles.", 10, coach_id, now()),
-        )
-
-        sam = participant_ids["Sam Wilson"]
-        conn.execute(
-            "INSERT INTO activities (participant_id, date, title, category, notes, points, logged_by, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            (sam, "2026-06-20", "Small Group Session with Regan", "Confidence & Resilience",
-             "Showed great composure leading a small group drill.", 10, coach_id, now()),
-        )
 
         conn.commit()
         return True
