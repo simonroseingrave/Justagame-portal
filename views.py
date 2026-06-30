@@ -415,7 +415,8 @@ def account_page(user, profile_error=None, profile_success=None, password_error=
     return layout("My Account", body, user=user, active_nav=None)
 
 
-def coach_list_page(user, coaches):
+def coach_list_page(user, coaches, message=None):
+    message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
     rows = []
     for c in coaches:
         is_self = c["id"] == user["id"]
@@ -444,6 +445,7 @@ def coach_list_page(user, coaches):
       <h1>Coaches</h1>
       <a class="btn btn-primary" href="/coach/coaches/new">Add Coach</a>
     </div>
+    {message_html}
     <div class="card">
       <table class="table">
         <thead><tr><th>Name</th><th>Email</th><th>Status</th><th></th></tr></thead>

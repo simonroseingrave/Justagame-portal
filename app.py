@@ -428,7 +428,8 @@ def list_coaches(req):
     conn = db.get_conn()
     try:
         coaches = db.list_coaches(conn)
-        return Response(views.coach_list_page(coach, coaches))
+        message = req.get_query("flash")
+        return Response(views.coach_list_page(coach, coaches, message=message))
     finally:
         conn.close()
 
