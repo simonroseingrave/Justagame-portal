@@ -52,19 +52,6 @@ MEASUREMENT_GAMES = [
                      "formula": "average_of", "of": ["time_1", "time_2", "time_3"]},
                 ],
             },
-            {
-                "key": "slalom_running_dribbling",
-                "name": "Slalom Running / Dribbling (15 metres)",
-                "fields": [
-                    {"key": "time_1", "label": "Time 1", "type": "time"},
-                    {"key": "time_2", "label": "Time 2", "type": "time"},
-                    {"key": "time_3", "label": "Time 3", "type": "time"},
-                ],
-                "computed": [
-                    {"key": "average", "label": "Average", "type": "time",
-                     "formula": "average_of", "of": ["time_1", "time_2", "time_3"]},
-                ],
-            },
         ],
     },
     {
