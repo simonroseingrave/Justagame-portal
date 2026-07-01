@@ -89,12 +89,13 @@ MEASUREMENT_GAMES = [
                 ],
             },
             {
-                "key": "reaction_catching",
-                "name": "Reaction Catching - 20 attempts",
+                "key": "perception_catching",
+                "name": "Perception Catching - 20 attempts",
                 "fields": [
-                    {"key": "very_small_ball", "label": "Very Small Ball", "type": "number"},
-                    {"key": "tape_ball", "label": "Tape Ball", "type": "number"},
-                    {"key": "ball_drop", "label": "Ball Drop", "type": "number"},
+                    {"key": "very_small_ball",   "label": "Very Small Ball", "type": "number"},
+                    {"key": "tape_ball",         "label": "Tape Ball",       "type": "number"},
+                    {"key": "tape_ball_bounce",  "label": "Tape Ball Bounce",  "type": "number"},
+                    {"key": "large_ball_taped",  "label": "Large Ball Taped",  "type": "number"},
                 ],
             },
             {
