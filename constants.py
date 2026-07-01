@@ -96,12 +96,12 @@ MEASUREMENT_GAMES = [
                 ],
             },
             {
-                "key": "target_shooting_passing",
-                "name": "Target Shooting / Passing",
+                "key": "chase_it",
+                "name": "Chase It",
                 "fields": [
-                    {"key": "distance_1", "label": "Distance 1", "type": "points"},
-                    {"key": "distance_2", "label": "Distance 2", "type": "points"},
-                    {"key": "distance_3", "label": "Distance 3", "type": "points"},
+                    {"key": "attempt_1", "label": "Attempt 1", "type": "number", "unit": "Number of Gates"},
+                    {"key": "attempt_2", "label": "Attempt 2", "type": "number", "unit": "Number of Gates"},
+                    {"key": "attempt_3", "label": "Attempt 3", "type": "number", "unit": "Number of Gates"},
                 ],
             },
             {
