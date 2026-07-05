@@ -9,3 +9,4 @@ from app import application  # noqa: F401  (re-exported for the WSGI server)
 
 db.init_db()
 db.seed_demo_data()
+db.patch_demo_data()

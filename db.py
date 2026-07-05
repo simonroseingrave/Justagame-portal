@@ -473,6 +473,108 @@ def reorder_items(conn, table, ordered_ids):
     conn.commit()
 
 
+def patch_demo_data():
+    """Idempotent patch applied on every startup.
+
+    1. Ensures all three demo participants belong to a "Demo Group".
+    2. Ensures Alex Taylor has a second (improved) Measurement Games session
+       dated 2026-07-03, so progression statistics pages have something to
+       display.  Safe to call when the DB already has the data -- it checks
+       before inserting.
+    """
+    conn = get_conn()
+    try:
+        # ---- 1. Ensure "Demo Group" exists and demo participants are in it
+        demo_emails = [
+            "alex.demo@example.com",
+            "jess.demo@example.com",
+            "sam.demo@example.com",
+        ]
+        demo_participants = []
+        for email in demo_emails:
+            row = conn.execute(
+                "SELECT id, group_id FROM users WHERE email = ? AND role = 'participant'", (email,)
+            ).fetchone()
+            if row:
+                demo_participants.append(row)
+
+        if not demo_participants:
+            return  # DB not seeded yet -- nothing to patch
+
+        # Find or create the Demo Group
+        group = conn.execute(
+            "SELECT id FROM participant_groups WHERE name = 'Demo Group'"
+        ).fetchone()
+        if not group:
+            max_order = conn.execute(
+                "SELECT COALESCE(MAX(sort_order), -1) FROM participant_groups"
+            ).fetchone()[0]
+            coach = conn.execute(
+                "SELECT id FROM users WHERE role = 'coach' ORDER BY id LIMIT 1"
+            ).fetchone()
+            coach_id = coach["id"] if coach else None
+            group_id = conn.execute(
+                "INSERT INTO participant_groups (name, sort_order, created_by, created_at) VALUES (?, ?, ?, ?)",
+                ("Demo Group", max_order + 1, coach_id, now()),
+            ).lastrowid
+            conn.commit()
+        else:
+            group_id = group["id"]
+
+        # Assign any demo participant not yet in the Demo Group
+        for p in demo_participants:
+            if p["group_id"] != group_id:
+                conn.execute(
+                    "UPDATE users SET group_id = ? WHERE id = ?", (group_id, p["id"])
+                )
+        conn.commit()
+
+        # ---- 2. Ensure Alex has a second session (2026-07-03)
+        alex = conn.execute(
+            "SELECT id FROM users WHERE email = 'alex.demo@example.com'"
+        ).fetchone()
+        if not alex:
+            return
+
+        alex_id = alex["id"]
+        already = conn.execute(
+            "SELECT COUNT(*) AS c FROM measurement_sessions WHERE participant_id = ? AND date = '2026-07-03'",
+            (alex_id,),
+        ).fetchone()["c"]
+
+        if already:
+            return  # already patched
+
+        coach = conn.execute(
+            "SELECT id FROM users WHERE role = 'coach' ORDER BY id LIMIT 1"
+        ).fetchone()
+        coach_id = coach["id"] if coach else None
+
+        t1, t2, t3 = 4.95, 4.82, 4.78
+        session_id = conn.execute(
+            "INSERT INTO measurement_sessions (participant_id, date, logged_by, created_at) VALUES (?, ?, ?, ?)",
+            (alex_id, "2026-07-03", coach_id, now()),
+        ).lastrowid
+
+        second_results = [
+            ("skipping_rope_sprint", "time_1", t1),
+            ("skipping_rope_sprint", "time_2", t2),
+            ("skipping_rope_sprint", "time_3", t3),
+            ("skipping_rope_sprint", "average", round((t1 + t2 + t3) / 3, 2)),
+            ("balance_ball_catching", "small_ball_two_hands", 18),
+            ("balance_ball_catching", "large_ball_two_hands", 26),
+            ("diamond_games", "running_room", 12),
+        ]
+        for game_key, field_key, value in second_results:
+            conn.execute(
+                "INSERT INTO measurement_results (session_id, game_key, field_key, value) VALUES (?, ?, ?, ?)",
+                (session_id, game_key, field_key, value),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+
 def maybe_reset_coach_password():
     """Recovery hatch for a forgotten coach password on a host (like
     Render's free tier) with no shell access. If the RESET_COACH_PASSWORD

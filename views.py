@@ -21,7 +21,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
                 links += [
                     ("/coach/participants/new", "Add Participant", "new_participant"),
                     ("/coach/coaches", "Coaches", "coaches"),
-                    ("/coach/progress", "Progress", "progress"),
+                    ("/coach/progress", "Progression Statistics", "progress"),
                 ]
             links.append(("/coach/resources", "Resources", "resources"))
         else:
@@ -524,7 +524,7 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
       </div>
       <div style="display:flex; gap:8px;">
         {reset_btn}
-        <a class="btn btn-primary" href="/coach/participants/{participant['id']}/progress">&#128200; Progress</a>
+        <a class="btn btn-primary" href="/coach/participants/{participant['id']}/progress">&#128200; Progression Statistics</a>
         <a class="btn btn-ghost" href="/coach">&larr; Back</a>
       </div>
     </div>
@@ -553,11 +553,11 @@ def participant_progress_page(coach, participant, measurement_sessions):
     if n == 0:
         body = f"""
         <div class="page-head">
-          <div><h1>{esc(participant['name'])} &mdash; Progress</h1></div>
+          <div><h1>{esc(participant['name'])} &mdash; Progression Statistics</h1></div>
           <a class="btn btn-ghost" href="/coach/participants/{pid}">&larr; Back</a>
         </div>
         <div class="card"><p class="muted">No test sessions recorded yet.</p></div>"""
-        return layout(f"{participant['name']} Progress", body, user=coach, active_nav="dashboard")
+        return layout(f"{participant['name']} Progression Statistics", body, user=coach, active_nav="dashboard")
 
     # sessions are most-recent-first; oldest = last
     latest = measurement_sessions[0]
@@ -582,7 +582,13 @@ def participant_progress_page(coach, participant, measurement_sessions):
         sign = "+" if diff > 0 else ""
         suffix = "s" if ftype == "time" else ""
         arrow = "&#9650;" if diff > 0 else "&#9660;"
-        return f'<span style="color:{colour}; font-weight:700;">{arrow} {sign}{diff:.2f}{suffix}</span>'
+        raw = f"{sign}{diff:.2f}{suffix}"
+        if first_val != 0:
+            pct = abs(diff / first_val) * 100
+            pct_sign = "+" if improved else "−"
+            return (f'<span style="color:{colour}; font-weight:700;">{arrow} {pct_sign}{pct:.1f}%</span>'
+                    f'<br><small style="color:{colour}; font-weight:400;">{raw}</small>')
+        return f'<span style="color:{colour}; font-weight:700;">{arrow} {raw}</span>'
 
     # Build game sections
     sections_html = ""
@@ -676,7 +682,7 @@ def participant_progress_page(coach, participant, measurement_sessions):
     body = f"""
     <div class="page-head">
       <div>
-        <h1>{esc(participant['name'])} &mdash; Progress</h1>
+        <h1>{esc(participant['name'])} &mdash; Progression Statistics</h1>
         <p class="muted">{esc(participant.get('sport') or '')} &middot; {n} test session{"s" if n != 1 else ""}</p>
       </div>
       <a class="btn btn-ghost" href="/coach/participants/{pid}">&larr; Back</a>
@@ -684,7 +690,7 @@ def participant_progress_page(coach, participant, measurement_sessions):
     {sections_html}
     {trend_html}
     """
-    return layout(f"{participant['name']} Progress", body, user=coach, active_nav="dashboard")
+    return layout(f"{participant['name']} Progression Statistics", body, user=coach, active_nav="dashboard")
 
 
 def _progress_for_participant(p_name, p_id, sessions):
@@ -731,7 +737,14 @@ def _delta_cell(first_val, latest_val, ftype):
     sign = "+" if diff > 0 else ""
     suffix = "s" if ftype == "time" else ""
     arrow = "&#9650;" if diff > 0 else "&#9660;"
-    return f'<td style="color:{colour}; font-weight:700;">{arrow}{sign}{diff:.2f}{suffix}</td>'
+    raw = f"{sign}{diff:.2f}{suffix}"
+    if first_val != 0:
+        pct = abs(diff / first_val) * 100
+        pct_sign = "+" if improved else "−"
+        return (f'<td style="color:{colour}; font-weight:700; white-space:nowrap;">'
+                f'{arrow} {pct_sign}{pct:.1f}%<br>'
+                f'<small style="font-weight:400;">{raw}</small></td>')
+    return f'<td style="color:{colour}; font-weight:700;">{arrow}{raw}</td>'
 
 
 def group_progress_page(coach, group, participants_sessions):
@@ -743,7 +756,7 @@ def group_progress_page(coach, group, participants_sessions):
 
     if not active:
         body = f"""
-        <div class="page-head"><div><h1>{gname} &mdash; Group Progress</h1></div>
+        <div class="page-head"><div><h1>{gname} &mdash; Group Progression Statistics</h1></div>
           <a class="btn btn-ghost" href="/coach">&larr; Back</a></div>
         <div class="card"><p class="muted">No test sessions recorded for this group yet.</p></div>"""
         return layout(f"{group['name']} Progress", body, user=coach, active_nav="progress")
@@ -807,7 +820,7 @@ def group_progress_page(coach, group, participants_sessions):
     body = f"""
     <div class="page-head">
       <div>
-        <h1>{gname} &mdash; Group Progress</h1>
+        <h1>{gname} &mdash; Group Progression Statistics</h1>
         <p class="muted">{len(active)} athlete{"s" if len(active)!=1 else ""} with test data</p>
       </div>
       <a class="btn btn-ghost" href="/coach">&larr; Back</a>
@@ -830,7 +843,7 @@ def all_progress_page(coach, groups_data):
         any_data = True
         gname = esc(group["name"]) if group else "Ungrouped"
         gid   = group["id"] if group else None
-        prog_link = f'<a class="btn btn-ghost btn-sm" href="/coach/groups/{gid}/progress">Full group progress</a>' if gid else ""
+        prog_link = f'<a class="btn btn-ghost btn-sm" href="/coach/groups/{gid}/progress">Full group progression statistics</a>' if gid else ""
 
         # Summary table: participant | sessions | games tested | first session | latest session
         rows = ""
@@ -867,12 +880,12 @@ def all_progress_page(coach, groups_data):
 
     body = f"""
     <div class="page-head">
-      <div><h1>Progress Overview</h1>
+      <div><h1>Progression Statistics Overview</h1>
         <p class="muted">{total_with_data} of {total_participants} participants tested &middot; {total_sessions} total sessions</p>
       </div>
     </div>
     {body_sections}"""
-    return layout("Progress Overview", body, user=coach, active_nav="progress")
+    return layout("Progression Statistics", body, user=coach, active_nav="progress")
 
 
 def simple_message_page(title, message, user=None):
