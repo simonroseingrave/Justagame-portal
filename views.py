@@ -16,12 +16,13 @@ def layout(title, body, user=None, flash=None, active_nav=None):
     nav = ""
     if user:
         if user["role"] == "coach":
-            links = [
-                ("/coach", "Dashboard", "dashboard"),
-                ("/coach/participants/new", "Add Participant", "new_participant"),
-                ("/coach/coaches", "Coaches", "coaches"),
-                ("/coach/resources", "Resources", "resources"),
-            ]
+            links = [("/coach", "Dashboard", "dashboard")]
+            if user.get("is_admin"):
+                links += [
+                    ("/coach/participants/new", "Add Participant", "new_participant"),
+                    ("/coach/coaches", "Coaches", "coaches"),
+                ]
+            links.append(("/coach/resources", "Resources", "resources"))
         else:
             links = [("/dashboard", "My Dashboard", "dashboard")]
         nav_items = "".join(
@@ -277,19 +278,68 @@ def participant_dashboard(user, measurement_sessions):
     return layout("My Dashboard", body, user=user, active_nav="dashboard")
 
 
-def coach_dashboard(participants):
-    rows = []
-    for p in participants:
-        rows.append(f"""
-        <tr>
-          <td><a href="/coach/participants/{p['id']}">{esc(p['name'])}</a></td>
-          <td>{esc(p['sport'] or '-')}</td>
-          <td>{esc(p['programme'] or '-')}</td>
-          <td>{p['test_count']}</td>
-          <td><a class="btn btn-sm btn-secondary" href="/coach/participants/{p['id']}">Manage</a></td>
-        </tr>
-        """)
-    rows_html = "".join(rows) or '<tr><td colspan="5" class="muted">No participants yet. Add one to get started.</td></tr>'
+def _participant_table(participants):
+    rows = "".join(f"""
+    <tr>
+      <td><a href="/coach/participants/{p['id']}">{esc(p['name'])}</a></td>
+      <td>{esc(p['sport'] or '-')}</td>
+      <td>{esc(p['programme'] or '-')}</td>
+      <td>{p['test_count']}</td>
+      <td><a class="btn btn-sm btn-secondary" href="/coach/participants/{p['id']}">Manage</a></td>
+    </tr>
+    """ for p in participants) or '<tr><td colspan="5" class="muted">No participants in this group.</td></tr>'
+    return f"""<table class="table">
+      <thead><tr><th>Name</th><th>Sport</th><th>Programme</th><th>Tests</th><th></th></tr></thead>
+      <tbody>{rows}</tbody>
+    </table>"""
+
+
+def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None):
+    message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
+
+    group_sections = ""
+    for group, participants in group_summaries:
+        group_sections += f"""
+        <div class="res-folder" style="margin-bottom:20px;">
+          <div class="res-folder-head" style="display:flex; align-items:center; gap:10px;">
+            <strong style="font-size:16px;">{esc(group['name'])}</strong>
+            <form method="post" action="/coach/groups/{group['id']}/delete" style="margin-left:auto; display:inline"
+                  onsubmit="return confirm('Delete group \\'{esc(group['name'])}\\'? Participants will be moved to ungrouped.');">
+              <button type="submit" class="btn btn-ghost btn-sm">Delete Group</button>
+            </form>
+          </div>
+          <div style="padding:0 8px 8px;">{_participant_table(participants)}</div>
+        </div>"""
+
+    ungrouped_section = ""
+    if ungrouped_summaries or not group_summaries:
+        ungrouped_label = "Ungrouped" if group_summaries else "Participants"
+        ungrouped_section = f"""
+        <div class="res-folder" style="margin-bottom:20px;">
+          <div class="res-folder-head"><strong style="font-size:16px;">{ungrouped_label}</strong></div>
+          <div style="padding:0 8px 8px;">{_participant_table(ungrouped_summaries)}</div>
+        </div>"""
+
+    is_admin = user.get("is_admin")
+
+    if not group_summaries and not ungrouped_summaries:
+        if is_admin:
+            content = '<div class="card"><p class="muted">No participants yet. Add one to get started.</p></div>'
+        else:
+            content = '<div class="card"><p class="muted">You haven\'t been assigned to a group yet. Contact an admin to be assigned.</p></div>'
+    else:
+        content = group_sections + ungrouped_section
+
+    add_btn = '<a class="btn btn-primary" href="/coach/participants/new">+ Add Participant</a>' if is_admin else ""
+    create_group_form = f"""
+    <div class="card form-card" style="max-width:360px; margin-top:8px;">
+      <h3 style="margin-top:0; font-size:15px;">Create Group</h3>
+      <form method="post" action="/coach/groups/new" style="display:flex; gap:8px;">
+        <input type="text" name="group_name" placeholder="e.g. Class 5A" required style="flex:1;" />
+        <button type="submit" class="btn btn-primary btn-sm" style="white-space:nowrap;">+ Group</button>
+      </form>
+    </div>
+    """ if is_admin else ""
 
     body = f"""
     <div class="page-head">
@@ -297,28 +347,23 @@ def coach_dashboard(participants):
         <h1>Coach Dashboard</h1>
         <p class="muted">Record Measurement Games results and track every athlete's progress.</p>
       </div>
-      <a class="btn btn-primary" href="/coach/participants/new">+ Add Participant</a>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">{add_btn}</div>
     </div>
-    <div class="card">
-      <table class="table">
-        <thead><tr><th>Name</th><th>Sport</th><th>Programme</th><th>Tests</th><th></th></tr></thead>
-        <tbody>{rows_html}</tbody>
-      </table>
-    </div>
+    {message_html}
+    {content}
+    {create_group_form}
     """
-    return layout("Coach Dashboard", body, user={"name": "Coach", "role": "coach"}, active_nav="dashboard")
+    return layout("Coach Dashboard", body, user=user, active_nav="dashboard")
 
 
-def coach_dashboard_for(user, participants):
-    html = coach_dashboard(participants)
-    # swap the placeholder user pill name for the real logged-in coach name
-    return html.replace(">Coach</span>", f">{esc(user['name'])}</span>", 1)
-
-
-def new_participant_form(user, error=None):
+def new_participant_form(user, error=None, groups=None):
     error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
     sport_options = "".join(f'<option value="{esc(s)}">{esc(s)}</option>' for s in
                              ["Cricket", "Football", "Hockey", "Multi-sport"])
+    groups = groups or []
+    group_opts = '<option value="">— No group —</option>' + "".join(
+        f'<option value="{g["id"]}">{esc(g["name"])}</option>' for g in groups
+    )
     body = f"""
     <div class="page-head"><h1>Add Participant</h1></div>
     {error_html}
@@ -334,6 +379,8 @@ def new_participant_form(user, error=None):
         <select id="sport" name="sport">{sport_options}</select>
         <label for="programme">Programme / notes</label>
         <input type="text" id="programme" name="programme" placeholder="e.g. Athlete Adaptability Programme - Masterton 2026" />
+        <label for="group_id">Group (optional)</label>
+        <select id="group_id" name="group_id">{group_opts}</select>
         <button type="submit" class="btn btn-primary">Create Participant</button>
       </form>
     </div>
@@ -341,24 +388,46 @@ def new_participant_form(user, error=None):
     return layout("Add Participant", body, user=user, active_nav="new_participant")
 
 
-def coach_participant_detail(coach, participant, measurement_sessions, message=None):
+def coach_participant_detail(coach, participant, measurement_sessions, groups=None, message=None):
     message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
+    groups = groups or []
+    current_group_id = participant.get("group_id")
+    group_opts = '<option value="">— No group —</option>' + "".join(
+        f'<option value="{g["id"]}" {"selected" if current_group_id == g["id"] else ""}>{esc(g["name"])}</option>'
+        for g in groups
+    )
+    current_group_name = next((g["name"] for g in groups if g["id"] == current_group_id), None)
+    group_badge = f' &middot; <span class="tag">{esc(current_group_name)}</span>' if current_group_name else ""
+
+    is_admin = coach.get("is_admin")
+    group_form = f"""
+    <div class="card form-card" style="max-width:360px; margin-bottom:20px;">
+      <h3 style="margin-top:0; font-size:14px; color:var(--jag-muted); text-transform:uppercase; letter-spacing:.04em;">Assign Group</h3>
+      <form method="post" action="/coach/participants/{participant['id']}/assign-group" style="display:flex; gap:8px;">
+        <select name="group_id" style="flex:1;">{group_opts}</select>
+        <button type="submit" class="btn btn-primary btn-sm">Save</button>
+      </form>
+    </div>
+    """ if (is_admin and groups) else ""
+
+    reset_btn = f"""<form method="post" action="/coach/participants/{participant['id']}/reset-password"
+          onsubmit="return confirm('Reset {esc(participant['name'])}&#39;s password? They will need the new one to log in again.');">
+      <button type="submit" class="btn btn-ghost">Reset Password</button>
+    </form>""" if is_admin else ""
 
     body = f"""
     <div class="page-head">
       <div>
         <h1>{esc(participant['name'])}</h1>
-        <p class="muted">{esc(participant['sport'] or '')} &middot; {esc(participant['programme'] or '')} &middot; {esc(participant['email'])}</p>
+        <p class="muted">{esc(participant['sport'] or '')} &middot; {esc(participant['programme'] or '')} &middot; {esc(participant['email'])}{group_badge}</p>
       </div>
       <div style="display:flex; gap:8px;">
-        <form method="post" action="/coach/participants/{participant['id']}/reset-password"
-              onsubmit="return confirm('Reset {esc(participant['name'])}&#39;s password? They will need the new one to log in again.');">
-          <button type="submit" class="btn btn-ghost">Reset Password</button>
-        </form>
+        {reset_btn}
         <a class="btn btn-ghost" href="/coach">&larr; Back to all participants</a>
       </div>
     </div>
     {message_html}
+    {group_form}
 
     <section class="stat-row">
       <div class="card stat-card"><div class="stat-number">{len(measurement_sessions)}</div><div class="stat-label">Test Sessions</div></div>
@@ -416,29 +485,53 @@ def account_page(user, profile_error=None, profile_success=None, password_error=
     return layout("My Account", body, user=user, active_nav=None)
 
 
-def coach_list_page(user, coaches, message=None):
+def coach_list_page(user, coaches, groups=None, message=None):
     message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
+    groups = groups or []
+    group_map = {g["id"]: g["name"] for g in groups}
+    group_opts_base = '<option value="">— No group —</option>' + "".join(
+        f'<option value="{g["id"]}">{esc(g["name"])}</option>' for g in groups
+    )
+
     rows = []
     for c in coaches:
         is_self = c["id"] == user["id"]
         status = "Active" if c["active"] else "Inactive"
         status_class = "tag-active" if c["active"] else "tag-inactive"
+        admin_badge = ' <span class="tag tag-active" style="font-size:11px;">Admin</span>' if c["is_admin"] else ""
+        current_group_name = group_map.get(c["group_id"]) if c["group_id"] else None
+        group_badge = f' &middot; <span class="tag">{esc(current_group_name)}</span>' if current_group_name else ""
+
         if is_self:
             action_html = '<span class="muted">(you)</span>'
         else:
-            action_label = "Deactivate" if c["active"] else "Reactivate"
-            action_html = f"""<form method="post" action="/coach/coaches/{c['id']}/reset-password" style="display:inline"
-                  onsubmit="return confirm('Reset {esc(c['name'])}&#39;s password? They will need the new one to log in again.');">
+            toggle_label = "Deactivate" if c["active"] else "Reactivate"
+            admin_toggle_label = "Remove Admin" if c["is_admin"] else "Make Admin"
+            # Group assignment select (inline)
+            group_opts = group_opts_base.replace(
+                f'value="{c["group_id"]}"', f'value="{c["group_id"]}" selected'
+            ) if c["group_id"] else group_opts_base
+            action_html = f"""
+            <form method="post" action="/coach/coaches/{c['id']}/reset-password" style="display:inline"
+                  onsubmit="return confirm('Reset {esc(c['name'])}&#39;s password?');">
               <button type="submit" class="btn btn-ghost btn-sm">Reset Password</button>
             </form>
+            <form method="post" action="/coach/coaches/{c['id']}/toggle-admin" style="display:inline"
+                  onsubmit="return confirm('{admin_toggle_label} for {esc(c['name'])}?');">
+              <button type="submit" class="btn btn-ghost btn-sm">{admin_toggle_label}</button>
+            </form>
             <form method="post" action="/coach/coaches/{c['id']}/toggle" style="display:inline">
-              <button type="submit" class="btn btn-ghost btn-sm">{action_label}</button>
+              <button type="submit" class="btn btn-ghost btn-sm">{toggle_label}</button>
+            </form>
+            <form method="post" action="/coach/coaches/{c['id']}/assign-group" style="display:inline-flex; gap:4px; vertical-align:middle;">
+              <select name="group_id" style="padding:4px 6px; font-size:12px; border-radius:6px; border:1px solid var(--jag-border);">{group_opts}</select>
+              <button type="submit" class="btn btn-ghost btn-sm">Set Group</button>
             </form>"""
         rows.append(f"""<tr>
-          <td>{esc(c['name'])}</td>
-          <td>{esc(c['email'])}</td>
+          <td>{esc(c['name'])}{admin_badge}</td>
+          <td>{esc(c['email'])}{group_badge}</td>
           <td><span class="tag {status_class}">{status}</span></td>
-          <td>{action_html}</td>
+          <td style="white-space:nowrap;">{action_html}</td>
         </tr>""")
     rows_html = "".join(rows)
     body = f"""
@@ -449,7 +542,7 @@ def coach_list_page(user, coaches, message=None):
     {message_html}
     <div class="card">
       <table class="table">
-        <thead><tr><th>Name</th><th>Email</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Email / Group</th><th>Status</th><th></th></tr></thead>
         <tbody>{rows_html}</tbody>
       </table>
     </div>
@@ -477,48 +570,162 @@ def new_coach_form(user, error=None):
     return layout("Add Coach", body, user=user, active_nav="coaches")
 
 
-def resources_page(user, resources, message=None, error=None):
+def _resource_row(r, is_admin=False):
+    name_q = esc(r['name']).replace("'", "\\'")
+    admin_actions = f"""
+      <a href="/coach/resources/{r['id']}/edit" class="btn btn-ghost btn-sm">Edit</a>
+      <form method="post" action="/coach/resources/{r['id']}/delete" style="display:inline"
+            onsubmit="return confirm('Delete \\'{name_q}\\'?');">
+        <button type="submit" class="btn btn-ghost btn-sm">Delete</button>
+      </form>""" if is_admin else ""
+    drag_handle = '<span class="drag-handle" title="Drag to reorder">&#9776;</span>' if is_admin else ""
+    return f"""<div class="res-item" data-id="{r['id']}">
+      {drag_handle}
+      <div class="res-item-body">
+        <a href="{esc(r['url'])}" target="_blank" rel="noopener">{esc(r['name'])}</a>
+        {f'<span class="muted res-desc">{esc(r["description"])}</span>' if r['description'] else ''}
+      </div>
+      <div class="res-item-actions">{admin_actions}</div>
+    </div>"""
+
+
+def resources_page(user, folder_groups, ungrouped, folders, message=None, error=None):
     message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
     error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
-    rows = []
-    for r in resources:
-        rows.append(f"""<tr>
-          <td><a href="{esc(r['url'])}" target="_blank" rel="noopener">{esc(r['name'])}</a></td>
-          <td>{esc(r['description'] or '')}</td>
-          <td class="muted" style="white-space:nowrap">{esc(r['added_by_name'] or '')}</td>
-          <td>
-            <form method="post" action="/coach/resources/{r['id']}/delete" style="display:inline"
-                  onsubmit="return confirm('Delete \"{esc(r['name'])}\"?');">
-              <button type="submit" class="btn btn-ghost btn-sm">Delete</button>
-            </form>
-          </td>
-        </tr>""")
-    rows_html = "".join(rows) if rows else '<tr><td colspan="4" class="muted">No resources yet.</td></tr>'
+    is_admin = user.get("is_admin")
+
+    folder_opts = '<option value="">— Ungrouped —</option>' + "".join(
+        f'<option value="{f["id"]}">{esc(f["name"])}</option>' for f in folders
+    )
+
+    # Build folder sections
+    folder_sections = ""
+    for folder, resources in folder_groups:
+        items_html = "".join(_resource_row(r, is_admin=is_admin) for r in resources)
+        if not items_html:
+            items_html = '<p class="muted" style="padding:8px 0 0; font-size:13px;">No resources in this folder yet.</p>'
+        folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder folders">&#9776;</span>' if is_admin else ""
+        delete_folder_btn = f"""<form method="post" action="/coach/resources/folders/{folder['id']}/delete" style="display:inline; margin-left:auto"
+              onsubmit="return confirm('Delete folder \\'{esc(folder['name'])}\\'? Resources will move to Ungrouped.');">
+              <button type="submit" class="btn btn-ghost btn-sm">Delete Folder</button>
+            </form>""" if is_admin else ""
+        folder_sections += f"""
+        <div class="res-folder" data-folder-id="{folder['id']}">
+          <div class="res-folder-head">
+            {folder_handle}
+            <strong>{esc(folder['name'])}</strong>
+            {delete_folder_btn}
+          </div>
+          <div class="res-list" data-list-id="{folder['id']}">{items_html}</div>
+        </div>"""
+
+    # Ungrouped section
+    ungrouped_html = "".join(_resource_row(r, is_admin=is_admin) for r in ungrouped)
+    if not ungrouped_html:
+        ungrouped_html = '<p class="muted" style="padding:8px 0 0; font-size:13px;">No ungrouped resources.</p>'
+
+    manage_forms = f"""
+    <div class="two-col" style="gap:16px; align-items:flex-start; margin-bottom:24px;">
+      <div class="card form-card">
+        <h2 style="margin-top:0; font-size:16px;">Add a resource</h2>
+        <form method="post" action="/coach/resources/new">
+          <label for="res_name">Name</label>
+          <input type="text" id="res_name" name="name" required placeholder="e.g. Diamond Games Guide" />
+          <label for="res_url">URL</label>
+          <input type="url" id="res_url" name="url" required placeholder="https://..." />
+          <label for="res_desc">Description (optional)</label>
+          <input type="text" id="res_desc" name="description" placeholder="A short note" />
+          <label for="res_folder">Folder (optional)</label>
+          <select id="res_folder" name="folder_id">{folder_opts}</select>
+          <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Add Resource</button>
+        </form>
+      </div>
+      <div class="card form-card">
+        <h2 style="margin-top:0; font-size:16px;">Add a folder</h2>
+        <form method="post" action="/coach/resources/folders/new">
+          <label for="folder_name">Folder name</label>
+          <input type="text" id="folder_name" name="folder_name" required placeholder="e.g. Coaching Guides" />
+          <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Create Folder</button>
+        </form>
+      </div>
+    </div>""" if is_admin else ""
+
+    sortable_js = """
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+    <script>
+    function postOrder(url, ids) {
+      fetch(url, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+        body: 'ids=' + ids.join(','),
+      });
+    }
+    var foldersContainer = document.getElementById('folders-container');
+    if (foldersContainer) {
+      Sortable.create(foldersContainer, {
+        handle: '.folder-handle',
+        animation: 150,
+        onEnd: function() {
+          var ids = Array.from(foldersContainer.querySelectorAll('.res-folder[data-folder-id]'))
+                        .map(function(el) { return el.dataset.folderId; });
+          postOrder('/coach/resources/folders/reorder', ids);
+        }
+      });
+    }
+    document.querySelectorAll('.res-list').forEach(function(list) {
+      Sortable.create(list, {
+        handle: '.drag-handle:not(.folder-handle)',
+        animation: 150,
+        onEnd: function() {
+          var ids = Array.from(list.querySelectorAll('.res-item'))
+                        .map(function(el) { return el.dataset.id; });
+          postOrder('/coach/resources/reorder', ids);
+        }
+      });
+    });
+    </script>""" if is_admin else ""
+
     body = f"""
-    <div class="page-head">
-      <h1>Resources</h1>
+    <div class="page-head"><h1>Resources</h1></div>
+    {message_html}{error_html}
+    {manage_forms}
+    <div id="folders-container">{folder_sections}</div>
+
+    <div class="res-folder res-ungrouped">
+      <div class="res-folder-head"><strong>Ungrouped</strong></div>
+      <div class="res-list" data-list-id="ungrouped">{ungrouped_html}</div>
     </div>
-    {message_html}
-    {error_html}
-    <div class="card form-card" style="max-width:600px; margin-bottom:28px;">
-      <h2 style="margin-top:0; font-size:17px;">Add a resource</h2>
-      <form method="post" action="/coach/resources/new">
-        <label for="res_name">Name</label>
-        <input type="text" id="res_name" name="name" required placeholder="e.g. Diamond Games Guide" />
-        <label for="res_url">URL</label>
-        <input type="url" id="res_url" name="url" required placeholder="https://..." />
-        <label for="res_desc">Description (optional)</label>
-        <input type="text" id="res_desc" name="description" placeholder="A short note about this resource" />
-        <button type="submit" class="btn btn-primary" style="margin-top:14px;">Add Resource</button>
-      </form>
-    </div>
-    <div class="card">
-      <table class="table">
-        <thead><tr><th>Name</th><th>Description</th><th>Added by</th><th></th></tr></thead>
-        <tbody>{rows_html}</tbody>
-      </table>
-    </div>
+    {sortable_js}
     """
     return layout("Resources", body, user=user, active_nav="resources")
+
+
+def edit_resource_page(user, resource, folders, error=None):
+    error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
+    folder_opts = '<option value="">— Ungrouped —</option>' + "".join(
+        f'<option value="{f["id"]}" {"selected" if resource["folder_id"] == f["id"] else ""}>{esc(f["name"])}</option>'
+        for f in folders
+    )
+    body = f"""
+    <div class="page-head">
+      <h1>Edit Resource</h1>
+      <a class="btn btn-ghost" href="/coach/resources">&larr; Back</a>
+    </div>
+    {error_html}
+    <div class="card form-card" style="max-width:520px;">
+      <form method="post" action="/coach/resources/{resource['id']}/edit">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" required value="{esc(resource['name'])}" />
+        <label for="url">URL</label>
+        <input type="url" id="url" name="url" required value="{esc(resource['url'])}" />
+        <label for="description">Description (optional)</label>
+        <input type="text" id="description" name="description" value="{esc(resource['description'] or '')}" />
+        <label for="folder_id">Folder</label>
+        <select id="folder_id" name="folder_id">{folder_opts}</select>
+        <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Save Changes</button>
+      </form>
+    </div>
+    """
+    return layout("Edit Resource", body, user=user, active_nav="resources")
 
 

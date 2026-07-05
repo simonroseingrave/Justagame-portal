@@ -55,6 +55,14 @@ def require_role(req, role):
     return user
 
 
+def require_admin(req):
+    """Returns the coach user dict if logged in as coach AND is_admin=1, else None."""
+    user = get_current_user(req)
+    if not user or user["role"] != "coach" or not user.get("is_admin"):
+        return None
+    return user
+
+
 def flash_redirect(path, message):
     qs = urlencode({"flash": message})
     return redirect(f"{path}?{qs}")
@@ -198,32 +206,53 @@ def coach_dashboard(req):
         return redirect("/login")
     conn = db.get_conn()
     try:
-        participants = conn.execute(
-            "SELECT * FROM users WHERE role = 'participant' AND active = 1 ORDER BY name"
-        ).fetchall()
-        summaries = []
-        for p in participants:
-            test_count = db.count_measurement_sessions(conn, p["id"])
-            summaries.append({
-                "id": p["id"], "name": p["name"], "sport": p["sport"], "programme": p["programme"],
-                "test_count": test_count,
-            })
-        return Response(views.coach_dashboard_for(coach, summaries))
+        def make_summary(p):
+            return {
+                "id": p["id"], "name": p["name"], "sport": p["sport"],
+                "programme": p["programme"],
+                "test_count": db.count_measurement_sessions(conn, p["id"]),
+            }
+        message = req.get_query("flash")
+        if coach.get("is_admin"):
+            group_groups, ungrouped = db.list_participants_by_group(conn)
+            group_summaries = [(g, [make_summary(p) for p in ps]) for g, ps in group_groups]
+            ungrouped_summaries = [make_summary(p) for p in ungrouped]
+        else:
+            # Regular coaches only see their assigned group
+            coach_group_id = coach.get("group_id")
+            if coach_group_id:
+                group = conn.execute(
+                    "SELECT * FROM participant_groups WHERE id = ?", (coach_group_id,)
+                ).fetchone()
+                participants = conn.execute(
+                    "SELECT * FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name",
+                    (coach_group_id,),
+                ).fetchall()
+                group_summaries = [(group, [make_summary(p) for p in participants])] if group else []
+            else:
+                group_summaries = []
+            ungrouped_summaries = []
+        return Response(views.coach_dashboard_for(coach, group_summaries, ungrouped_summaries, message=message))
     finally:
         conn.close()
 
 
 @router.get("/coach/participants/new")
 def new_participant_get(req):
-    coach = require_role(req, "coach")
+    coach = require_admin(req)
     if not coach:
         return redirect("/login")
-    return Response(views.new_participant_form(coach))
+    conn = db.get_conn()
+    try:
+        groups = db.list_participant_groups(conn)
+        return Response(views.new_participant_form(coach, groups=groups))
+    finally:
+        conn.close()
 
 
 @router.post("/coach/participants/new")
 def new_participant_post(req):
-    coach = require_role(req, "coach")
+    coach = require_admin(req)
     if not coach:
         return redirect("/login")
     name = req.form_get("name").strip()
@@ -231,19 +260,21 @@ def new_participant_post(req):
     password = req.form_get("password") or "Athlete123!"
     sport = req.form_get("sport")
     programme = req.form_get("programme").strip()
-
-    if not name or not email:
-        return Response(views.new_participant_form(coach, error="Name and email are required."), status=400)
+    group_id = req.form_get("group_id").strip() or None
 
     conn = db.get_conn()
     try:
+        groups = db.list_participant_groups(conn)
+        if not name or not email:
+            return Response(views.new_participant_form(coach, groups=groups, error="Name and email are required."), status=400)
+
         existing = conn.execute("SELECT id FROM users WHERE lower(email) = ?", (email,)).fetchone()
         if existing:
-            return Response(views.new_participant_form(coach, error="A user with that email already exists."), status=400)
+            return Response(views.new_participant_form(coach, groups=groups, error="A user with that email already exists."), status=400)
         conn.execute(
-            "INSERT INTO users (name, email, password_hash, role, sport, programme, created_at) "
-            "VALUES (?, ?, ?, 'participant', ?, ?, ?)",
-            (name, email, hash_password(password), sport, programme, db.now()),
+            "INSERT INTO users (name, email, password_hash, role, sport, programme, group_id, created_at) "
+            "VALUES (?, ?, ?, 'participant', ?, ?, ?, ?)",
+            (name, email, hash_password(password), sport, programme, group_id or None, db.now()),
         )
         conn.commit()
         return flash_redirect("/coach", f"Added participant {name}. Share their login: {email} / {password}")
@@ -263,10 +294,14 @@ def coach_participant_detail(req, participant_id):
         ).fetchone()
         if not participant:
             return Response(views.simple_message_page("Not found", "Participant not found.", user=coach), status=404)
+        # Non-admin coaches can only access participants in their assigned group
+        if not coach.get("is_admin") and participant["group_id"] != coach.get("group_id"):
+            return Response(views.simple_message_page("Access denied", "You don't have access to this participant.", user=coach), status=403)
         measurement_sessions = db.measurement_sessions_for(conn, participant_id)
+        groups = db.list_participant_groups(conn)
         message = req.get_query("flash")
         return Response(views.coach_participant_detail(
-            coach, dict(participant), measurement_sessions, message=message,
+            coach, dict(participant), measurement_sessions, groups=groups, message=message,
         ))
     finally:
         conn.close()
@@ -277,6 +312,15 @@ def log_measurement_session(req, participant_id):
     coach = require_role(req, "coach")
     if not coach:
         return redirect("/login")
+    # Check group access for non-admins
+    if not coach.get("is_admin"):
+        conn = db.get_conn()
+        try:
+            p = conn.execute("SELECT group_id FROM users WHERE id = ?", (participant_id,)).fetchone()
+        finally:
+            conn.close()
+        if not p or p["group_id"] != coach.get("group_id"):
+            return flash_redirect("/coach", "You don't have access to that participant.")
     date = req.form_get("date") or db.today()
 
     results = []
@@ -317,7 +361,7 @@ def log_measurement_session(req, participant_id):
 
 @router.post("/coach/participants/<int:participant_id>/reset-password")
 def reset_participant_password(req, participant_id):
-    coach = require_role(req, "coach")
+    coach = require_admin(req)
     if not coach:
         return redirect("/login")
     conn = db.get_conn()
@@ -422,21 +466,22 @@ def change_password_post(req):
 
 @router.get("/coach/coaches")
 def list_coaches(req):
-    coach = require_role(req, "coach")
+    coach = require_admin(req)
     if not coach:
         return redirect("/login")
     conn = db.get_conn()
     try:
         coaches = db.list_coaches(conn)
+        groups = db.list_participant_groups(conn)
         message = req.get_query("flash")
-        return Response(views.coach_list_page(coach, coaches, message=message))
+        return Response(views.coach_list_page(coach, coaches, groups=groups, message=message))
     finally:
         conn.close()
 
 
 @router.get("/coach/coaches/new")
 def new_coach_get(req):
-    coach = require_role(req, "coach")
+    coach = require_admin(req)
     if not coach:
         return redirect("/login")
     return Response(views.new_coach_form(coach))
@@ -444,7 +489,7 @@ def new_coach_get(req):
 
 @router.post("/coach/coaches/new")
 def new_coach_post(req):
-    coach = require_role(req, "coach")
+    coach = require_admin(req)
     if not coach:
         return redirect("/login")
     name = req.form_get("name").strip()
@@ -472,7 +517,7 @@ def new_coach_post(req):
 
 @router.post("/coach/coaches/<int:coach_id>/reset-password")
 def reset_coach_password(req, coach_id):
-    coach = require_role(req, "coach")
+    coach = require_admin(req)
     if not coach:
         return redirect("/login")
     conn = db.get_conn()
@@ -493,9 +538,45 @@ def reset_coach_password(req, coach_id):
         conn.close()
 
 
+@router.post("/coach/coaches/<int:coach_id>/assign-group")
+def assign_coach_group(req, coach_id):
+    admin = require_admin(req)
+    if not admin:
+        return redirect("/login")
+    group_id = req.form_get("group_id").strip() or None
+    conn = db.get_conn()
+    try:
+        conn.execute("UPDATE users SET group_id = ? WHERE id = ? AND role = 'coach'",
+                     (group_id or None, coach_id))
+        conn.commit()
+        return flash_redirect("/coach/coaches", "Coach group updated.")
+    finally:
+        conn.close()
+
+
+@router.post("/coach/coaches/<int:coach_id>/toggle-admin")
+def toggle_admin(req, coach_id):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    if int(coach_id) == coach["id"]:
+        return flash_redirect("/coach/coaches", "You can't change your own admin status.")
+    conn = db.get_conn()
+    try:
+        target = conn.execute("SELECT * FROM users WHERE id = ? AND role = 'coach'", (coach_id,)).fetchone()
+        if not target:
+            return flash_redirect("/coach/coaches", "Coach not found.")
+        new_admin = 0 if target["is_admin"] else 1
+        db.set_admin_status(conn, coach_id, new_admin)
+        action = "granted admin rights to" if new_admin else "removed admin rights from"
+        return flash_redirect("/coach/coaches", f"{action.capitalize()} {target['name']}.")
+    finally:
+        conn.close()
+
+
 @router.post("/coach/coaches/<int:coach_id>/toggle")
 def toggle_coach(req, coach_id):
-    coach = require_role(req, "coach")
+    coach = require_admin(req)
     if not coach:
         return redirect("/login")
     # core.py's router passes path params as strings even for <int:...>
@@ -517,7 +598,62 @@ def toggle_coach(req, coach_id):
         conn.close()
 
 
+# --------------------------------------------------------- participant groups
+
+
+@router.post("/coach/participants/<int:participant_id>/assign-group")
+def assign_participant_group(req, participant_id):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    group_id = req.form_get("group_id").strip() or None
+    conn = db.get_conn()
+    try:
+        db.assign_participant_group(conn, participant_id, group_id)
+        return flash_redirect(f"/coach/participants/{participant_id}", "Group updated.")
+    finally:
+        conn.close()
+
+
+@router.post("/coach/groups/new")
+def group_new(req):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    name = req.form_get("group_name").strip()
+    if not name:
+        return flash_redirect("/coach", "Group name is required.")
+    conn = db.get_conn()
+    try:
+        db.add_participant_group(conn, name, coach["id"])
+        return flash_redirect("/coach", f'Group "{name}" created.')
+    finally:
+        conn.close()
+
+
+@router.post("/coach/groups/<int:group_id>/delete")
+def group_delete(req, group_id):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        db.delete_participant_group(conn, group_id)
+        return flash_redirect("/coach", "Group deleted. Participants moved to ungrouped.")
+    finally:
+        conn.close()
+
+
 # ------------------------------------------------------------------ resources
+
+
+def _resources_page_response(coach, conn, message=None, error=None, status=200):
+    folder_groups, ungrouped = db.list_resources_by_folder(conn)
+    folders = db.list_folders(conn)
+    return Response(
+        views.resources_page(coach, folder_groups, ungrouped, folders, message=message, error=error),
+        status=status,
+    )
 
 
 @router.get("/coach/resources")
@@ -528,44 +664,81 @@ def resources_list(req):
         return redirect("/dashboard" if user else "/login")
     conn = db.get_conn()
     try:
-        resources = db.list_resources(conn)
-        message = req.get_query("flash")
-        return Response(views.resources_page(coach, resources, message=message))
+        return _resources_page_response(coach, conn, message=req.get_query("flash"))
     finally:
         conn.close()
 
 
 @router.post("/coach/resources/new")
 def resources_new(req):
-    coach = require_role(req, "coach")
+    coach = require_admin(req)
     if not coach:
         return redirect("/login")
     name = req.form_get("name").strip()
     url = req.form_get("url").strip()
     description = req.form_get("description").strip()
-
+    folder_id = req.form_get("folder_id").strip() or None
     if not name or not url:
         conn = db.get_conn()
         try:
-            resources = db.list_resources(conn)
+            return _resources_page_response(coach, conn, error="Name and URL are required.", status=400)
+        finally:
+            conn.close()
+    conn = db.get_conn()
+    try:
+        db.add_resource(conn, name, description, url, coach["id"], folder_id)
+        return flash_redirect("/coach/resources", f'"{name}" added.')
+    finally:
+        conn.close()
+
+
+@router.get("/coach/resources/<int:resource_id>/edit")
+def resource_edit_get(req, resource_id):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        resource = conn.execute("SELECT * FROM resources WHERE id = ?", (resource_id,)).fetchone()
+        if not resource:
+            return flash_redirect("/coach/resources", "Resource not found.")
+        folders = db.list_folders(conn)
+        return Response(views.edit_resource_page(coach, dict(resource), folders))
+    finally:
+        conn.close()
+
+
+@router.post("/coach/resources/<int:resource_id>/edit")
+def resource_edit_post(req, resource_id):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    name = req.form_get("name").strip()
+    url = req.form_get("url").strip()
+    description = req.form_get("description").strip()
+    folder_id = req.form_get("folder_id").strip() or None
+    if not name or not url:
+        conn = db.get_conn()
+        try:
+            resource = conn.execute("SELECT * FROM resources WHERE id = ?", (resource_id,)).fetchone()
+            folders = db.list_folders(conn)
             return Response(
-                views.resources_page(coach, resources, error="Name and URL are required."),
+                views.edit_resource_page(coach, dict(resource), folders, error="Name and URL are required."),
                 status=400,
             )
         finally:
             conn.close()
-
     conn = db.get_conn()
     try:
-        db.add_resource(conn, name, description, url, coach["id"])
-        return flash_redirect("/coach/resources", f"\"{name}\" added.")
+        db.update_resource(conn, resource_id, name, description, url, folder_id)
+        return flash_redirect("/coach/resources", f'"{name}" updated.')
     finally:
         conn.close()
 
 
 @router.post("/coach/resources/<int:resource_id>/delete")
 def resources_delete(req, resource_id):
-    coach = require_role(req, "coach")
+    coach = require_admin(req)
     if not coach:
         return redirect("/login")
     conn = db.get_conn()
@@ -574,6 +747,73 @@ def resources_delete(req, resource_id):
         return flash_redirect("/coach/resources", "Resource deleted.")
     finally:
         conn.close()
+
+
+@router.post("/coach/resources/reorder")
+def resources_reorder(req):
+    coach = require_role(req, "coach")
+    if not coach:
+        return Response("", status=403)
+    ids_str = req.form_get("ids")
+    if ids_str:
+        try:
+            ids = [int(i) for i in ids_str.split(",") if i.strip()]
+            conn = db.get_conn()
+            try:
+                db.reorder_items(conn, "resources", ids)
+            finally:
+                conn.close()
+        except ValueError:
+            pass
+    return Response("ok")
+
+
+@router.post("/coach/resources/folders/new")
+def folder_new(req):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    name = req.form_get("folder_name").strip()
+    if not name:
+        return flash_redirect("/coach/resources", "Folder name is required.")
+    conn = db.get_conn()
+    try:
+        db.add_folder(conn, name, coach["id"])
+        return flash_redirect("/coach/resources", f'Folder "{name}" created.')
+    finally:
+        conn.close()
+
+
+@router.post("/coach/resources/folders/<int:folder_id>/delete")
+def folder_delete(req, folder_id):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        db.delete_folder(conn, folder_id)
+        return flash_redirect("/coach/resources", "Folder deleted. Resources moved to Ungrouped.")
+    finally:
+        conn.close()
+
+
+@router.post("/coach/resources/folders/reorder")
+def folders_reorder(req):
+    coach = require_role(req, "coach")
+    if not coach:
+        return Response("", status=403)
+    ids_str = req.form_get("ids")
+    if ids_str:
+        try:
+            ids = [int(i) for i in ids_str.split(",") if i.strip()]
+            conn = db.get_conn()
+            try:
+                db.reorder_items(conn, "resource_folders", ids)
+            finally:
+                conn.close()
+        except ValueError:
+            pass
+    return Response("ok")
 
 
 # ------------------------------------------------------------------- bootstrap

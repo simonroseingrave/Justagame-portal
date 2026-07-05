@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL CHECK(role IN ('coach','participant')),
+    is_admin INTEGER NOT NULL DEFAULT 0,
     sport TEXT,
     programme TEXT,
     active INTEGER NOT NULL DEFAULT 1,
@@ -72,12 +73,30 @@ CREATE TABLE IF NOT EXISTS measurement_results (
     value REAL NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS participant_groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS resource_folders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS resources (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     description TEXT,
     url TEXT NOT NULL,
     added_by INTEGER REFERENCES users(id),
+    folder_id INTEGER REFERENCES resource_folders(id),
+    sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
 """
@@ -109,6 +128,19 @@ def init_db():
     conn = get_conn()
     conn.executescript(SCHEMA)
     conn.commit()
+    # Migrations: add columns to existing tables that pre-date this schema version.
+    # ALTER TABLE ADD COLUMN silently fails if the column already exists.
+    for sql in [
+        "ALTER TABLE resources ADD COLUMN folder_id INTEGER REFERENCES resource_folders(id)",
+        "ALTER TABLE resources ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE users ADD COLUMN group_id INTEGER REFERENCES participant_groups(id)",
+        "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0",
+    ]:
+        try:
+            conn.execute(sql)
+            conn.commit()
+        except Exception:
+            pass  # column already exists
     conn.close()
 
 
@@ -136,8 +168,8 @@ def seed_demo_data():
 
         # --- Coach / admin account -------------------------------------
         coach_id = conn.execute(
-            "INSERT INTO users (name, email, password_hash, role, sport, programme, created_at) "
-            "VALUES (?, ?, ?, 'coach', NULL, NULL, ?)",
+            "INSERT INTO users (name, email, password_hash, role, is_admin, sport, programme, created_at) "
+            "VALUES (?, ?, ?, 'coach', 1, NULL, NULL, ?)",
             ("Coach Admin", "coach@justagame.co.nz", hash_password("CoachDemo123!"), now()),
         ).lastrowid
 
@@ -266,28 +298,141 @@ def list_coaches(conn):
     ).fetchall()
 
 
+def set_admin_status(conn, user_id, is_admin):
+    conn.execute("UPDATE users SET is_admin = ? WHERE id = ?", (1 if is_admin else 0, user_id))
+    conn.commit()
+
+
 def set_active(conn, user_id, active):
     conn.execute("UPDATE users SET active = ? WHERE id = ?", (1 if active else 0, user_id))
     conn.commit()
 
 
-def list_resources(conn):
+# ------------------------------------------------------ Participant Groups
+
+
+def list_participant_groups(conn):
     return conn.execute(
-        "SELECT r.*, u.name AS added_by_name FROM resources r "
-        "LEFT JOIN users u ON u.id = r.added_by ORDER BY r.created_at DESC"
+        "SELECT * FROM participant_groups ORDER BY sort_order, id"
     ).fetchall()
 
 
-def add_resource(conn, name, description, url, added_by):
+def add_participant_group(conn, name, created_by):
+    max_order = conn.execute("SELECT COALESCE(MAX(sort_order), -1) FROM participant_groups").fetchone()[0]
     conn.execute(
-        "INSERT INTO resources (name, description, url, added_by, created_at) VALUES (?, ?, ?, ?, ?)",
-        (name, description or None, url, added_by, now()),
+        "INSERT INTO participant_groups (name, sort_order, created_by, created_at) VALUES (?, ?, ?, ?)",
+        (name, max_order + 1, created_by, now()),
+    )
+    conn.commit()
+
+
+def delete_participant_group(conn, group_id):
+    # Move participants in this group to ungrouped rather than removing them
+    conn.execute("UPDATE users SET group_id = NULL WHERE group_id = ?", (group_id,))
+    conn.execute("DELETE FROM participant_groups WHERE id = ?", (group_id,))
+    conn.commit()
+
+
+def assign_participant_group(conn, participant_id, group_id):
+    """Set group_id for a participant. Pass None to remove from all groups."""
+    conn.execute(
+        "UPDATE users SET group_id = ? WHERE id = ?",
+        (group_id or None, participant_id),
+    )
+    conn.commit()
+
+
+def list_participants_by_group(conn):
+    """Returns (group_groups, ungrouped) where group_groups is a list of
+    (group_row, [participant_rows]) tuples ordered by group sort_order."""
+    groups = list_participant_groups(conn)
+    all_participants = conn.execute(
+        "SELECT * FROM users WHERE role = 'participant' AND active = 1 ORDER BY name"
+    ).fetchall()
+    by_group = {}
+    ungrouped = []
+    for p in all_participants:
+        gid = p["group_id"]
+        if gid is None:
+            ungrouped.append(p)
+        else:
+            by_group.setdefault(gid, []).append(p)
+    group_groups = [(g, by_group.get(g["id"], [])) for g in groups]
+    return group_groups, ungrouped
+
+
+# ------------------------------------------------------ Resource Folders
+
+
+def list_folders(conn):
+    return conn.execute(
+        "SELECT * FROM resource_folders ORDER BY sort_order, id"
+    ).fetchall()
+
+
+def add_folder(conn, name, created_by):
+    max_order = conn.execute("SELECT COALESCE(MAX(sort_order), -1) FROM resource_folders").fetchone()[0]
+    conn.execute(
+        "INSERT INTO resource_folders (name, sort_order, created_by, created_at) VALUES (?, ?, ?, ?)",
+        (name, max_order + 1, created_by, now()),
+    )
+    conn.commit()
+
+
+def delete_folder(conn, folder_id):
+    # Move resources in this folder to ungrouped rather than deleting them
+    conn.execute("UPDATE resources SET folder_id = NULL WHERE folder_id = ?", (folder_id,))
+    conn.execute("DELETE FROM resource_folders WHERE id = ?", (folder_id,))
+    conn.commit()
+
+
+def list_resources_by_folder(conn):
+    """Returns (folder_groups, ungrouped) where folder_groups is a list of
+    (folder_row, [resource_rows]) tuples ordered by folder sort_order."""
+    folders = list_folders(conn)
+    all_resources = conn.execute(
+        "SELECT r.*, u.name AS added_by_name FROM resources r "
+        "LEFT JOIN users u ON u.id = r.added_by ORDER BY r.sort_order, r.id"
+    ).fetchall()
+    by_folder = {}
+    ungrouped = []
+    for r in all_resources:
+        fid = r["folder_id"]
+        if fid is None:
+            ungrouped.append(r)
+        else:
+            by_folder.setdefault(fid, []).append(r)
+    folder_groups = [(f, by_folder.get(f["id"], [])) for f in folders]
+    return folder_groups, ungrouped
+
+
+def add_resource(conn, name, description, url, added_by, folder_id=None):
+    max_order = conn.execute("SELECT COALESCE(MAX(sort_order), -1) FROM resources").fetchone()[0]
+    conn.execute(
+        "INSERT INTO resources (name, description, url, added_by, folder_id, sort_order, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (name, description or None, url, added_by, folder_id or None, max_order + 1, now()),
+    )
+    conn.commit()
+
+
+def update_resource(conn, resource_id, name, description, url, folder_id):
+    conn.execute(
+        "UPDATE resources SET name = ?, description = ?, url = ?, folder_id = ? WHERE id = ?",
+        (name, description or None, url, folder_id or None, resource_id),
     )
     conn.commit()
 
 
 def delete_resource(conn, resource_id):
     conn.execute("DELETE FROM resources WHERE id = ?", (resource_id,))
+    conn.commit()
+
+
+def reorder_items(conn, table, ordered_ids):
+    """Set sort_order = index position for each id in the list."""
+    for i, item_id in enumerate(ordered_ids):
+        conn.execute(f"UPDATE {table} SET sort_order = ? WHERE id = ?", (i, item_id))
     conn.commit()
 
 
@@ -324,10 +469,10 @@ def maybe_reset_coach_password():
         if not row:
             print("RESET_COACH_PASSWORD is set, but no matching coach account was found -- nothing changed.", flush=True)
             return
-        conn.execute("UPDATE users SET password_hash = ? WHERE id = ?", (hash_password(new_password), row["id"]))
+        conn.execute("UPDATE users SET password_hash = ?, is_admin = 1 WHERE id = ?", (hash_password(new_password), row["id"]))
         conn.execute("DELETE FROM sessions WHERE user_id = ?", (row["id"],))
         conn.commit()
-        print(f"RESET_COACH_PASSWORD: password updated for {row['email']}. "
+        print(f"RESET_COACH_PASSWORD: password updated for {row['email']} (also granted admin). "
               f"Log in with the new password, then remove the RESET_COACH_PASSWORD env var.", flush=True)
     finally:
         conn.close()
