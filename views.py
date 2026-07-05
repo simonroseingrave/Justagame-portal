@@ -21,6 +21,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
                 links += [
                     ("/coach/participants/new", "Add Participant", "new_participant"),
                     ("/coach/coaches", "Coaches", "coaches"),
+                    ("/coach/progress", "Progress", "progress"),
                 ]
             links.append(("/coach/resources", "Resources", "resources"))
         else:
@@ -523,7 +524,8 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
       </div>
       <div style="display:flex; gap:8px;">
         {reset_btn}
-        <a class="btn btn-ghost" href="/coach">&larr; Back to all participants</a>
+        <a class="btn btn-primary" href="/coach/participants/{participant['id']}/progress">&#128200; Progress</a>
+        <a class="btn btn-ghost" href="/coach">&larr; Back</a>
       </div>
     </div>
     {message_html}
@@ -539,6 +541,338 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
     {measurement_games_history(measurement_sessions, show_delete=True, participant_id=participant['id'])}
     """
     return layout(participant["name"], body, user=coach, active_nav="dashboard")
+
+
+def participant_progress_page(coach, participant, measurement_sessions):
+    """Progress page: first vs latest comparison + full trend across all sessions."""
+    from constants import all_measurement_games, MEASUREMENT_GAMES
+
+    pid = participant["id"]
+    n = len(measurement_sessions)
+
+    if n == 0:
+        body = f"""
+        <div class="page-head">
+          <div><h1>{esc(participant['name'])} &mdash; Progress</h1></div>
+          <a class="btn btn-ghost" href="/coach/participants/{pid}">&larr; Back</a>
+        </div>
+        <div class="card"><p class="muted">No test sessions recorded yet.</p></div>"""
+        return layout(f"{participant['name']} Progress", body, user=coach, active_nav="dashboard")
+
+    # sessions are most-recent-first; oldest = last
+    latest = measurement_sessions[0]
+    first  = measurement_sessions[-1]
+
+    def fmt(val, ftype):
+        if val is None:
+            return "—"
+        if ftype == "time":
+            return f"{val:.2f}s"
+        return str(int(val)) if val == int(val) else str(val)
+
+    def delta_html(first_val, latest_val, ftype):
+        if first_val is None or latest_val is None:
+            return '<span class="muted">—</span>'
+        diff = latest_val - first_val
+        if diff == 0:
+            return '<span class="muted">no change</span>'
+        # For time fields lower is better; for number/points higher is better
+        improved = (diff < 0) if ftype == "time" else (diff > 0)
+        colour = "#0f6e62" if improved else "#9b1c1c"
+        sign = "+" if diff > 0 else ""
+        suffix = "s" if ftype == "time" else ""
+        arrow = "&#9650;" if diff > 0 else "&#9660;"
+        return f'<span style="color:{colour}; font-weight:700;">{arrow} {sign}{diff:.2f}{suffix}</span>'
+
+    # Build game sections
+    sections_html = ""
+    for section in MEASUREMENT_GAMES:
+        game_cards = ""
+        for game in section["games"]:
+            all_fields = game["fields"] + game.get("computed", [])
+            # Only include fields that have data in at least one session
+            active_fields = [f for f in all_fields
+                             if any(s["results"].get((game["key"], f["key"])) is not None
+                                    for s in measurement_sessions)]
+            if not active_fields:
+                continue
+
+            # Header row: First date + Latest date (or just date if only 1 session)
+            if n == 1:
+                date_headers = f'<th>{first["date"]}</th>'
+            else:
+                date_headers = f'<th>{first["date"]}<br><small class="muted">First</small></th>'
+                if n > 2:
+                    date_headers += f'<th class="muted" style="font-size:12px;">({n-2} more)</th>'
+                date_headers += f'<th>{latest["date"]}<br><small class="muted">Latest</small></th>'
+                date_headers += '<th>Change</th>'
+
+            rows = ""
+            for field in active_fields:
+                fkey = field["key"]
+                ftype = field["type"]
+                flabel = field["label"]
+                first_val  = first["results"].get((game["key"], fkey))
+                latest_val = latest["results"].get((game["key"], fkey))
+
+                if n == 1:
+                    rows += f"""<tr>
+                      <td>{esc(flabel)}</td>
+                      <td>{fmt(first_val, ftype)}</td>
+                    </tr>"""
+                else:
+                    mid_cell = f'<td class="muted" style="font-size:12px; text-align:center;">…</td>' if n > 2 else ""
+                    rows += f"""<tr>
+                      <td>{esc(flabel)}</td>
+                      <td>{fmt(first_val, ftype)}</td>
+                      {mid_cell}
+                      <td>{fmt(latest_val, ftype)}</td>
+                      <td>{delta_html(first_val, latest_val, ftype)}</td>
+                    </tr>"""
+
+            game_cards += f"""
+            <div class="card" style="margin-bottom:16px;">
+              <h3 style="margin:0 0 12px; font-size:15px;">{esc(game['name'])}</h3>
+              <table class="table">
+                <thead><tr><th>Measurement</th>{date_headers}</tr></thead>
+                <tbody>{rows}</tbody>
+              </table>
+            </div>"""
+
+        if game_cards:
+            sections_html += f'<h2 class="section-title">{esc(section["section"])}</h2>{game_cards}'
+
+    # Full trend table — only shown when 3+ sessions
+    trend_html = ""
+    if n >= 3:
+        trend_rows = ""
+        for session in reversed(measurement_sessions):  # chronological order
+            trend_rows += f'<tr><td colspan="99" style="background:var(--jag-bg); font-weight:700; font-size:12px; padding:6px 12px;">{session["date"]}</td></tr>'
+            for game in all_measurement_games():
+                all_fields = game["fields"] + game.get("computed", [])
+                game_results = [(f, session["results"].get((game["key"], f["key"]))) for f in all_fields]
+                game_results = [(f, v) for f, v in game_results if v is not None]
+                if not game_results:
+                    continue
+                for field, val in game_results:
+                    trend_rows += f"""<tr>
+                      <td style="padding-left:20px; font-size:13px; color:var(--jag-muted);">{esc(game['name'])}</td>
+                      <td style="font-size:13px;">{esc(field['label'])}</td>
+                      <td style="font-size:13px; font-weight:600;">{fmt(val, field['type'])}</td>
+                    </tr>"""
+
+        trend_html = f"""
+        <h2 class="section-title">All Sessions (chronological)</h2>
+        <div class="card">
+          <table class="table">
+            <thead><tr><th>Game</th><th>Measurement</th><th>Value</th></tr></thead>
+            <tbody>{trend_rows}</tbody>
+          </table>
+        </div>"""
+
+    if not sections_html:
+        sections_html = '<div class="card"><p class="muted">No measurements recorded yet.</p></div>'
+
+    body = f"""
+    <div class="page-head">
+      <div>
+        <h1>{esc(participant['name'])} &mdash; Progress</h1>
+        <p class="muted">{esc(participant.get('sport') or '')} &middot; {n} test session{"s" if n != 1 else ""}</p>
+      </div>
+      <a class="btn btn-ghost" href="/coach/participants/{pid}">&larr; Back</a>
+    </div>
+    {sections_html}
+    {trend_html}
+    """
+    return layout(f"{participant['name']} Progress", body, user=coach, active_nav="dashboard")
+
+
+def _progress_for_participant(p_name, p_id, sessions):
+    """Return dict: {(game_key, field_key): {first, latest, ftype, flabel, game_name}}"""
+    if not sessions:
+        return {}
+    first  = sessions[-1]   # oldest
+    latest = sessions[0]    # most recent
+    out = {}
+    for game in all_measurement_games():
+        all_fields = game["fields"] + game.get("computed", [])
+        for field in all_fields:
+            key = (game["key"], field["key"])
+            fv = first["results"].get(key)
+            lv = latest["results"].get(key)
+            if fv is not None or lv is not None:
+                out[key] = {
+                    "first": fv, "latest": lv,
+                    "ftype": field["type"],
+                    "flabel": field["label"],
+                    "game_name": game["name"],
+                    "game_key": game["key"],
+                    "n": len(sessions),
+                }
+    return out
+
+
+def _fmt_val(val, ftype):
+    if val is None:
+        return "—"
+    if ftype == "time":
+        return f"{val:.2f}s"
+    return str(int(val)) if val == int(val) else str(val)
+
+
+def _delta_cell(first_val, latest_val, ftype):
+    if first_val is None or latest_val is None:
+        return '<td class="muted">—</td>'
+    diff = latest_val - first_val
+    if diff == 0:
+        return '<td class="muted">±0</td>'
+    improved = (diff < 0) if ftype == "time" else (diff > 0)
+    colour = "#0f6e62" if improved else "#9b1c1c"
+    sign = "+" if diff > 0 else ""
+    suffix = "s" if ftype == "time" else ""
+    arrow = "&#9650;" if diff > 0 else "&#9660;"
+    return f'<td style="color:{colour}; font-weight:700;">{arrow}{sign}{diff:.2f}{suffix}</td>'
+
+
+def group_progress_page(coach, group, participants_sessions):
+    """Progress summary for a group: each measurement, each participant, first→latest.
+    participants_sessions: list of (participant_dict, sessions_list)
+    """
+    active = [(p, s) for p, s in participants_sessions if s]
+    gname = esc(group["name"]) if group else "Ungrouped"
+
+    if not active:
+        body = f"""
+        <div class="page-head"><div><h1>{gname} &mdash; Group Progress</h1></div>
+          <a class="btn btn-ghost" href="/coach">&larr; Back</a></div>
+        <div class="card"><p class="muted">No test sessions recorded for this group yet.</p></div>"""
+        return layout(f"{group['name']} Progress", body, user=coach, active_nav="progress")
+
+    # Build one table per game
+    sections_html = ""
+    for section in MEASUREMENT_GAMES:
+        game_cards = ""
+        for game in section["games"]:
+            all_fields = game["fields"] + game.get("computed", [])
+            # Only fields with any data in this group
+            active_fields = [
+                f for f in all_fields
+                if any(
+                    s["results"].get((game["key"], f["key"])) is not None
+                    for _, sessions in active for s in sessions
+                )
+            ]
+            if not active_fields:
+                continue
+
+            header_names = "".join(f'<th colspan="3" style="text-align:center; border-left:2px solid var(--jag-border);">{esc(p["name"])}<br><small class="muted">{n} session{"s" if n!=1 else ""}</small></th>'
+                                   for p, sessions in active
+                                   for n in [len(sessions)])
+            sub_headers = "".join('<th style="border-left:2px solid var(--jag-border);">First</th><th>Latest</th><th>Change</th>'
+                                  for _ in active)
+
+            rows = ""
+            for field in active_fields:
+                fkey = field["key"]
+                ftype = field["type"]
+                cells = ""
+                for p, sessions in active:
+                    first_s  = sessions[-1] if sessions else None
+                    latest_s = sessions[0]  if sessions else None
+                    fv = first_s["results"].get((game["key"], fkey)) if first_s else None
+                    lv = latest_s["results"].get((game["key"], fkey)) if latest_s else None
+                    cells += f'<td style="border-left:2px solid var(--jag-border);">{_fmt_val(fv, ftype)}</td>'
+                    cells += f'<td>{_fmt_val(lv, ftype)}</td>'
+                    cells += _delta_cell(fv, lv, ftype)
+                rows += f'<tr><td style="font-size:13px;">{esc(field["label"])}</td>{cells}</tr>'
+
+            game_cards += f"""
+            <div class="card" style="margin-bottom:16px; overflow-x:auto;">
+              <h3 style="margin:0 0 12px; font-size:15px;">{esc(game['name'])}</h3>
+              <table class="table" style="min-width:400px;">
+                <thead>
+                  <tr><th></th>{header_names}</tr>
+                  <tr><th>Measurement</th>{sub_headers}</tr>
+                </thead>
+                <tbody>{rows}</tbody>
+              </table>
+            </div>"""
+
+        if game_cards:
+            sections_html += f'<h2 class="section-title">{esc(section["section"])}</h2>{game_cards}'
+
+    if not sections_html:
+        sections_html = '<div class="card"><p class="muted">No measurements recorded yet.</p></div>'
+
+    body = f"""
+    <div class="page-head">
+      <div>
+        <h1>{gname} &mdash; Group Progress</h1>
+        <p class="muted">{len(active)} athlete{"s" if len(active)!=1 else ""} with test data</p>
+      </div>
+      <a class="btn btn-ghost" href="/coach">&larr; Back</a>
+    </div>
+    {sections_html}"""
+    return layout(f"{group['name'] if group else 'Group'} Progress", body, user=coach, active_nav="progress")
+
+
+def all_progress_page(coach, groups_data):
+    """Admin-only page: progress across all participants, organised by group.
+    groups_data: list of (group_or_None, [(participant, sessions), ...])
+    """
+    body_sections = ""
+    any_data = False
+
+    for group, participants_sessions in groups_data:
+        active = [(p, s) for p, s in participants_sessions if s]
+        if not active:
+            continue
+        any_data = True
+        gname = esc(group["name"]) if group else "Ungrouped"
+        gid   = group["id"] if group else None
+        prog_link = f'<a class="btn btn-ghost btn-sm" href="/coach/groups/{gid}/progress">Full group progress</a>' if gid else ""
+
+        # Summary table: participant | sessions | games tested | first session | latest session
+        rows = ""
+        for p, sessions in active:
+            n = len(sessions)
+            first_date  = sessions[-1]["date"] if sessions else "—"
+            latest_date = sessions[0]["date"]  if sessions else "—"
+            # Count distinct games with data in latest session
+            games_in_latest = len({gk for (gk, _) in sessions[0]["results"].keys()}) if sessions else 0
+            rows += f"""<tr>
+              <td><a href="/coach/participants/{p['id']}/progress">{esc(p['name'])}</a></td>
+              <td>{n}</td>
+              <td>{first_date}</td>
+              <td>{latest_date}</td>
+              <td>{games_in_latest} game{"s" if games_in_latest!=1 else ""}</td>
+            </tr>"""
+
+        body_sections += f"""
+        <h2 class="section-title">{gname} {prog_link}</h2>
+        <div class="card">
+          <table class="table">
+            <thead><tr><th>Participant</th><th>Sessions</th><th>First Test</th><th>Latest Test</th><th>Latest Coverage</th></tr></thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </div>"""
+
+    if not any_data:
+        body_sections = '<div class="card"><p class="muted">No test sessions recorded yet.</p></div>'
+
+    # Count totals
+    total_participants = sum(len(ps) for _, ps in groups_data)
+    total_with_data = sum(len([p for p, s in ps if s]) for _, ps in groups_data)
+    total_sessions = sum(len(s) for _, ps in groups_data for _, s in ps)
+
+    body = f"""
+    <div class="page-head">
+      <div><h1>Progress Overview</h1>
+        <p class="muted">{total_with_data} of {total_participants} participants tested &middot; {total_sessions} total sessions</p>
+      </div>
+    </div>
+    {body_sections}"""
+    return layout("Progress Overview", body, user=coach, active_nav="progress")
 
 
 def simple_message_page(title, message, user=None):

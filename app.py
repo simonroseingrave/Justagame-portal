@@ -313,6 +313,73 @@ def coach_participant_detail(req, participant_id):
         conn.close()
 
 
+@router.get("/coach/progress")
+def all_progress(req):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        group_groups, ungrouped = db.list_participants_by_group(conn)
+        groups_data = []
+        for group, participants in group_groups:
+            ps_data = [(dict(p), db.measurement_sessions_for(conn, p["id"])) for p in participants]
+            groups_data.append((dict(group), ps_data))
+        if ungrouped:
+            ug_data = [(dict(p), db.measurement_sessions_for(conn, p["id"])) for p in ungrouped]
+            groups_data.append((None, ug_data))
+        return Response(views.all_progress_page(coach, groups_data))
+    finally:
+        conn.close()
+
+
+@router.get("/coach/groups/<int:group_id>/progress")
+def group_progress(req, group_id):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        group = conn.execute("SELECT * FROM participant_groups WHERE id = ?", (group_id,)).fetchone()
+        if not group:
+            return Response(views.simple_message_page("Not found", "Group not found.", user=coach), status=404)
+        # Non-admins can only view their assigned groups
+        if not coach.get("is_admin"):
+            coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
+            if group_id not in coach_group_ids:
+                return Response(views.simple_message_page("Access denied", "You don't have access to this group.", user=coach), status=403)
+        participants = conn.execute(
+            "SELECT * FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name",
+            (group_id,),
+        ).fetchall()
+        participants_sessions = [(dict(p), db.measurement_sessions_for(conn, p["id"])) for p in participants]
+        return Response(views.group_progress_page(coach, dict(group), participants_sessions))
+    finally:
+        conn.close()
+
+
+@router.get("/coach/participants/<int:participant_id>/progress")
+def coach_participant_progress(req, participant_id):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        participant = conn.execute(
+            "SELECT * FROM users WHERE id = ? AND role = 'participant'", (participant_id,)
+        ).fetchone()
+        if not participant:
+            return Response(views.simple_message_page("Not found", "Participant not found.", user=coach), status=404)
+        if not coach.get("is_admin"):
+            coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
+            if participant["group_id"] not in coach_group_ids:
+                return Response(views.simple_message_page("Access denied", "You don't have access to this participant.", user=coach), status=403)
+        measurement_sessions = db.measurement_sessions_for(conn, participant_id)
+        return Response(views.participant_progress_page(coach, dict(participant), measurement_sessions))
+    finally:
+        conn.close()
+
+
 @router.post("/coach/participants/<int:participant_id>/measurement")
 def log_measurement_session(req, participant_id):
     coach = require_role(req, "coach")
