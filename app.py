@@ -734,6 +734,43 @@ def group_new(req):
         conn.close()
 
 
+@router.get("/coach/groups/<int:group_id>/edit")
+def group_edit_get(req, group_id):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        group = conn.execute("SELECT * FROM participant_groups WHERE id = ?", (group_id,)).fetchone()
+        if not group:
+            return Response(views.simple_message_page("Not found", "Group not found.", user=coach), status=404)
+        return Response(views.edit_group_page(coach, dict(group)))
+    finally:
+        conn.close()
+
+
+@router.post("/coach/groups/<int:group_id>/edit")
+def group_edit_post(req, group_id):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    name = req.form_get("group_name").strip()
+    icon_url = req.form_get("icon_url").strip() or None
+    if not name:
+        conn = db.get_conn()
+        try:
+            group = conn.execute("SELECT * FROM participant_groups WHERE id = ?", (group_id,)).fetchone()
+            return Response(views.edit_group_page(coach, dict(group), error="Group name is required."), status=400)
+        finally:
+            conn.close()
+    conn = db.get_conn()
+    try:
+        db.update_participant_group(conn, group_id, name, icon_url)
+        return flash_redirect("/coach", f'Group "{name}" updated.')
+    finally:
+        conn.close()
+
+
 @router.post("/coach/groups/reorder")
 def groups_reorder(req):
     coach = require_admin(req)

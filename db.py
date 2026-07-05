@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS measurement_results (
 CREATE TABLE IF NOT EXISTS participant_groups (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
+    icon_url TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_by INTEGER REFERENCES users(id),
     created_at TEXT NOT NULL
@@ -141,6 +142,7 @@ def init_db():
         "ALTER TABLE resources ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE users ADD COLUMN group_id INTEGER REFERENCES participant_groups(id)",
         "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE participant_groups ADD COLUMN icon_url TEXT",
     ]:
         try:
             conn.execute(sql)
@@ -345,11 +347,19 @@ def list_participant_groups(conn):
     ).fetchall()
 
 
-def add_participant_group(conn, name, created_by):
+def add_participant_group(conn, name, created_by, icon_url=None):
     max_order = conn.execute("SELECT COALESCE(MAX(sort_order), -1) FROM participant_groups").fetchone()[0]
     conn.execute(
-        "INSERT INTO participant_groups (name, sort_order, created_by, created_at) VALUES (?, ?, ?, ?)",
-        (name, max_order + 1, created_by, now()),
+        "INSERT INTO participant_groups (name, icon_url, sort_order, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
+        (name, icon_url or None, max_order + 1, created_by, now()),
+    )
+    conn.commit()
+
+
+def update_participant_group(conn, group_id, name, icon_url=None):
+    conn.execute(
+        "UPDATE participant_groups SET name = ?, icon_url = ? WHERE id = ?",
+        (name, icon_url or None, group_id),
     )
     conn.commit()
 

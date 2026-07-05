@@ -321,6 +321,29 @@ def _participant_table(rows_html, is_admin=False):
     </table>"""
 
 
+def edit_group_page(user, group, error=None):
+    error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
+    icon_url = group.get("icon_url") or ""
+    body = f"""
+    <div class="page-head">
+      <h1>Edit Group</h1>
+      <a class="btn btn-ghost" href="/coach">&larr; Back</a>
+    </div>
+    {error_html}
+    <div class="card form-card" style="max-width:480px;">
+      <form method="post" action="/coach/groups/{group['id']}/edit">
+        <label for="group_name">Group name</label>
+        <input type="text" id="group_name" name="group_name" required value="{esc(group['name'])}" />
+        <label for="icon_url">Icon URL <span class="muted" style="font-weight:400;">(optional — paste a favicon or logo URL)</span></label>
+        <input type="url" id="icon_url" name="icon_url" value="{esc(icon_url)}" placeholder="https://example.com/favicon.ico" />
+        {f'<img src="{esc(icon_url)}" style="margin-top:8px;width:32px;height:32px;object-fit:contain;border-radius:4px;border:1px solid var(--jag-border);" onerror="this.style.display=\'none\'">' if icon_url else ""}
+        <button type="submit" class="btn btn-primary btn-block" style="margin-top:16px;">Save Changes</button>
+      </form>
+    </div>
+    """
+    return layout(f"Edit Group — {group['name']}", body, user=user, active_nav="dashboard")
+
+
 def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None):
     message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
     is_admin = user.get("is_admin")
@@ -333,21 +356,26 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         empty = '<div class="res-drop-hint">Drop participants here</div>' if is_admin else '<p class="muted" style="padding:8px 4px; font-size:13px;">No participants in this group.</p>'
         list_html = _participant_table(items_html, is_admin=is_admin) if items_html else empty
         folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder groups">&#9776;</span>' if is_admin else ""
-        delete_btn = f"""<form method="post" action="/coach/groups/{group['id']}/delete" style="display:inline"
+        icon_url = group.get("icon_url")
+        icon_html = (f'<img src="{esc(icon_url)}" style="width:22px;height:22px;object-fit:contain;border-radius:3px;flex-shrink:0;" '
+                     f'onerror="this.style.display=\'none\'">')  if icon_url else "&#128193;"
+        admin_btns = f"""
+            <a href="/coach/groups/{group['id']}/edit" class="btn btn-ghost btn-sm" style="font-size:12px;">Edit</a>
+            <form method="post" action="/coach/groups/{group['id']}/delete" style="display:inline"
               onsubmit="return confirm('Delete group \\'{esc(group['name'])}\\'? Participants move to ungrouped.');">
-              <button type="submit" class="btn btn-ghost btn-sm">Delete Group</button>
+              <button type="submit" class="btn btn-ghost btn-sm" style="font-size:12px;">Delete</button>
             </form>""" if is_admin else ""
         group_sections += f"""
         <div class="res-folder" data-group-id="{group['id']}">
           <div class="res-folder-tab">
             {folder_handle}
             <button type="button" class="res-folder-toggle" onclick="var f=this.closest('.res-folder'),l=f.querySelector('.res-list'),o=f.classList.toggle('res-folder--open');if(l)l.style.display=o?'block':'none';" title="Expand / collapse">
-              <span class="res-folder-icon">&#128193;</span>
+              <span class="res-folder-icon">{icon_html}</span>
               <strong class="res-folder-name">{esc(group['name'])}</strong>
               {count_badge}
               <span class="res-folder-chevron">&#9654;</span>
             </button>
-            {delete_btn}
+            {admin_btns}
           </div>
           <div class="res-list" data-group-list-id="{group['id']}" style="display:none">{list_html}</div>
         </div>"""
