@@ -208,8 +208,8 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
   border: 2px solid var(--jag-border);
   border-radius: 0 var(--radius) var(--radius) var(--radius);
   box-shadow: var(--shadow);
-  margin-bottom: 28px;
-  margin-top: 34px;
+  margin-bottom: 32px;
+  margin-top: 50px;
   position: relative;
 }
 
@@ -217,19 +217,19 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
 .res-folder-tab {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 14px 7px 10px;
+  gap: 10px;
+  padding: 10px 20px 10px 14px;
   background: var(--jag-green);
   color: var(--jag-navy);
   border-radius: var(--radius) var(--radius) 0 0;
   position: absolute;
-  top: -34px;
+  top: -50px;
   left: -2px;
-  min-width: 160px;
+  min-width: 220px;
   max-width: 80%;
   border: 2px solid var(--jag-green);
   border-bottom: 2px solid var(--jag-card);
-  font-size: 14px;
+  font-size: 21px;
   cursor: pointer;
   user-select: none;
 }
@@ -239,13 +239,19 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
   border-bottom-color: var(--jag-card);
   color: var(--jag-muted);
 }
-.res-folder-icon { width: 14px; height: 14px; flex-shrink: 0; object-fit: contain; opacity: 0.85; }
+.res-folder-icon { font-size: 21px; flex-shrink: 0; line-height: 1; }
+.res-folder-toggle {
+  display: flex; align-items: center; gap: 10px;
+  background: none; border: none; padding: 0; margin: 0;
+  cursor: pointer; color: inherit; font: inherit;
+  flex: 1; min-width: 0; text-align: left;
+}
 .res-folder-name { font-weight: 700; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .res-count {
   background: rgba(0,0,0,0.13);
   border-radius: 999px;
-  padding: 1px 8px;
-  font-size: 11px;
+  padding: 2px 10px;
+  font-size: 14px;
   font-weight: 700;
   flex-shrink: 0;
   white-space: nowrap;
@@ -253,7 +259,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
 .res-folder-tab--ungrouped .res-count { background: var(--jag-border); color: var(--jag-muted); }
 .res-folder-chevron {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 14px;
   transition: transform 0.2s ease;
   opacity: 0.7;
 }

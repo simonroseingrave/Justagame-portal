@@ -65,7 +65,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{esc(title)} - {APP_NAME}</title>
-  <link rel="stylesheet" href="/static/css/style.css" />
+  <link rel="stylesheet" href="/static/css/style.css?v=18" />
 
   <!-- Add to Home Screen / PWA -->
   <link rel="manifest" href="/static/manifest.json" />
