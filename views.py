@@ -68,12 +68,12 @@ def layout(title, body, user=None, flash=None, active_nav=None):
   <link rel="stylesheet" href="/static/css/style.css?v=18" />
   <style>
     /* Folder sizing — inlined to bypass CDN caching */
-    .res-folder { margin-top: 50px; margin-bottom: 32px; }
-    .res-folder-tab { font-size: 21px; padding: 10px 20px 10px 14px; gap: 10px; top: -50px; min-width: 220px; }
-    .res-folder-icon { font-size: 21px; }
-    .res-folder-toggle { gap: 10px; }
-    .res-count { font-size: 14px; padding: 2px 10px; }
-    .res-folder-chevron { font-size: 14px; }
+    .res-folder {{ margin-top: 50px; margin-bottom: 32px; }}
+    .res-folder-tab {{ font-size: 21px; padding: 10px 20px 10px 14px; gap: 10px; top: -50px; min-width: 220px; }}
+    .res-folder-icon {{ font-size: 21px; }}
+    .res-folder-toggle {{ gap: 10px; }}
+    .res-count {{ font-size: 14px; padding: 2px 10px; }}
+    .res-folder-chevron {{ font-size: 14px; }}
   </style>
 
   <!-- Add to Home Screen / PWA -->
