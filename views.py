@@ -311,13 +311,15 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
             </form>""" if is_admin else ""
         group_sections += f"""
         <div class="res-folder" data-group-id="{group['id']}">
-          <div class="res-folder-tab" onclick="if(!event.target.closest('button,a,input,select,form')){{var f=this.closest('.res-folder'),l=f.querySelector('.res-list'),o=f.classList.toggle('res-folder--open');if(l)l.style.display=o?'block':'none';}}">
+          <div class="res-folder-tab">
             {folder_handle}
-            <span class="res-folder-icon">&#128193;</span>
-            <strong class="res-folder-name">{esc(group['name'])}</strong>
-            {count_badge}
+            <button type="button" class="res-folder-toggle" onclick="var f=this.closest('.res-folder'),l=f.querySelector('.res-list'),o=f.classList.toggle('res-folder--open');if(l)l.style.display=o?'block':'none';" title="Expand / collapse">
+              <span class="res-folder-icon">&#128193;</span>
+              <strong class="res-folder-name">{esc(group['name'])}</strong>
+              {count_badge}
+              <span class="res-folder-chevron">&#9654;</span>
+            </button>
             {delete_btn}
-            <span class="res-folder-chevron">&#9654;</span>
           </div>
           <div class="res-list" data-group-list-id="{group['id']}" style="display:none">{list_html}</div>
         </div>"""
@@ -330,11 +332,13 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
 
     ungrouped_section = f"""
     <div class="res-folder res-folder--open res-ungrouped">
-      <div class="res-folder-tab res-folder-tab--ungrouped" onclick="if(!event.target.closest('button,a,input,select,form')){{var f=this.closest('.res-folder'),l=f.querySelector('.res-list'),o=f.classList.toggle('res-folder--open');if(l)l.style.display=o?'block':'none';}}">
-        <span class="res-folder-icon">&#128193;</span>
-        <strong class="res-folder-name">{"Participants" if not group_summaries else "Ungrouped"}</strong>
-        {ug_badge}
-        <span class="res-folder-chevron" style="transform:rotate(90deg);">&#9654;</span>
+      <div class="res-folder-tab res-folder-tab--ungrouped">
+        <button type="button" class="res-folder-toggle" onclick="var f=this.closest('.res-folder'),l=f.querySelector('.res-list'),o=f.classList.toggle('res-folder--open');if(l)l.style.display=o?'block':'none';" title="Expand / collapse">
+          <span class="res-folder-icon">&#128193;</span>
+          <strong class="res-folder-name">{"Participants" if not group_summaries else "Ungrouped"}</strong>
+          {ug_badge}
+          <span class="res-folder-chevron" style="transform:rotate(90deg);">&#9654;</span>
+        </button>
       </div>
       <div class="res-list" data-group-list-id="ungrouped">{ug_list_html}</div>
     </div>"""
@@ -410,8 +414,8 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     if is_admin:
         subtitle = 'Viewing all participant groups &mdash; administrator access.'
     elif group_summaries:
-        assigned_name = esc(group_summaries[0][0]['name'])
-        subtitle = f'Your assigned group: <strong>{assigned_name}</strong>'
+        names = ", ".join(f'<strong>{esc(g["name"])}</strong>' for g, _ in group_summaries)
+        subtitle = f'Your assigned group{"s" if len(group_summaries) > 1 else ""}: {names}'
     else:
         subtitle = 'No group assigned yet &mdash; contact an admin.'
 
@@ -572,13 +576,11 @@ def account_page(user, profile_error=None, profile_success=None, password_error=
     return layout("My Account", body, user=user, active_nav=None)
 
 
-def coach_list_page(user, coaches, groups=None, message=None):
+def coach_list_page(user, coaches, groups=None, coach_group_map=None, message=None):
     message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
     groups = groups or []
+    coach_group_map = coach_group_map or {}
     group_map = {g["id"]: g["name"] for g in groups}
-    group_opts_base = '<option value="">— No group —</option>' + "".join(
-        f'<option value="{g["id"]}">{esc(g["name"])}</option>' for g in groups
-    )
 
     rows = []
     for c in coaches:
@@ -586,18 +588,22 @@ def coach_list_page(user, coaches, groups=None, message=None):
         status = "Active" if c["active"] else "Inactive"
         status_class = "tag-active" if c["active"] else "tag-inactive"
         admin_badge = ' <span class="tag tag-active" style="font-size:11px;">Admin</span>' if c["is_admin"] else ""
-        current_group_name = group_map.get(c["group_id"]) if c["group_id"] else None
-        group_badge = f' &middot; <span class="tag">{esc(current_group_name)}</span>' if current_group_name else ""
+        assigned_ids = coach_group_map.get(c["id"], [])
+        assigned_names = [esc(group_map[gid]) for gid in assigned_ids if gid in group_map]
+        group_badge = (" &middot; " + ", ".join(f'<span class="tag">{n}</span>' for n in assigned_names)) if assigned_names else ""
 
         if is_self:
             action_html = '<span class="muted">(you)</span>'
         else:
             toggle_label = "Deactivate" if c["active"] else "Reactivate"
             admin_toggle_label = "Remove Admin" if c["is_admin"] else "Make Admin"
-            # Group assignment select (inline)
-            group_opts = group_opts_base.replace(
-                f'value="{c["group_id"]}"', f'value="{c["group_id"]}" selected'
-            ) if c["group_id"] else group_opts_base
+            # Multi-select checkboxes for group assignment
+            checkboxes = "".join(
+                f'<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;margin:2px 0;">'
+                f'<input type="checkbox" name="group_id" value="{g["id"]}"'
+                f'{" checked" if g["id"] in assigned_ids else ""}> {esc(g["name"])}</label>'
+                for g in groups
+            ) if groups else '<span class="muted" style="font-size:12px;">No groups yet</span>'
             action_html = f"""
             <form method="post" action="/coach/coaches/{c['id']}/reset-password" style="display:inline"
                   onsubmit="return confirm('Reset {esc(c['name'])}&#39;s password?');">
@@ -610,15 +616,15 @@ def coach_list_page(user, coaches, groups=None, message=None):
             <form method="post" action="/coach/coaches/{c['id']}/toggle" style="display:inline">
               <button type="submit" class="btn btn-ghost btn-sm">{toggle_label}</button>
             </form>
-            <form method="post" action="/coach/coaches/{c['id']}/assign-group" style="display:inline-flex; gap:4px; vertical-align:middle;">
-              <select name="group_id" style="padding:4px 6px; font-size:12px; border-radius:6px; border:1px solid var(--jag-border);">{group_opts}</select>
-              <button type="submit" class="btn btn-ghost btn-sm">Set Group</button>
+            <form method="post" action="/coach/coaches/{c['id']}/assign-group" style="display:inline-block; vertical-align:middle; margin-left:4px;">
+              <div style="border:1px solid var(--jag-border); border-radius:6px; padding:6px 10px; background:#fff; margin-bottom:4px;">{checkboxes}</div>
+              <button type="submit" class="btn btn-ghost btn-sm">Set Groups</button>
             </form>"""
         rows.append(f"""<tr>
           <td>{esc(c['name'])}{admin_badge}</td>
           <td>{esc(c['email'])}{group_badge}</td>
           <td><span class="tag {status_class}">{status}</span></td>
-          <td style="white-space:nowrap;">{action_html}</td>
+          <td>{action_html}</td>
         </tr>""")
     rows_html = "".join(rows)
     body = f"""
@@ -629,7 +635,7 @@ def coach_list_page(user, coaches, groups=None, message=None):
     {message_html}
     <div class="card">
       <table class="table">
-        <thead><tr><th>Name</th><th>Email / Group</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th>Email / Groups</th><th>Status</th><th></th></tr></thead>
         <tbody>{rows_html}</tbody>
       </table>
     </div>
@@ -700,13 +706,15 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
             </form>""" if is_admin else ""
         folder_sections += f"""
         <div class="res-folder" data-folder-id="{folder['id']}">
-          <div class="res-folder-tab" onclick="if(!event.target.closest('button,a,input,select,form')){{var f=this.closest('.res-folder'),l=f.querySelector('.res-list'),o=f.classList.toggle('res-folder--open');if(l)l.style.display=o?'block':'none';}}">
+          <div class="res-folder-tab">
             {folder_handle}
-            <span class="res-folder-icon">&#128193;</span>
-            <strong class="res-folder-name">{esc(folder['name'])}</strong>
-            {count_badge}
+            <button type="button" class="res-folder-toggle" onclick="var f=this.closest('.res-folder'),l=f.querySelector('.res-list'),o=f.classList.toggle('res-folder--open');if(l)l.style.display=o?'block':'none';" title="Expand / collapse">
+              <span class="res-folder-icon">&#128193;</span>
+              <strong class="res-folder-name">{esc(folder['name'])}</strong>
+              {count_badge}
+              <span class="res-folder-chevron">&#9654;</span>
+            </button>
             {delete_folder_btn}
-            <span class="res-folder-chevron">&#9654;</span>
           </div>
           <div class="res-list" data-list-id="{folder['id']}" style="display:none">{list_content}</div>
         </div>"""
@@ -820,11 +828,13 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     <div id="folders-container">{folder_sections}</div>
 
     <div class="res-folder res-folder--open res-ungrouped">
-      <div class="res-folder-tab res-folder-tab--ungrouped" onclick="if(!event.target.closest('button,a,input,select,form')){{var f=this.closest('.res-folder'),l=f.querySelector('.res-list'),o=f.classList.toggle('res-folder--open');if(l)l.style.display=o?'block':'none';}}">
-        <span class="res-folder-icon">&#128194;</span>
-        <strong class="res-folder-name">Ungrouped</strong>
-        {ug_count_badge}
-        <span class="res-folder-chevron" style="transform:rotate(90deg);">&#9654;</span>
+      <div class="res-folder-tab res-folder-tab--ungrouped">
+        <button type="button" class="res-folder-toggle" onclick="var f=this.closest('.res-folder'),l=f.querySelector('.res-list'),o=f.classList.toggle('res-folder--open');if(l)l.style.display=o?'block':'none';" title="Expand / collapse">
+          <span class="res-folder-icon">&#128194;</span>
+          <strong class="res-folder-name">Ungrouped</strong>
+          {ug_count_badge}
+          <span class="res-folder-chevron" style="transform:rotate(90deg);">&#9654;</span>
+        </button>
       </div>
       <div class="res-list" data-list-id="ungrouped">{ungrouped_list_html}</div>
     </div>

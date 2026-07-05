@@ -34,18 +34,21 @@ class Request:
     @property
     def form(self):
         if self._form is None:
-            self._form = {}
             try:
                 length = int(self.environ.get("CONTENT_LENGTH") or 0)
             except ValueError:
                 length = 0
             body = self.environ["wsgi.input"].read(length) if length else b""
-            parsed = parse_qs(body.decode("utf-8"))
-            self._form = {k: v[0] for k, v in parsed.items()}
+            self._form = parse_qs(body.decode("utf-8"))
         return self._form
 
     def form_get(self, name, default=""):
-        return self.form.get(name, default)
+        vals = self.form.get(name)
+        return vals[0] if vals else default
+
+    def form_get_list(self, name):
+        """Return all submitted values for a field (e.g. multi-select checkboxes)."""
+        return self.form.get(name, [])
 
 
 class Response:

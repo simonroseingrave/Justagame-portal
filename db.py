@@ -99,6 +99,12 @@ CREATE TABLE IF NOT EXISTS resources (
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS coach_groups (
+    coach_id INTEGER NOT NULL REFERENCES users(id),
+    group_id INTEGER NOT NULL REFERENCES participant_groups(id),
+    PRIMARY KEY (coach_id, group_id)
+);
 """
 
 
@@ -300,6 +306,28 @@ def list_coaches(conn):
 
 def set_admin_status(conn, user_id, is_admin):
     conn.execute("UPDATE users SET is_admin = ? WHERE id = ?", (1 if is_admin else 0, user_id))
+    conn.commit()
+
+
+def get_coach_group_ids(conn, coach_id):
+    """Return list of group_ids assigned to a coach (from coach_groups junction table)."""
+    rows = conn.execute(
+        "SELECT group_id FROM coach_groups WHERE coach_id = ?", (coach_id,)
+    ).fetchall()
+    return [r["group_id"] for r in rows]
+
+
+def set_coach_groups(conn, coach_id, group_ids):
+    """Replace all group assignments for a coach. group_ids is a list of ints (may be empty)."""
+    conn.execute("DELETE FROM coach_groups WHERE coach_id = ?", (coach_id,))
+    for gid in group_ids:
+        try:
+            conn.execute(
+                "INSERT OR IGNORE INTO coach_groups (coach_id, group_id) VALUES (?, ?)",
+                (coach_id, int(gid)),
+            )
+        except Exception:
+            pass
     conn.commit()
 
 

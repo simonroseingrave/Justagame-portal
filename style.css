@@ -240,6 +240,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
   color: var(--jag-muted);
 }
 .res-folder-icon { font-size: 14px; flex-shrink: 0; line-height: 1; }
+.res-folder-toggle {
+  display: flex; align-items: center; gap: 8px;
+  background: none; border: none; padding: 0; margin: 0;
+  cursor: pointer; color: inherit; font: inherit;
+  flex: 1; min-width: 0; text-align: left;
+}
 .res-folder-name { font-weight: 700; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .res-count {
   background: rgba(0,0,0,0.13);

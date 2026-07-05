@@ -218,17 +218,21 @@ def coach_dashboard(req):
             group_summaries = [(g, [make_summary(p) for p in ps]) for g, ps in group_groups]
             ungrouped_summaries = [make_summary(p) for p in ungrouped]
         else:
-            # Regular coaches only see their assigned group
-            coach_group_id = coach.get("group_id")
-            if coach_group_id:
-                group = conn.execute(
-                    "SELECT * FROM participant_groups WHERE id = ?", (coach_group_id,)
-                ).fetchone()
-                participants = conn.execute(
-                    "SELECT * FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name",
-                    (coach_group_id,),
+            # Regular coaches only see their assigned groups
+            coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
+            if coach_group_ids:
+                placeholders = ",".join("?" * len(coach_group_ids))
+                groups = conn.execute(
+                    f"SELECT * FROM participant_groups WHERE id IN ({placeholders}) ORDER BY sort_order, id",
+                    coach_group_ids,
                 ).fetchall()
-                group_summaries = [(group, [make_summary(p) for p in participants])] if group else []
+                group_summaries = []
+                for group in groups:
+                    participants = conn.execute(
+                        "SELECT * FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name",
+                        (group["id"],),
+                    ).fetchall()
+                    group_summaries.append((group, [make_summary(p) for p in participants]))
             else:
                 group_summaries = []
             ungrouped_summaries = []
@@ -294,9 +298,11 @@ def coach_participant_detail(req, participant_id):
         ).fetchone()
         if not participant:
             return Response(views.simple_message_page("Not found", "Participant not found.", user=coach), status=404)
-        # Non-admin coaches can only access participants in their assigned group
-        if not coach.get("is_admin") and participant["group_id"] != coach.get("group_id"):
-            return Response(views.simple_message_page("Access denied", "You don't have access to this participant.", user=coach), status=403)
+        # Non-admin coaches can only access participants in their assigned groups
+        if not coach.get("is_admin"):
+            coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
+            if participant["group_id"] not in coach_group_ids:
+                return Response(views.simple_message_page("Access denied", "You don't have access to this participant.", user=coach), status=403)
         measurement_sessions = db.measurement_sessions_for(conn, participant_id)
         groups = db.list_participant_groups(conn)
         message = req.get_query("flash")
@@ -317,9 +323,10 @@ def log_measurement_session(req, participant_id):
         conn = db.get_conn()
         try:
             p = conn.execute("SELECT group_id FROM users WHERE id = ?", (participant_id,)).fetchone()
+            coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
         finally:
             conn.close()
-        if not p or p["group_id"] != coach.get("group_id"):
+        if not p or p["group_id"] not in coach_group_ids:
             return flash_redirect("/coach", "You don't have access to that participant.")
     date = req.form_get("date") or db.today()
 
@@ -473,8 +480,9 @@ def list_coaches(req):
     try:
         coaches = db.list_coaches(conn)
         groups = db.list_participant_groups(conn)
+        coach_group_map = {c["id"]: db.get_coach_group_ids(conn, c["id"]) for c in coaches}
         message = req.get_query("flash")
-        return Response(views.coach_list_page(coach, coaches, groups=groups, message=message))
+        return Response(views.coach_list_page(coach, coaches, groups=groups, coach_group_map=coach_group_map, message=message))
     finally:
         conn.close()
 
@@ -543,13 +551,11 @@ def assign_coach_group(req, coach_id):
     admin = require_admin(req)
     if not admin:
         return redirect("/login")
-    group_id = req.form_get("group_id").strip() or None
+    group_ids = [gid for gid in req.form_get_list("group_id") if gid.strip()]
     conn = db.get_conn()
     try:
-        conn.execute("UPDATE users SET group_id = ? WHERE id = ? AND role = 'coach'",
-                     (group_id or None, coach_id))
-        conn.commit()
-        return flash_redirect("/coach/coaches", "Coach group updated.")
+        db.set_coach_groups(conn, coach_id, group_ids)
+        return flash_redirect("/coach/coaches", "Coach groups updated.")
     finally:
         conn.close()
 
