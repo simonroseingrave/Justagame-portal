@@ -361,14 +361,6 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     sortable_js = """
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <script>
-    // Folder toggle
-    document.querySelectorAll('.res-folder-tab').forEach(function(tab) {
-      tab.addEventListener('click', function(e) {
-        if (e.target.closest('button, a, input, select, form')) return;
-        tab.closest('.res-folder').classList.toggle('res-folder--open');
-      });
-    });
-
     function post(url, body) {
       fetch(url, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: body });
     }
@@ -435,6 +427,14 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     {content}
     {create_group_form}
     {sortable_js}
+    <script>
+    document.querySelectorAll('.res-folder-tab').forEach(function(tab) {{
+      tab.addEventListener('click', function(e) {{
+        if (e.target.closest('button, a, input, select, form')) return;
+        tab.closest('.res-folder').classList.toggle('res-folder--open');
+      }});
+    }});
+    </script>
     """
     return layout("Coach Dashboard", body, user=user, active_nav="dashboard")
 

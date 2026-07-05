@@ -239,7 +239,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
   border-bottom-color: var(--jag-card);
   color: var(--jag-muted);
 }
-.res-folder-icon { width: 20px; height: 20px; flex-shrink: 0; object-fit: contain; }
+.res-folder-icon { width: 14px; height: 14px; flex-shrink: 0; object-fit: contain; opacity: 0.85; }
 .res-folder-name { font-weight: 700; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .res-count {
   background: rgba(0,0,0,0.13);
