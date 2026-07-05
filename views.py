@@ -70,15 +70,15 @@ def layout(title, body, user=None, flash=None, active_nav=None):
   <style>
     /* Folder styling — inlined to bypass CDN caching */
     .res-folder {{ margin-top: 50px; margin-bottom: 32px; }}
-    .res-folder-tab {{ font-size: 22px; padding: 10px 20px 10px 14px; gap: 10px; top: -50px; min-width: 220px; background: #2D323B; border-color: #2D323B; border-bottom-color: #fff; }}
-    .res-folder-tab--ungrouped {{ background: #DDE0E3; border-color: #DDE0E3; border-bottom-color: #fff; }}
+    .res-folder-tab {{ font-size: 22px; padding: 10px 20px 10px 14px; gap: 10px; top: -50px; min-width: 220px; background: #EAECEE; border-color: #EAECEE; border-bottom-color: #fff; }}
+    .res-folder-tab--ungrouped {{ background: #F3F4F5; border-color: #DDE0E3; border-bottom-color: #fff; }}
     .res-folder-icon {{ font-size: 22px; }}
-    .res-folder-toggle {{ gap: 10px; color: #F0A82E; }}
-    .res-folder-name {{ color: #F0A82E; font-size: 22px; }}
+    .res-folder-toggle {{ gap: 10px; color: #2D323B; }}
+    .res-folder-name {{ color: #2D323B; font-size: 22px; }}
     .res-folder-tab--ungrouped .res-folder-toggle {{ color: #6E737B; }}
     .res-folder-tab--ungrouped .res-folder-name {{ color: #6E737B; }}
-    .res-count {{ font-size: 14px; padding: 2px 10px; }}
-    .res-folder-chevron {{ font-size: 16px; color: #F0A82E; }}
+    .res-count {{ font-size: 14px; padding: 2px 10px; background: rgba(0,0,0,0.08); }}
+    .res-folder-chevron {{ font-size: 16px; color: #2D323B; }}
     .res-folder-tab--ungrouped .res-folder-chevron {{ color: #6E737B; }}
     .res-folder-toggle:hover .res-folder-name {{ text-decoration: underline; }}
   </style>
@@ -1240,18 +1240,6 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     {message_html}{error_html}
     {manage_forms}
     <div id="folders-container">{folder_sections}</div>
-
-    <div class="res-folder res-folder--open res-ungrouped">
-      <div class="res-folder-tab res-folder-tab--ungrouped">
-        <button type="button" class="res-folder-toggle" onclick="var f=this.closest('.res-folder'),l=f.querySelector('.res-list'),o=f.classList.toggle('res-folder--open');if(l)l.style.display=o?'block':'none';" title="Expand / collapse">
-          <span class="res-folder-icon">&#128194;</span>
-          <strong class="res-folder-name">Ungrouped</strong>
-          {ug_count_badge}
-          <span class="res-folder-chevron" style="transform:rotate(90deg);">&#9654;</span>
-        </button>
-      </div>
-      <div class="res-list" data-list-id="ungrouped">{ungrouped_list_html}</div>
-    </div>
     <script>
     document.querySelectorAll('.res-folder-tab').forEach(function(tab) {{
       tab.addEventListener('click', function(e) {{
