@@ -68,13 +68,19 @@ def layout(title, body, user=None, flash=None, active_nav=None):
   <title>{esc(title)} - {APP_NAME}</title>
   <link rel="stylesheet" href="/static/css/style.css?v=18" />
   <style>
-    /* Folder sizing — inlined to bypass CDN caching */
+    /* Folder styling — inlined to bypass CDN caching */
     .res-folder {{ margin-top: 50px; margin-bottom: 32px; }}
-    .res-folder-tab {{ font-size: 21px; padding: 10px 20px 10px 14px; gap: 10px; top: -50px; min-width: 220px; }}
-    .res-folder-icon {{ font-size: 21px; }}
-    .res-folder-toggle {{ gap: 10px; }}
+    .res-folder-tab {{ font-size: 22px; padding: 10px 20px 10px 14px; gap: 10px; top: -50px; min-width: 220px; background: #2D323B; border-color: #2D323B; border-bottom-color: #fff; }}
+    .res-folder-tab--ungrouped {{ background: #DDE0E3; border-color: #DDE0E3; border-bottom-color: #fff; }}
+    .res-folder-icon {{ font-size: 22px; }}
+    .res-folder-toggle {{ gap: 10px; color: #F0A82E; }}
+    .res-folder-name {{ color: #F0A82E; font-size: 22px; }}
+    .res-folder-tab--ungrouped .res-folder-toggle {{ color: #6E737B; }}
+    .res-folder-tab--ungrouped .res-folder-name {{ color: #6E737B; }}
     .res-count {{ font-size: 14px; padding: 2px 10px; }}
-    .res-folder-chevron {{ font-size: 14px; }}
+    .res-folder-chevron {{ font-size: 16px; color: #F0A82E; }}
+    .res-folder-tab--ungrouped .res-folder-chevron {{ color: #6E737B; }}
+    .res-folder-toggle:hover .res-folder-name {{ text-decoration: underline; }}
   </style>
 
   <!-- Add to Home Screen / PWA -->
