@@ -313,7 +313,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         <div class="res-folder" data-group-id="{group['id']}">
           <div class="res-folder-tab">
             {folder_handle}
-            <img src="/static/img/logo.png" alt="" class="res-folder-icon" />
+            <span class="res-folder-icon">&#128193;</span>
             <strong class="res-folder-name">{esc(group['name'])}</strong>
             {count_badge}
             {delete_btn}
@@ -331,7 +331,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     ungrouped_section = f"""
     <div class="res-folder res-folder--open res-ungrouped">
       <div class="res-folder-tab res-folder-tab--ungrouped">
-        <img src="/static/img/logo.png" alt="" class="res-folder-icon" />
+        <span class="res-folder-icon">&#128193;</span>
         <strong class="res-folder-name">{"Participants" if not group_summaries else "Ungrouped"}</strong>
         {ug_badge}
         <span class="res-folder-chevron" style="transform:rotate(90deg);">&#9654;</span>
@@ -698,7 +698,7 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
         <div class="res-folder" data-folder-id="{folder['id']}">
           <div class="res-folder-tab">
             {folder_handle}
-            <img src="/static/img/logo.png" alt="" class="res-folder-icon" />
+            <span class="res-folder-icon">&#128193;</span>
             <strong class="res-folder-name">{esc(folder['name'])}</strong>
             {count_badge}
             {delete_folder_btn}
