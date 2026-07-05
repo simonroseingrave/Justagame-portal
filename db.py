@@ -502,34 +502,6 @@ def patch_demo_data():
             print("patch_demo_data: no demo participants found, skipping", flush=True)
             return  # DB not seeded yet -- nothing to patch
 
-        # Find or create the Demo Group
-        group = conn.execute(
-            "SELECT id FROM participant_groups WHERE name = 'Demo Group'"
-        ).fetchone()
-        if not group:
-            max_order = conn.execute(
-                "SELECT COALESCE(MAX(sort_order), -1) FROM participant_groups"
-            ).fetchone()[0]
-            coach = conn.execute(
-                "SELECT id FROM users WHERE role = 'coach' ORDER BY id LIMIT 1"
-            ).fetchone()
-            coach_id = coach["id"] if coach else None
-            group_id = conn.execute(
-                "INSERT INTO participant_groups (name, sort_order, created_by, created_at) VALUES (?, ?, ?, ?)",
-                ("Demo Group", max_order + 1, coach_id, now()),
-            ).lastrowid
-            conn.commit()
-        else:
-            group_id = group["id"]
-
-        # Assign any demo participant not yet in the Demo Group
-        for p in demo_participants:
-            if p["group_id"] != group_id:
-                conn.execute(
-                    "UPDATE users SET group_id = ? WHERE id = ?", (group_id, p["id"])
-                )
-        conn.commit()
-
         coach = conn.execute(
             "SELECT id FROM users WHERE role = 'coach' ORDER BY id LIMIT 1"
         ).fetchone()
