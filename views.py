@@ -21,8 +21,8 @@ def layout(title, body, user=None, flash=None, active_nav=None):
                 links += [
                     ("/coach/participants/new", "Add Participant", "new_participant"),
                     ("/coach/coaches", "Coaches", "coaches"),
-                    ("/coach/progress", "Progression Statistics", "progress"),
                 ]
+            links.append(("/coach/progress", "Achievement Statistics", "progress"))
             links.append(("/coach/resources", "Resources", "resources"))
         else:
             links = [("/dashboard", "My Dashboard", "dashboard")]
@@ -290,17 +290,29 @@ def participant_dashboard(user, measurement_sessions):
 
 def _participant_row(p, is_admin=False):
     drag = '<span class="drag-handle" title="Drag to move group">&#9776;</span>' if is_admin else ""
-    return f"""<div class="res-item" data-id="{p['id']}">
-      {drag}
-      <div class="res-item-body">
-        <a href="/coach/participants/{p['id']}">{esc(p['name'])}</a>
-        <span class="res-desc">{esc(p['sport'] or '')}{'  ·  ' + esc(p['programme']) if p.get('programme') else ''}</span>
-      </div>
-      <div class="res-item-actions">
-        <span class="muted" style="font-size:12px; padding:0 6px;">{p['test_count']} test{"s" if p['test_count'] != 1 else ""}</span>
-        <a href="/coach/participants/{p['id']}" class="btn btn-ghost btn-sm">Manage</a>
-      </div>
-    </div>"""
+    sport_prog = esc(p['sport'] or '')
+    if p.get('programme'):
+        sport_prog += f' &middot; {esc(p["programme"])}'
+    return f"""<tr class="res-item" data-id="{p['id']}">
+      <td style="width:20px; padding-right:0;">{drag}</td>
+      <td><a href="/coach/participants/{p['id']}" style="font-weight:600;">{esc(p['name'])}</a></td>
+      <td class="muted" style="font-size:13px;">{sport_prog}</td>
+      <td style="white-space:nowrap;">{p['test_count']} test{"s" if p['test_count'] != 1 else ""}</td>
+      <td style="text-align:right;"><a href="/coach/participants/{p['id']}" class="btn btn-ghost btn-sm">Manage</a></td>
+    </tr>"""
+
+
+def _participant_table(rows_html, is_admin=False):
+    """Wrap participant rows in a table with column headers."""
+    if not rows_html:
+        return ""
+    return f"""<table class="table" style="width:100%;">
+      <thead><tr>
+        {"<th style='width:20px;'></th>" if is_admin else ""}
+        <th>Name</th><th>Sport / Programme</th><th>Tests</th><th></th>
+      </tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table>"""
 
 
 def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None):
@@ -313,7 +325,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         count_badge = f'<span class="res-count">{count} athlete{"s" if count != 1 else ""}</span>'
         items_html = "".join(_participant_row(p, is_admin=is_admin) for p in participants)
         empty = '<div class="res-drop-hint">Drop participants here</div>' if is_admin else '<p class="muted" style="padding:8px 4px; font-size:13px;">No participants in this group.</p>'
-        list_html = items_html if items_html else empty
+        list_html = _participant_table(items_html, is_admin=is_admin) if items_html else empty
         folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder groups">&#9776;</span>' if is_admin else ""
         delete_btn = f"""<form method="post" action="/coach/groups/{group['id']}/delete" style="display:inline"
               onsubmit="return confirm('Delete group \\'{esc(group['name'])}\\'? Participants move to ungrouped.');">
@@ -338,7 +350,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     ug_badge = f'<span class="res-count">{ungrouped_count} athlete{"s" if ungrouped_count != 1 else ""}</span>'
     ug_items = "".join(_participant_row(p, is_admin=is_admin) for p in ungrouped_summaries)
     ug_empty = '<div class="res-drop-hint">Drop participants here</div>' if is_admin else '<p class="muted" style="padding:8px 4px; font-size:13px;">No ungrouped participants.</p>'
-    ug_list_html = ug_items if ug_items else ug_empty
+    ug_list_html = _participant_table(ug_items, is_admin=is_admin) if ug_items else ug_empty
 
     ungrouped_section = f"""
     <div class="res-folder res-folder--open res-ungrouped">
@@ -524,7 +536,7 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
       </div>
       <div style="display:flex; gap:8px;">
         {reset_btn}
-        <a class="btn btn-primary" href="/coach/participants/{participant['id']}/progress">&#128200; Progression Statistics</a>
+        <a class="btn btn-primary" href="/coach/participants/{participant['id']}/progress">&#128200; Achievement Statistics</a>
         <a class="btn btn-ghost" href="/coach">&larr; Back</a>
       </div>
     </div>
@@ -553,11 +565,11 @@ def participant_progress_page(coach, participant, measurement_sessions):
     if n == 0:
         body = f"""
         <div class="page-head">
-          <div><h1>{esc(participant['name'])} &mdash; Progression Statistics</h1></div>
+          <div><h1>{esc(participant['name'])} &mdash; Achievement Statistics</h1></div>
           <a class="btn btn-ghost" href="/coach/participants/{pid}">&larr; Back</a>
         </div>
         <div class="card"><p class="muted">No test sessions recorded yet.</p></div>"""
-        return layout(f"{participant['name']} Progression Statistics", body, user=coach, active_nav="dashboard")
+        return layout(f"{participant['name']} Achievement Statistics", body, user=coach, active_nav="dashboard")
 
     # sessions are most-recent-first; oldest = last
     latest = measurement_sessions[0]
@@ -682,7 +694,7 @@ def participant_progress_page(coach, participant, measurement_sessions):
     body = f"""
     <div class="page-head">
       <div>
-        <h1>{esc(participant['name'])} &mdash; Progression Statistics</h1>
+        <h1>{esc(participant['name'])} &mdash; Achievement Statistics</h1>
         <p class="muted">{esc(participant.get('sport') or '')} &middot; {n} test session{"s" if n != 1 else ""}</p>
       </div>
       <a class="btn btn-ghost" href="/coach/participants/{pid}">&larr; Back</a>
@@ -690,7 +702,7 @@ def participant_progress_page(coach, participant, measurement_sessions):
     {sections_html}
     {trend_html}
     """
-    return layout(f"{participant['name']} Progression Statistics", body, user=coach, active_nav="dashboard")
+    return layout(f"{participant['name']} Achievement Statistics", body, user=coach, active_nav="dashboard")
 
 
 def _progress_for_participant(p_name, p_id, sessions):
@@ -756,7 +768,7 @@ def group_progress_page(coach, group, participants_sessions):
 
     if not active:
         body = f"""
-        <div class="page-head"><div><h1>{gname} &mdash; Group Progression Statistics</h1></div>
+        <div class="page-head"><div><h1>{gname} &mdash; Group Achievement Statistics</h1></div>
           <a class="btn btn-ghost" href="/coach">&larr; Back</a></div>
         <div class="card"><p class="muted">No test sessions recorded for this group yet.</p></div>"""
         return layout(f"{group['name']} Progress", body, user=coach, active_nav="progress")
@@ -820,7 +832,7 @@ def group_progress_page(coach, group, participants_sessions):
     body = f"""
     <div class="page-head">
       <div>
-        <h1>{gname} &mdash; Group Progression Statistics</h1>
+        <h1>{gname} &mdash; Group Achievement Statistics</h1>
         <p class="muted">{len(active)} athlete{"s" if len(active)!=1 else ""} with test data</p>
       </div>
       <a class="btn btn-ghost" href="/coach">&larr; Back</a>
@@ -843,7 +855,7 @@ def all_progress_page(coach, groups_data):
         any_data = True
         gname = esc(group["name"]) if group else "Ungrouped"
         gid   = group["id"] if group else None
-        prog_link = f'<a class="btn btn-ghost btn-sm" href="/coach/groups/{gid}/progress">Full group progression statistics</a>' if gid else ""
+        prog_link = f'<a class="btn btn-ghost btn-sm" href="/coach/groups/{gid}/progress">Full group achievement statistics</a>' if gid else ""
 
         # Summary table: participant | sessions | games tested | first session | latest session
         rows = ""
@@ -880,12 +892,12 @@ def all_progress_page(coach, groups_data):
 
     body = f"""
     <div class="page-head">
-      <div><h1>Progression Statistics Overview</h1>
+      <div><h1>Achievement Statistics Overview</h1>
         <p class="muted">{total_with_data} of {total_participants} participants tested &middot; {total_sessions} total sessions</p>
       </div>
     </div>
     {body_sections}"""
-    return layout("Progression Statistics", body, user=coach, active_nav="progress")
+    return layout("Achievement Statistics", body, user=coach, active_nav="progress")
 
 
 def simple_message_page(title, message, user=None):
@@ -1028,14 +1040,26 @@ def _resource_row(r, is_admin=False):
         <button type="submit" class="btn btn-ghost btn-sm">Delete</button>
       </form>""" if is_admin else ""
     drag_handle = '<span class="drag-handle" title="Drag to reorder">&#9776;</span>' if is_admin else ""
-    return f"""<div class="res-item" data-id="{r['id']}">
-      {drag_handle}
-      <div class="res-item-body">
-        <a href="{esc(r['url'])}" target="_blank" rel="noopener">{esc(r['name'])}</a>
-        {f'<span class="muted res-desc">{esc(r["description"])}</span>' if r['description'] else ''}
-      </div>
-      <div class="res-item-actions">{admin_actions}</div>
-    </div>"""
+    desc = f'<span class="muted" style="font-size:13px;">{esc(r["description"])}</span>' if r['description'] else ''
+    return f"""<tr class="res-item" data-id="{r['id']}">
+      <td style="width:20px; padding-right:0;">{drag_handle}</td>
+      <td><a href="{esc(r['url'])}" target="_blank" rel="noopener" style="font-weight:600;">{esc(r['name'])}</a></td>
+      <td>{desc}</td>
+      <td style="text-align:right; white-space:nowrap;">{admin_actions}</td>
+    </tr>"""
+
+
+def _resource_table(rows_html, is_admin=False):
+    """Wrap resource rows in a table with column headers."""
+    if not rows_html:
+        return ""
+    return f"""<table class="table" style="width:100%;">
+      <thead><tr>
+        {"<th style='width:20px;'></th>" if is_admin else ""}
+        <th>Name</th><th>Description</th><th></th>
+      </tr></thead>
+      <tbody>{rows_html}</tbody>
+    </table>"""
 
 
 def resources_page(user, folder_groups, ungrouped, folders, message=None, error=None):
@@ -1054,7 +1078,7 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
         count = len(resources)
         count_badge = f'<span class="res-count">{count} link{"s" if count != 1 else ""}</span>'
         empty_drop = '<div class="res-drop-hint">Drop resources here</div>' if is_admin else '<p class="muted" style="padding:8px 4px; font-size:13px;">No resources yet.</p>'
-        list_content = items_html if items_html else empty_drop
+        list_content = _resource_table(items_html, is_admin=is_admin) if items_html else empty_drop
         folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder folders">&#9776;</span>' if is_admin else ""
         delete_folder_btn = f"""<form method="post" action="/coach/resources/folders/{folder['id']}/delete" style="display:inline"
               onsubmit="return confirm('Delete folder \\'{esc(folder['name'])}\\'? Resources will move to Ungrouped.');">
@@ -1080,7 +1104,7 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     ug_count = len(ungrouped)
     ug_count_badge = f'<span class="res-count">{ug_count} link{"s" if ug_count != 1 else ""}</span>'
     ug_empty = '<div class="res-drop-hint">Drop resources here</div>' if is_admin else '<p class="muted" style="padding:8px 4px; font-size:13px;">No ungrouped resources.</p>'
-    ungrouped_list_html = ungrouped_html if ungrouped_html else ug_empty
+    ungrouped_list_html = _resource_table(ungrouped_html, is_admin=is_admin) if ungrouped_html else ug_empty
 
     manage_forms = f"""
     <div class="two-col" style="gap:16px; align-items:flex-start; margin-bottom:24px;">

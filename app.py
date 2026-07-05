@@ -315,19 +315,34 @@ def coach_participant_detail(req, participant_id):
 
 @router.get("/coach/progress")
 def all_progress(req):
-    coach = require_admin(req)
+    coach = require_role(req, "coach")
     if not coach:
         return redirect("/login")
     conn = db.get_conn()
     try:
-        group_groups, ungrouped = db.list_participants_by_group(conn)
-        groups_data = []
-        for group, participants in group_groups:
-            ps_data = [(dict(p), db.measurement_sessions_for(conn, p["id"])) for p in participants]
-            groups_data.append((dict(group), ps_data))
-        if ungrouped:
-            ug_data = [(dict(p), db.measurement_sessions_for(conn, p["id"])) for p in ungrouped]
-            groups_data.append((None, ug_data))
+        if coach.get("is_admin"):
+            # Admins see all groups and ungrouped
+            group_groups, ungrouped = db.list_participants_by_group(conn)
+            groups_data = []
+            for group, participants in group_groups:
+                ps_data = [(dict(p), db.measurement_sessions_for(conn, p["id"])) for p in participants]
+                groups_data.append((dict(group), ps_data))
+            if ungrouped:
+                ug_data = [(dict(p), db.measurement_sessions_for(conn, p["id"])) for p in ungrouped]
+                groups_data.append((None, ug_data))
+        else:
+            # Non-admin coaches see only their assigned groups
+            coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
+            groups_data = []
+            for gid in coach_group_ids:
+                group = conn.execute("SELECT * FROM participant_groups WHERE id = ?", (gid,)).fetchone()
+                if not group:
+                    continue
+                participants = conn.execute(
+                    "SELECT * FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name", (gid,)
+                ).fetchall()
+                ps_data = [(dict(p), db.measurement_sessions_for(conn, p["id"])) for p in participants]
+                groups_data.append((dict(group), ps_data))
         return Response(views.all_progress_page(coach, groups_data))
     finally:
         conn.close()
