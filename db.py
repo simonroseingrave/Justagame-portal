@@ -71,6 +71,15 @@ CREATE TABLE IF NOT EXISTS measurement_results (
     field_key TEXT NOT NULL,
     value REAL NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS resources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    url TEXT NOT NULL,
+    added_by INTEGER REFERENCES users(id),
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -162,7 +171,7 @@ def seed_demo_data():
             ("skipping_rope_sprint", "average", round((t1 + t2 + t3) / 3, 2)),
             ("balance_ball_catching", "small_ball", 14),
             ("balance_ball_catching", "large_ball", 22),
-            ("diamond_games", "running", 8),
+            ("diamond_games", "running_room", 8),
         ]
         for game_key, field_key, value in sample_results:
             conn.execute(
@@ -259,6 +268,26 @@ def list_coaches(conn):
 
 def set_active(conn, user_id, active):
     conn.execute("UPDATE users SET active = ? WHERE id = ?", (1 if active else 0, user_id))
+    conn.commit()
+
+
+def list_resources(conn):
+    return conn.execute(
+        "SELECT r.*, u.name AS added_by_name FROM resources r "
+        "LEFT JOIN users u ON u.id = r.added_by ORDER BY r.created_at DESC"
+    ).fetchall()
+
+
+def add_resource(conn, name, description, url, added_by):
+    conn.execute(
+        "INSERT INTO resources (name, description, url, added_by, created_at) VALUES (?, ?, ?, ?, ?)",
+        (name, description or None, url, added_by, now()),
+    )
+    conn.commit()
+
+
+def delete_resource(conn, resource_id):
+    conn.execute("DELETE FROM resources WHERE id = ?", (resource_id,))
     conn.commit()
 
 

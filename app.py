@@ -517,6 +517,65 @@ def toggle_coach(req, coach_id):
         conn.close()
 
 
+# ------------------------------------------------------------------ resources
+
+
+@router.get("/coach/resources")
+def resources_list(req):
+    coach = require_role(req, "coach")
+    if not coach:
+        user = get_current_user(req)
+        return redirect("/dashboard" if user else "/login")
+    conn = db.get_conn()
+    try:
+        resources = db.list_resources(conn)
+        message = req.get_query("flash")
+        return Response(views.resources_page(coach, resources, message=message))
+    finally:
+        conn.close()
+
+
+@router.post("/coach/resources/new")
+def resources_new(req):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    name = req.form_get("name").strip()
+    url = req.form_get("url").strip()
+    description = req.form_get("description").strip()
+
+    if not name or not url:
+        conn = db.get_conn()
+        try:
+            resources = db.list_resources(conn)
+            return Response(
+                views.resources_page(coach, resources, error="Name and URL are required."),
+                status=400,
+            )
+        finally:
+            conn.close()
+
+    conn = db.get_conn()
+    try:
+        db.add_resource(conn, name, description, url, coach["id"])
+        return flash_redirect("/coach/resources", f"\"{name}\" added.")
+    finally:
+        conn.close()
+
+
+@router.post("/coach/resources/<int:resource_id>/delete")
+def resources_delete(req, resource_id):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        db.delete_resource(conn, resource_id)
+        return flash_redirect("/coach/resources", "Resource deleted.")
+    finally:
+        conn.close()
+
+
 # ------------------------------------------------------------------- bootstrap
 
 application = App(router, STATIC_DIR)

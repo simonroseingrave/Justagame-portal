@@ -20,6 +20,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
                 ("/coach", "Dashboard", "dashboard"),
                 ("/coach/participants/new", "Add Participant", "new_participant"),
                 ("/coach/coaches", "Coaches", "coaches"),
+                ("/coach/resources", "Resources", "resources"),
             ]
         else:
             links = [("/dashboard", "My Dashboard", "dashboard")]
@@ -474,5 +475,50 @@ def new_coach_form(user, error=None):
     </div>
     """
     return layout("Add Coach", body, user=user, active_nav="coaches")
+
+
+def resources_page(user, resources, message=None, error=None):
+    message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
+    error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
+    rows = []
+    for r in resources:
+        rows.append(f"""<tr>
+          <td><a href="{esc(r['url'])}" target="_blank" rel="noopener">{esc(r['name'])}</a></td>
+          <td>{esc(r['description'] or '')}</td>
+          <td class="muted" style="white-space:nowrap">{esc(r['added_by_name'] or '')}</td>
+          <td>
+            <form method="post" action="/coach/resources/{r['id']}/delete" style="display:inline"
+                  onsubmit="return confirm('Delete \"{esc(r['name'])}\"?');">
+              <button type="submit" class="btn btn-ghost btn-sm">Delete</button>
+            </form>
+          </td>
+        </tr>""")
+    rows_html = "".join(rows) if rows else '<tr><td colspan="4" class="muted">No resources yet.</td></tr>'
+    body = f"""
+    <div class="page-head">
+      <h1>Resources</h1>
+    </div>
+    {message_html}
+    {error_html}
+    <div class="card form-card" style="max-width:600px; margin-bottom:28px;">
+      <h2 style="margin-top:0; font-size:17px;">Add a resource</h2>
+      <form method="post" action="/coach/resources/new">
+        <label for="res_name">Name</label>
+        <input type="text" id="res_name" name="name" required placeholder="e.g. Diamond Games Guide" />
+        <label for="res_url">URL</label>
+        <input type="url" id="res_url" name="url" required placeholder="https://..." />
+        <label for="res_desc">Description (optional)</label>
+        <input type="text" id="res_desc" name="description" placeholder="A short note about this resource" />
+        <button type="submit" class="btn btn-primary" style="margin-top:14px;">Add Resource</button>
+      </form>
+    </div>
+    <div class="card">
+      <table class="table">
+        <thead><tr><th>Name</th><th>Description</th><th>Added by</th><th></th></tr></thead>
+        <tbody>{rows_html}</tbody>
+      </table>
+    </div>
+    """
+    return layout("Resources", body, user=user, active_nav="resources")
 
 
