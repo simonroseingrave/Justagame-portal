@@ -278,59 +278,75 @@ def participant_dashboard(user, measurement_sessions):
     return layout("My Dashboard", body, user=user, active_nav="dashboard")
 
 
-def _participant_table(participants):
-    rows = "".join(f"""
-    <tr>
-      <td><a href="/coach/participants/{p['id']}">{esc(p['name'])}</a></td>
-      <td>{esc(p['sport'] or '-')}</td>
-      <td>{esc(p['programme'] or '-')}</td>
-      <td>{p['test_count']}</td>
-      <td><a class="btn btn-sm btn-secondary" href="/coach/participants/{p['id']}">Manage</a></td>
-    </tr>
-    """ for p in participants) or '<tr><td colspan="5" class="muted">No participants in this group.</td></tr>'
-    return f"""<table class="table">
-      <thead><tr><th>Name</th><th>Sport</th><th>Programme</th><th>Tests</th><th></th></tr></thead>
-      <tbody>{rows}</tbody>
-    </table>"""
+def _participant_row(p, is_admin=False):
+    drag = '<span class="drag-handle" title="Drag to move group">&#9776;</span>' if is_admin else ""
+    return f"""<div class="res-item" data-id="{p['id']}">
+      {drag}
+      <div class="res-item-body">
+        <a href="/coach/participants/{p['id']}">{esc(p['name'])}</a>
+        <span class="res-desc">{esc(p['sport'] or '')}{'  ·  ' + esc(p['programme']) if p.get('programme') else ''}</span>
+      </div>
+      <div class="res-item-actions">
+        <span class="muted" style="font-size:12px; padding:0 6px;">{p['test_count']} test{"s" if p['test_count'] != 1 else ""}</span>
+        <a href="/coach/participants/{p['id']}" class="btn btn-ghost btn-sm">Manage</a>
+      </div>
+    </div>"""
 
 
 def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None):
     message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
+    is_admin = user.get("is_admin")
 
     group_sections = ""
     for group, participants in group_summaries:
-        group_sections += f"""
-        <div class="res-folder" style="margin-bottom:20px;">
-          <div class="res-folder-head" style="display:flex; align-items:center; gap:10px;">
-            <strong style="font-size:16px;">{esc(group['name'])}</strong>
-            <form method="post" action="/coach/groups/{group['id']}/delete" style="margin-left:auto; display:inline"
-                  onsubmit="return confirm('Delete group \\'{esc(group['name'])}\\'? Participants will be moved to ungrouped.');">
+        count = len(participants)
+        count_badge = f'<span class="res-count">{count} athlete{"s" if count != 1 else ""}</span>'
+        items_html = "".join(_participant_row(p, is_admin=is_admin) for p in participants)
+        empty = '<div class="res-drop-hint">Drop participants here</div>' if is_admin else '<p class="muted" style="padding:8px 4px; font-size:13px;">No participants in this group.</p>'
+        list_html = items_html if items_html else empty
+        folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder groups">&#9776;</span>' if is_admin else ""
+        delete_btn = f"""<form method="post" action="/coach/groups/{group['id']}/delete" style="display:inline"
+              onsubmit="return confirm('Delete group \\'{esc(group['name'])}\\'? Participants move to ungrouped.');">
               <button type="submit" class="btn btn-ghost btn-sm">Delete Group</button>
-            </form>
+            </form>""" if is_admin else ""
+        group_sections += f"""
+        <div class="res-folder" data-group-id="{group['id']}">
+          <div class="res-folder-tab">
+            {folder_handle}
+            <span class="res-folder-icon">&#128101;</span>
+            <strong class="res-folder-name">{esc(group['name'])}</strong>
+            {count_badge}
+            {delete_btn}
           </div>
-          <div style="padding:0 8px 8px;">{_participant_table(participants)}</div>
+          <div class="res-list" data-group-list-id="{group['id']}">{list_html}</div>
         </div>"""
 
-    ungrouped_section = ""
-    if ungrouped_summaries or not group_summaries:
-        ungrouped_label = "Ungrouped" if group_summaries else "Participants"
-        ungrouped_section = f"""
-        <div class="res-folder" style="margin-bottom:20px;">
-          <div class="res-folder-head"><strong style="font-size:16px;">{ungrouped_label}</strong></div>
-          <div style="padding:0 8px 8px;">{_participant_table(ungrouped_summaries)}</div>
-        </div>"""
+    ungrouped_count = len(ungrouped_summaries)
+    ug_badge = f'<span class="res-count">{ungrouped_count} athlete{"s" if ungrouped_count != 1 else ""}</span>'
+    ug_items = "".join(_participant_row(p, is_admin=is_admin) for p in ungrouped_summaries)
+    ug_empty = '<div class="res-drop-hint">Drop participants here</div>' if is_admin else '<p class="muted" style="padding:8px 4px; font-size:13px;">No ungrouped participants.</p>'
+    ug_list_html = ug_items if ug_items else ug_empty
 
-    is_admin = user.get("is_admin")
+    ungrouped_section = f"""
+    <div class="res-folder res-ungrouped">
+      <div class="res-folder-tab res-folder-tab--ungrouped">
+        <span class="res-folder-icon">&#128101;</span>
+        <strong class="res-folder-name">{"Participants" if not group_summaries else "Ungrouped"}</strong>
+        {ug_badge}
+      </div>
+      <div class="res-list" data-group-list-id="ungrouped">{ug_list_html}</div>
+    </div>"""
 
     if not group_summaries and not ungrouped_summaries:
         if is_admin:
-            content = '<div class="card"><p class="muted">No participants yet. Add one to get started.</p></div>'
+            content = '<div class="card"><p class="muted">No participants yet. Add one to get started.</p></div>' + ungrouped_section
         else:
             content = '<div class="card"><p class="muted">You haven\'t been assigned to a group yet. Contact an admin to be assigned.</p></div>'
     else:
-        content = group_sections + ungrouped_section
+        content = f'<div id="groups-container">{group_sections}</div>{ungrouped_section}'
 
     add_btn = '<a class="btn btn-primary" href="/coach/participants/new">+ Add Participant</a>' if is_admin else ""
+
     create_group_form = f"""
     <div class="card form-card" style="max-width:360px; margin-top:8px;">
       <h3 style="margin-top:0; font-size:15px;">Create Group</h3>
@@ -338,20 +354,77 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         <input type="text" name="group_name" placeholder="e.g. Class 5A" required style="flex:1;" />
         <button type="submit" class="btn btn-primary btn-sm" style="white-space:nowrap;">+ Group</button>
       </form>
-    </div>
-    """ if is_admin else ""
+    </div>""" if is_admin else ""
+
+    sortable_js = """
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
+    <script>
+    function post(url, body) {
+      fetch(url, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: body });
+    }
+    // Reorder groups
+    var gc = document.getElementById('groups-container');
+    if (gc) {
+      Sortable.create(gc, {
+        handle: '.folder-handle', animation: 150,
+        onEnd: function() {
+          var ids = Array.from(gc.querySelectorAll('.res-folder[data-group-id]'))
+                        .map(function(el){ return el.dataset.groupId; });
+          post('/coach/groups/reorder', 'ids=' + ids.join(','));
+        }
+      });
+    }
+    // Cross-group participant drag
+    document.querySelectorAll('[data-group-list-id]').forEach(function(list) {
+      Sortable.create(list, {
+        group: { name:'participants', pull:true, put:true },
+        handle: '.drag-handle:not(.folder-handle)',
+        animation: 150,
+        ghostClass: 'res-item--ghost',
+        onEnd: function(evt) {
+          var fromList = evt.from, toList = evt.to, itemId = evt.item.dataset.id;
+          if (fromList !== toList) {
+            var newGroupId = toList.dataset.groupListId;
+            post('/coach/participants/' + itemId + '/move-group',
+                 'group_id=' + (newGroupId === 'ungrouped' ? '' : newGroupId));
+            updateGroupCount(fromList);
+            updateGroupCount(toList);
+          }
+        }
+      });
+    });
+    function updateGroupCount(list) {
+      var folder = list.closest('.res-folder');
+      if (!folder) return;
+      var badge = folder.querySelector('.res-count');
+      if (!badge) return;
+      var n = list.querySelectorAll('.res-item').length;
+      badge.textContent = n + (n === 1 ? ' athlete' : ' athletes');
+      var hint = list.querySelector('.res-drop-hint');
+      if (hint) hint.style.display = n > 0 ? 'none' : '';
+    }
+    </script>""" if is_admin else ""
+
+    if is_admin:
+        subtitle = 'Viewing all participant groups &mdash; administrator access.'
+    elif group_summaries:
+        assigned_name = esc(group_summaries[0][0]['name'])
+        subtitle = f'Your assigned group: <strong>{assigned_name}</strong>'
+    else:
+        subtitle = 'No group assigned yet &mdash; contact an admin.'
 
     body = f"""
     <div class="page-head">
       <div>
         <h1>Coach Dashboard</h1>
-        <p class="muted">Record Measurement Games results and track every athlete's progress.</p>
+        <p class="muted">{subtitle}</p>
       </div>
       <div style="display:flex; gap:8px; flex-wrap:wrap;">{add_btn}</div>
     </div>
     {message_html}
     {content}
     {create_group_form}
+    {sortable_js}
     """
     return layout("Coach Dashboard", body, user=user, active_nav="dashboard")
 
@@ -602,27 +675,33 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     folder_sections = ""
     for folder, resources in folder_groups:
         items_html = "".join(_resource_row(r, is_admin=is_admin) for r in resources)
-        if not items_html:
-            items_html = '<p class="muted" style="padding:8px 0 0; font-size:13px;">No resources in this folder yet.</p>'
+        count = len(resources)
+        count_badge = f'<span class="res-count">{count} link{"s" if count != 1 else ""}</span>'
+        empty_drop = '<div class="res-drop-hint">Drop resources here</div>' if is_admin else '<p class="muted" style="padding:8px 4px; font-size:13px;">No resources yet.</p>'
+        list_content = items_html if items_html else empty_drop
         folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder folders">&#9776;</span>' if is_admin else ""
-        delete_folder_btn = f"""<form method="post" action="/coach/resources/folders/{folder['id']}/delete" style="display:inline; margin-left:auto"
+        delete_folder_btn = f"""<form method="post" action="/coach/resources/folders/{folder['id']}/delete" style="display:inline"
               onsubmit="return confirm('Delete folder \\'{esc(folder['name'])}\\'? Resources will move to Ungrouped.');">
               <button type="submit" class="btn btn-ghost btn-sm">Delete Folder</button>
             </form>""" if is_admin else ""
         folder_sections += f"""
         <div class="res-folder" data-folder-id="{folder['id']}">
-          <div class="res-folder-head">
+          <div class="res-folder-tab">
             {folder_handle}
-            <strong>{esc(folder['name'])}</strong>
+            <span class="res-folder-icon">&#128193;</span>
+            <strong class="res-folder-name">{esc(folder['name'])}</strong>
+            {count_badge}
             {delete_folder_btn}
           </div>
-          <div class="res-list" data-list-id="{folder['id']}">{items_html}</div>
+          <div class="res-list" data-list-id="{folder['id']}">{list_content}</div>
         </div>"""
 
     # Ungrouped section
     ungrouped_html = "".join(_resource_row(r, is_admin=is_admin) for r in ungrouped)
-    if not ungrouped_html:
-        ungrouped_html = '<p class="muted" style="padding:8px 0 0; font-size:13px;">No ungrouped resources.</p>'
+    ug_count = len(ungrouped)
+    ug_count_badge = f'<span class="res-count">{ug_count} link{"s" if ug_count != 1 else ""}</span>'
+    ug_empty = '<div class="res-drop-hint">Drop resources here</div>' if is_admin else '<p class="muted" style="padding:8px 4px; font-size:13px;">No ungrouped resources.</p>'
+    ungrouped_list_html = ungrouped_html if ungrouped_html else ug_empty
 
     manage_forms = f"""
     <div class="two-col" style="gap:16px; align-items:flex-start; margin-bottom:24px;">
@@ -653,13 +732,16 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     sortable_js = """
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <script>
-    function postOrder(url, ids) {
+    function post(url, body) {
       fetch(url, {
         method: 'POST',
         headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-        body: 'ids=' + ids.join(','),
+        body: body,
       });
     }
+    function postOrder(url, ids) { post(url, 'ids=' + ids.join(',')); }
+
+    // Drag to reorder folders
     var foldersContainer = document.getElementById('folders-container');
     if (foldersContainer) {
       Sortable.create(foldersContainer, {
@@ -672,17 +754,48 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
         }
       });
     }
+
+    // Drag resources within and between lists (cross-folder)
     document.querySelectorAll('.res-list').forEach(function(list) {
       Sortable.create(list, {
+        group: { name: 'resources', pull: true, put: true },
         handle: '.drag-handle:not(.folder-handle)',
         animation: 150,
-        onEnd: function() {
-          var ids = Array.from(list.querySelectorAll('.res-item'))
-                        .map(function(el) { return el.dataset.id; });
-          postOrder('/coach/resources/reorder', ids);
+        ghostClass: 'res-item--ghost',
+        onEnd: function(evt) {
+          var fromList = evt.from;
+          var toList   = evt.to;
+          var itemId   = evt.item.dataset.id;
+
+          if (fromList !== toList) {
+            // Moved to a different folder — update folder_id on the server
+            var newListId = toList.dataset.listId;
+            var folderId  = (newListId === 'ungrouped') ? '' : newListId;
+            post('/coach/resources/' + itemId + '/move', 'folder_id=' + folderId);
+
+            // Update the count badges on both affected folders
+            updateCount(fromList);
+            updateCount(toList);
+          }
+          // Always persist the new order of the destination list
+          var destIds = Array.from(toList.querySelectorAll('.res-item'))
+                            .map(function(el) { return el.dataset.id; });
+          postOrder('/coach/resources/reorder', destIds);
         }
       });
     });
+
+    function updateCount(list) {
+      var folder = list.closest('.res-folder');
+      if (!folder) return;
+      var badge = folder.querySelector('.res-count');
+      if (!badge) return;
+      var n = list.querySelectorAll('.res-item').length;
+      badge.textContent = n + (n === 1 ? ' link' : ' links');
+      // Show/hide the drop hint
+      var hint = list.querySelector('.res-drop-hint');
+      if (hint) hint.style.display = n > 0 ? 'none' : '';
+    }
     </script>""" if is_admin else ""
 
     body = f"""
@@ -692,8 +805,12 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     <div id="folders-container">{folder_sections}</div>
 
     <div class="res-folder res-ungrouped">
-      <div class="res-folder-head"><strong>Ungrouped</strong></div>
-      <div class="res-list" data-list-id="ungrouped">{ungrouped_html}</div>
+      <div class="res-folder-tab res-folder-tab--ungrouped">
+        <span class="res-folder-icon">&#128194;</span>
+        <strong class="res-folder-name">Ungrouped</strong>
+        {ug_count_badge}
+      </div>
+      <div class="res-list" data-list-id="ungrouped">{ungrouped_list_html}</div>
     </div>
     {sortable_js}
     """

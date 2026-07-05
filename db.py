@@ -416,6 +416,15 @@ def add_resource(conn, name, description, url, added_by, folder_id=None):
     conn.commit()
 
 
+def move_resource(conn, resource_id, folder_id):
+    """Move a resource to a different folder (or ungrouped if folder_id is None)."""
+    conn.execute(
+        "UPDATE resources SET folder_id = ? WHERE id = ?",
+        (folder_id or None, resource_id),
+    )
+    conn.commit()
+
+
 def update_resource(conn, resource_id, name, description, url, folder_id):
     conn.execute(
         "UPDATE resources SET name = ?, description = ?, url = ?, folder_id = ? WHERE id = ?",

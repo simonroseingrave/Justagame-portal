@@ -601,6 +601,21 @@ def toggle_coach(req, coach_id):
 # --------------------------------------------------------- participant groups
 
 
+@router.post("/coach/participants/<int:participant_id>/move-group")
+def move_participant_group(req, participant_id):
+    """AJAX endpoint — moves a participant to a new group via drag-and-drop."""
+    coach = require_admin(req)
+    if not coach:
+        return Response("", status=403)
+    group_id = req.form_get("group_id").strip() or None
+    conn = db.get_conn()
+    try:
+        db.assign_participant_group(conn, participant_id, group_id)
+    finally:
+        conn.close()
+    return Response("ok")
+
+
 @router.post("/coach/participants/<int:participant_id>/assign-group")
 def assign_participant_group(req, participant_id):
     coach = require_admin(req)
@@ -629,6 +644,25 @@ def group_new(req):
         return flash_redirect("/coach", f'Group "{name}" created.')
     finally:
         conn.close()
+
+
+@router.post("/coach/groups/reorder")
+def groups_reorder(req):
+    coach = require_admin(req)
+    if not coach:
+        return Response("", status=403)
+    ids_str = req.form_get("ids")
+    if ids_str:
+        try:
+            ids = [int(i) for i in ids_str.split(",") if i.strip()]
+            conn = db.get_conn()
+            try:
+                db.reorder_items(conn, "participant_groups", ids)
+            finally:
+                conn.close()
+        except ValueError:
+            pass
+    return Response("ok")
 
 
 @router.post("/coach/groups/<int:group_id>/delete")
@@ -747,6 +781,20 @@ def resources_delete(req, resource_id):
         return flash_redirect("/coach/resources", "Resource deleted.")
     finally:
         conn.close()
+
+
+@router.post("/coach/resources/<int:resource_id>/move")
+def resource_move(req, resource_id):
+    coach = require_admin(req)
+    if not coach:
+        return Response("", status=403)
+    folder_id = req.form_get("folder_id").strip() or None
+    conn = db.get_conn()
+    try:
+        db.move_resource(conn, resource_id, folder_id)
+    finally:
+        conn.close()
+    return Response("ok")
 
 
 @router.post("/coach/resources/reorder")
