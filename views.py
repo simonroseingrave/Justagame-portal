@@ -1089,16 +1089,17 @@ def _resource_row(r, is_admin=False):
     </tr>"""
 
 
-def _resource_table(rows_html, is_admin=False):
+def _resource_table(rows_html, is_admin=False, list_id=None):
     """Wrap resource rows in a table with column headers."""
     if not rows_html:
         return ""
+    tbody_attr = f' data-list-id="{list_id}"' if list_id is not None else ""
     return f"""<table class="table" style="width:100%;">
       <thead><tr>
         {"<th style='width:20px;'></th>" if is_admin else ""}
         <th>Name</th><th>Description</th><th></th>
       </tr></thead>
-      <tbody>{rows_html}</tbody>
+      <tbody{tbody_attr}>{rows_html}</tbody>
     </table>"""
 
 
@@ -1118,25 +1119,24 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
         count = len(resources)
         count_badge = f'<span class="res-count">{count} link{"s" if count != 1 else ""}</span>'
         empty_drop = '<div class="res-drop-hint">Drop resources here</div>' if is_admin else '<p class="muted" style="padding:8px 4px; font-size:13px;">No resources yet.</p>'
-        list_content = _resource_table(items_html, is_admin=is_admin) if items_html else empty_drop
+        list_content = _resource_table(items_html, is_admin=is_admin, list_id=folder['id']) if items_html else empty_drop
         folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder folders">&#9776;</span>' if is_admin else ""
         delete_folder_btn = f"""<form method="post" action="/coach/resources/folders/{folder['id']}/delete" style="display:inline"
               onsubmit="return confirm('Delete folder \\'{esc(folder['name'])}\\'? Resources will move to Ungrouped.');">
               <button type="submit" class="btn btn-ghost btn-sm">Delete Folder</button>
             </form>""" if is_admin else ""
         folder_sections += f"""
-        <div class="res-folder" data-folder-id="{folder['id']}">
+        <div class="res-folder res-folder--open" data-folder-id="{folder['id']}">
           <div class="res-folder-tab">
             {folder_handle}
-            <button type="button" class="res-folder-toggle" onclick="var f=this.closest('.res-folder'),l=f.querySelector('.res-list'),o=f.classList.toggle('res-folder--open');if(l)l.style.display=o?'block':'none';" title="Expand / collapse">
+            <div class="res-folder-toggle">
               <span class="res-folder-icon">&#128193;</span>
               <strong class="res-folder-name">{esc(folder['name'])}</strong>
               {count_badge}
-              <span class="res-folder-chevron">&#9654;</span>
-            </button>
+            </div>
             {delete_folder_btn}
           </div>
-          <div class="res-list" data-list-id="{folder['id']}" style="display:none">{list_content}</div>
+          <div class="res-list" data-list-id="{folder['id']}">{list_content}</div>
         </div>"""
 
     # Ungrouped section — open by default
@@ -1199,7 +1199,8 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     }
 
     // Drag resources within and between lists (cross-folder)
-    document.querySelectorAll('.res-list').forEach(function(list) {
+    // Target <tbody data-list-id> because resource rows are <tr> elements
+    document.querySelectorAll('tbody[data-list-id]').forEach(function(list) {
       Sortable.create(list, {
         group: { name: 'resources', pull: true, put: true },
         handle: '.drag-handle:not(.folder-handle)',
@@ -1246,18 +1247,6 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     {message_html}{error_html}
     {manage_forms}
     <div id="folders-container">{folder_sections}</div>
-    <script>
-    document.querySelectorAll('.res-folder-tab').forEach(function(tab) {{
-      tab.addEventListener('click', function(e) {{
-        if (e.target.closest('button, a, input, select, form')) return;
-        var folder = tab.closest('.res-folder');
-        var list = folder.querySelector('.res-list');
-        var isOpen = folder.classList.contains('res-folder--open');
-        folder.classList.toggle('res-folder--open');
-        if (list) list.style.display = isOpen ? 'none' : 'block';
-      }});
-    }});
-    </script>
     {sortable_js}
     """
     return layout("Resources", body, user=user, active_nav="resources")
