@@ -542,35 +542,58 @@ def patch_demo_data():
             (alex_id,),
         ).fetchone()["c"]
 
-        if already:
-            return  # already patched
-
         coach = conn.execute(
             "SELECT id FROM users WHERE role = 'coach' ORDER BY id LIMIT 1"
         ).fetchone()
         coach_id = coach["id"] if coach else None
 
-        t1, t2, t3 = 4.95, 4.82, 4.78
-        session_id = conn.execute(
-            "INSERT INTO measurement_sessions (participant_id, date, logged_by, created_at) VALUES (?, ?, ?, ?)",
-            (alex_id, "2026-07-03", coach_id, now()),
-        ).lastrowid
+        # Session 2 — 2026-07-03
+        if not already:
+            t1, t2, t3 = 4.95, 4.82, 4.78
+            session_id = conn.execute(
+                "INSERT INTO measurement_sessions (participant_id, date, logged_by, created_at) VALUES (?, ?, ?, ?)",
+                (alex_id, "2026-07-03", coach_id, now()),
+            ).lastrowid
+            for game_key, field_key, value in [
+                ("skipping_rope_sprint", "time_1", t1),
+                ("skipping_rope_sprint", "time_2", t2),
+                ("skipping_rope_sprint", "time_3", t3),
+                ("skipping_rope_sprint", "average", round((t1 + t2 + t3) / 3, 2)),
+                ("balance_ball_catching", "small_ball_two_hands", 18),
+                ("balance_ball_catching", "large_ball_two_hands", 26),
+                ("diamond_games", "running_room", 12),
+            ]:
+                conn.execute(
+                    "INSERT INTO measurement_results (session_id, game_key, field_key, value) VALUES (?, ?, ?, ?)",
+                    (session_id, game_key, field_key, value),
+                )
+            conn.commit()
 
-        second_results = [
-            ("skipping_rope_sprint", "time_1", t1),
-            ("skipping_rope_sprint", "time_2", t2),
-            ("skipping_rope_sprint", "time_3", t3),
-            ("skipping_rope_sprint", "average", round((t1 + t2 + t3) / 3, 2)),
-            ("balance_ball_catching", "small_ball_two_hands", 18),
-            ("balance_ball_catching", "large_ball_two_hands", 26),
-            ("diamond_games", "running_room", 12),
-        ]
-        for game_key, field_key, value in second_results:
-            conn.execute(
-                "INSERT INTO measurement_results (session_id, game_key, field_key, value) VALUES (?, ?, ?, ?)",
-                (session_id, game_key, field_key, value),
-            )
-        conn.commit()
+        # Session 3 — 2026-07-05 (only if not yet present)
+        already3 = conn.execute(
+            "SELECT COUNT(*) AS c FROM measurement_sessions WHERE participant_id = ? AND date = '2026-07-05'",
+            (alex_id,),
+        ).fetchone()["c"]
+        if not already3:
+            t1, t2, t3 = 4.71, 4.65, 4.60
+            session_id = conn.execute(
+                "INSERT INTO measurement_sessions (participant_id, date, logged_by, created_at) VALUES (?, ?, ?, ?)",
+                (alex_id, "2026-07-05", coach_id, now()),
+            ).lastrowid
+            for game_key, field_key, value in [
+                ("skipping_rope_sprint", "time_1", t1),
+                ("skipping_rope_sprint", "time_2", t2),
+                ("skipping_rope_sprint", "time_3", t3),
+                ("skipping_rope_sprint", "average", round((t1 + t2 + t3) / 3, 2)),
+                ("balance_ball_catching", "small_ball_two_hands", 22),
+                ("balance_ball_catching", "large_ball_two_hands", 29),
+                ("diamond_games", "running_room", 15),
+            ]:
+                conn.execute(
+                    "INSERT INTO measurement_results (session_id, game_key, field_key, value) VALUES (?, ?, ?, ?)",
+                    (session_id, game_key, field_key, value),
+                )
+            conn.commit()
     finally:
         conn.close()
 
