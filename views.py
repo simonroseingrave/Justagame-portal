@@ -648,9 +648,9 @@ def participant_progress_page(coach, participant, measurement_sessions):
         if game_cards:
             sections_html += f'<h2 class="section-title">{esc(section["section"])}</h2>{game_cards}'
 
-    # Full trend table — only shown when 3+ sessions
+    # Full trend table — shown when 2+ sessions
     trend_html = ""
-    if n >= 3:
+    if n >= 2:
         trend_rows = ""
         for session in reversed(measurement_sessions):  # chronological order
             trend_rows += f'<tr><td colspan="99" style="background:var(--jag-bg); font-weight:700; font-size:12px; padding:6px 12px;">{session["date"]}</td></tr>'
