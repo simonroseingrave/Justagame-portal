@@ -228,8 +228,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
   min-width: 160px;
   max-width: 80%;
   border: 2px solid var(--jag-green);
-  border-bottom: 2px solid var(--jag-card);  /* merges tab into card */
+  border-bottom: 2px solid var(--jag-card);
   font-size: 14px;
+  cursor: pointer;
+  user-select: none;
 }
 .res-folder-tab--ungrouped {
   background: var(--jag-bg);
@@ -237,7 +239,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
   border-bottom-color: var(--jag-card);
   color: var(--jag-muted);
 }
-.res-folder-icon { font-size: 15px; flex-shrink: 0; line-height: 1; }
+.res-folder-icon { width: 20px; height: 20px; flex-shrink: 0; object-fit: contain; }
 .res-folder-name { font-weight: 700; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .res-count {
   background: rgba(0,0,0,0.13);
@@ -249,9 +251,21 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
   white-space: nowrap;
 }
 .res-folder-tab--ungrouped .res-count { background: var(--jag-border); color: var(--jag-muted); }
+.res-folder-chevron {
+  flex-shrink: 0;
+  font-size: 11px;
+  transition: transform 0.2s ease;
+  opacity: 0.7;
+}
+.res-folder--open .res-folder-chevron { transform: rotate(90deg); }
 
-/* Folder body */
-.res-list { padding: 4px 12px 8px; min-height: 52px; }
+/* Folder body — hidden by default, shown when open */
+.res-list {
+  padding: 4px 12px 8px;
+  min-height: 52px;
+  display: none;
+}
+.res-folder--open .res-list { display: block; }
 .res-drop-hint {
   text-align: center;
   color: var(--jag-muted);

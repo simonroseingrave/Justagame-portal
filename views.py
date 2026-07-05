@@ -313,10 +313,11 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         <div class="res-folder" data-group-id="{group['id']}">
           <div class="res-folder-tab">
             {folder_handle}
-            <span class="res-folder-icon">&#128101;</span>
+            <img src="/static/img/logo.png" alt="" class="res-folder-icon" />
             <strong class="res-folder-name">{esc(group['name'])}</strong>
             {count_badge}
             {delete_btn}
+            <span class="res-folder-chevron">&#9654;</span>
           </div>
           <div class="res-list" data-group-list-id="{group['id']}">{list_html}</div>
         </div>"""
@@ -328,11 +329,12 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     ug_list_html = ug_items if ug_items else ug_empty
 
     ungrouped_section = f"""
-    <div class="res-folder res-ungrouped">
+    <div class="res-folder res-folder--open res-ungrouped">
       <div class="res-folder-tab res-folder-tab--ungrouped">
-        <span class="res-folder-icon">&#128101;</span>
+        <img src="/static/img/logo.png" alt="" class="res-folder-icon" />
         <strong class="res-folder-name">{"Participants" if not group_summaries else "Ungrouped"}</strong>
         {ug_badge}
+        <span class="res-folder-chevron" style="transform:rotate(90deg);">&#9654;</span>
       </div>
       <div class="res-list" data-group-list-id="ungrouped">{ug_list_html}</div>
     </div>"""
@@ -359,6 +361,14 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     sortable_js = """
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
     <script>
+    // Folder toggle
+    document.querySelectorAll('.res-folder-tab').forEach(function(tab) {
+      tab.addEventListener('click', function(e) {
+        if (e.target.closest('button, a, input, select, form')) return;
+        tab.closest('.res-folder').classList.toggle('res-folder--open');
+      });
+    });
+
     function post(url, body) {
       fetch(url, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: body });
     }
@@ -688,15 +698,16 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
         <div class="res-folder" data-folder-id="{folder['id']}">
           <div class="res-folder-tab">
             {folder_handle}
-            <span class="res-folder-icon">&#128193;</span>
+            <img src="/static/img/logo.png" alt="" class="res-folder-icon" />
             <strong class="res-folder-name">{esc(folder['name'])}</strong>
             {count_badge}
             {delete_folder_btn}
+            <span class="res-folder-chevron">&#9654;</span>
           </div>
           <div class="res-list" data-list-id="{folder['id']}">{list_content}</div>
         </div>"""
 
-    # Ungrouped section
+    # Ungrouped section — open by default
     ungrouped_html = "".join(_resource_row(r, is_admin=is_admin) for r in ungrouped)
     ug_count = len(ungrouped)
     ug_count_badge = f'<span class="res-count">{ug_count} link{"s" if ug_count != 1 else ""}</span>'
@@ -804,14 +815,23 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     {manage_forms}
     <div id="folders-container">{folder_sections}</div>
 
-    <div class="res-folder res-ungrouped">
+    <div class="res-folder res-folder--open res-ungrouped">
       <div class="res-folder-tab res-folder-tab--ungrouped">
         <span class="res-folder-icon">&#128194;</span>
         <strong class="res-folder-name">Ungrouped</strong>
         {ug_count_badge}
+        <span class="res-folder-chevron" style="transform:rotate(90deg);">&#9654;</span>
       </div>
       <div class="res-list" data-list-id="ungrouped">{ungrouped_list_html}</div>
     </div>
+    <script>
+    document.querySelectorAll('.res-folder-tab').forEach(function(tab) {{
+      tab.addEventListener('click', function(e) {{
+        if (e.target.closest('button, a, input, select, form')) return;
+        tab.closest('.res-folder').classList.toggle('res-folder--open');
+      }});
+    }});
+    </script>
     {sortable_js}
     """
     return layout("Resources", body, user=user, active_nav="resources")
