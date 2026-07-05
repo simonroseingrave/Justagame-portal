@@ -311,7 +311,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
             </form>""" if is_admin else ""
         group_sections += f"""
         <div class="res-folder" data-group-id="{group['id']}">
-          <div class="res-folder-tab">
+          <div class="res-folder-tab" onclick="if(!event.target.closest('button,a,input,select,form')){{var f=this.closest('.res-folder'),l=f.querySelector('.res-list'),o=f.classList.toggle('res-folder--open');if(l)l.style.display=o?'block':'none';}}">
             {folder_handle}
             <span class="res-folder-icon">&#128193;</span>
             <strong class="res-folder-name">{esc(group['name'])}</strong>
@@ -319,7 +319,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
             {delete_btn}
             <span class="res-folder-chevron">&#9654;</span>
           </div>
-          <div class="res-list" data-group-list-id="{group['id']}">{list_html}</div>
+          <div class="res-list" data-group-list-id="{group['id']}" style="display:none">{list_html}</div>
         </div>"""
 
     ungrouped_count = len(ungrouped_summaries)
@@ -330,7 +330,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
 
     ungrouped_section = f"""
     <div class="res-folder res-folder--open res-ungrouped">
-      <div class="res-folder-tab res-folder-tab--ungrouped">
+      <div class="res-folder-tab res-folder-tab--ungrouped" onclick="if(!event.target.closest('button,a,input,select,form')){{var f=this.closest('.res-folder'),l=f.querySelector('.res-list'),o=f.classList.toggle('res-folder--open');if(l)l.style.display=o?'block':'none';}}">
         <span class="res-folder-icon">&#128193;</span>
         <strong class="res-folder-name">{"Participants" if not group_summaries else "Ungrouped"}</strong>
         {ug_badge}
@@ -431,7 +431,11 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     document.querySelectorAll('.res-folder-tab').forEach(function(tab) {{
       tab.addEventListener('click', function(e) {{
         if (e.target.closest('button, a, input, select, form')) return;
-        tab.closest('.res-folder').classList.toggle('res-folder--open');
+        var folder = tab.closest('.res-folder');
+        var list = folder.querySelector('.res-list');
+        var isOpen = folder.classList.contains('res-folder--open');
+        folder.classList.toggle('res-folder--open');
+        if (list) list.style.display = isOpen ? 'none' : 'block';
       }});
     }});
     </script>
@@ -696,7 +700,7 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
             </form>""" if is_admin else ""
         folder_sections += f"""
         <div class="res-folder" data-folder-id="{folder['id']}">
-          <div class="res-folder-tab">
+          <div class="res-folder-tab" onclick="if(!event.target.closest('button,a,input,select,form')){{var f=this.closest('.res-folder'),l=f.querySelector('.res-list'),o=f.classList.toggle('res-folder--open');if(l)l.style.display=o?'block':'none';}}">
             {folder_handle}
             <span class="res-folder-icon">&#128193;</span>
             <strong class="res-folder-name">{esc(folder['name'])}</strong>
@@ -704,7 +708,7 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
             {delete_folder_btn}
             <span class="res-folder-chevron">&#9654;</span>
           </div>
-          <div class="res-list" data-list-id="{folder['id']}">{list_content}</div>
+          <div class="res-list" data-list-id="{folder['id']}" style="display:none">{list_content}</div>
         </div>"""
 
     # Ungrouped section — open by default
@@ -816,7 +820,7 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     <div id="folders-container">{folder_sections}</div>
 
     <div class="res-folder res-folder--open res-ungrouped">
-      <div class="res-folder-tab res-folder-tab--ungrouped">
+      <div class="res-folder-tab res-folder-tab--ungrouped" onclick="if(!event.target.closest('button,a,input,select,form')){{var f=this.closest('.res-folder'),l=f.querySelector('.res-list'),o=f.classList.toggle('res-folder--open');if(l)l.style.display=o?'block':'none';}}">
         <span class="res-folder-icon">&#128194;</span>
         <strong class="res-folder-name">Ungrouped</strong>
         {ug_count_badge}
@@ -828,7 +832,11 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     document.querySelectorAll('.res-folder-tab').forEach(function(tab) {{
       tab.addEventListener('click', function(e) {{
         if (e.target.closest('button, a, input, select, form')) return;
-        tab.closest('.res-folder').classList.toggle('res-folder--open');
+        var folder = tab.closest('.res-folder');
+        var list = folder.querySelector('.res-list');
+        var isOpen = folder.classList.contains('res-folder--open');
+        folder.classList.toggle('res-folder--open');
+        if (list) list.style.display = isOpen ? 'none' : 'block';
       }});
     }});
     </script>
