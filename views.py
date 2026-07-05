@@ -323,7 +323,10 @@ def _participant_table(rows_html, is_admin=False):
 
 def edit_group_page(user, group, error=None):
     error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
-    icon_url = group.get("icon_url") or ""
+    try:
+        icon_url = group["icon_url"] or ""
+    except Exception:
+        icon_url = ""
     body = f"""
     <div class="page-head">
       <h1>Edit Group</h1>
@@ -356,7 +359,10 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         empty = '<div class="res-drop-hint">Drop participants here</div>' if is_admin else '<p class="muted" style="padding:8px 4px; font-size:13px;">No participants in this group.</p>'
         list_html = _participant_table(items_html, is_admin=is_admin) if items_html else empty
         folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder groups">&#9776;</span>' if is_admin else ""
-        icon_url = group.get("icon_url")
+        try:
+            icon_url = group["icon_url"]
+        except Exception:
+            icon_url = None
         icon_html = (f'<img src="{esc(icon_url)}" style="width:22px;height:22px;object-fit:contain;border-radius:3px;flex-shrink:0;" '
                      f'onerror="this.style.display=\'none\'">')  if icon_url else "&#128193;"
         admin_btns = f"""
