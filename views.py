@@ -970,6 +970,87 @@ def group_achievement_summary_page(coach, group, participants_sessions):
     return layout(f"{group['name']} Achievement Summary", body, user=coach, active_nav="progress")
 
 
+def _overall_achievement_html(groups_data):
+    """Build the programme-wide aggregate improvement section for the admin page.
+    Combines all participants across all groups; shows avg % improvement per field.
+    Only counts athletes with 2+ sessions.
+    """
+    # Flatten all (participant, sessions) pairs
+    all_ps = [(p, s) for _, ps in groups_data for p, s in ps if len(s) >= 2]
+    if not all_ps:
+        return ""
+
+    athlete_count = len(all_ps)
+    sections_html = ""
+
+    for section in MEASUREMENT_GAMES:
+        game_cards = ""
+        for game in section["games"]:
+            all_fields = game["fields"] + game.get("computed", [])
+            rows = ""
+            for field in all_fields:
+                fkey  = field["key"]
+                ftype = field["type"]
+                pcts  = []
+                for _p, sessions in all_ps:
+                    first_s  = sessions[-1]
+                    latest_s = sessions[0]
+                    fv = first_s["results"].get((game["key"], fkey))
+                    lv = latest_s["results"].get((game["key"], fkey))
+                    if fv is not None and lv is not None and fv != 0:
+                        pcts.append((lv - fv) / fv * 100)
+
+                if not pcts:
+                    continue
+
+                n        = len(pcts)
+                avg      = sum(pcts) / n
+                improved = (avg < 0) if ftype == "time" else (avg > 0)
+                colour   = "#0f6e62" if improved else "#9b1c1c"
+                arrow    = "&#9650;" if avg > 0 else "&#9660;"
+                sign     = "+" if avg > 0 else ""
+                coverage = f'{n} of {athlete_count} athlete{"s" if athlete_count != 1 else ""}'
+
+                rows += f"""<tr>
+                  <td style="font-size:13px;">{esc(field['label'])}</td>
+                  <td style="color:{colour}; font-weight:700; white-space:nowrap; font-size:16px;">
+                    {arrow} {sign}{avg:.1f}%
+                  </td>
+                  <td class="muted" style="font-size:12px;">{coverage}</td>
+                </tr>"""
+
+            if rows:
+                game_cards += f"""
+                <div class="card" style="margin-bottom:16px;">
+                  <h3 style="margin:0 0 12px; font-size:15px;">{esc(game['name'])}</h3>
+                  <table class="table" style="width:100%;">
+                    <thead><tr>
+                      <th>Measurement</th>
+                      <th>Avg improvement</th>
+                      <th>Athletes</th>
+                    </tr></thead>
+                    <tbody>{rows}</tbody>
+                  </table>
+                </div>"""
+
+        if game_cards:
+            sections_html += f'<h2 class="section-title">{esc(section["section"])}</h2>{game_cards}'
+
+    if not sections_html:
+        return ""
+
+    return f"""
+    <h2 class="section-title" style="margin-top:40px; padding-top:24px; border-top:2px solid var(--jag-border);">
+      Programme-Wide Achievement Report
+    </h2>
+    <div class="card" style="margin-bottom:12px; background:var(--jag-bg); border:1px solid var(--jag-border);">
+      <p class="muted" style="margin:0; font-size:13px;">
+        Combined average improvement across all {athlete_count} athlete{"s" if athlete_count != 1 else ""} with 2+ sessions, regardless of group.
+      </p>
+    </div>
+    {sections_html}"""
+
+
 def all_progress_page(coach, groups_data):
     """Admin-only page: progress across all participants, organised by group.
     groups_data: list of (group_or_None, [(participant, sessions), ...])
@@ -1019,13 +1100,16 @@ def all_progress_page(coach, groups_data):
     total_with_data = sum(len([p for p, s in ps if s]) for _, ps in groups_data)
     total_sessions = sum(len(s) for _, ps in groups_data for _, s in ps)
 
+    overall_report = _overall_achievement_html(groups_data)
+
     body = f"""
     <div class="page-head">
       <div><h1>Achievement Statistics Overview</h1>
         <p class="muted">{total_with_data} of {total_participants} participants tested &middot; {total_sessions} total sessions</p>
       </div>
     </div>
-    {body_sections}"""
+    {body_sections}
+    {overall_report}"""
     return layout("Achievement Statistics", body, user=coach, active_nav="progress")
 
 
