@@ -61,8 +61,6 @@ MEASUREMENT_GAMES = [
                 "key": "balance_ball_catching",
                 "name": "Balance Catching - 1 minute",
                 "fields": [
-                    {"key": "small_ball_two_hands",        "label": "Small Ball - Two Hands (Partner Feed)",                       "type": "number"},
-                    {"key": "large_ball_two_hands",        "label": "Large Ball - Two Hands (Partner Feed)",                       "type": "number"},
                     {"key": "small_ball_wall_bounce",      "label": "Small Ball - Wall Bounce",                                    "type": "number"},
                     {"key": "large_ball_wall_bounce",      "label": "Large Ball - Wall Bounce",                                    "type": "number"},
                     {"key": "small_ball_dominant",         "label": "Small Ball - Dominant Hand (Wall Bounce)",                    "type": "number"},
