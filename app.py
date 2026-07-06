@@ -373,6 +373,30 @@ def group_progress(req, group_id):
         conn.close()
 
 
+@router.get("/coach/groups/<int:group_id>/achievement-summary")
+def group_achievement_summary(req, group_id):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        group = conn.execute("SELECT * FROM participant_groups WHERE id = ?", (group_id,)).fetchone()
+        if not group:
+            return Response(views.simple_message_page("Not found", "Group not found.", user=coach), status=404)
+        if not coach.get("is_admin"):
+            coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
+            if group_id not in coach_group_ids:
+                return Response(views.simple_message_page("Access denied", "You don't have access to this group.", user=coach), status=403)
+        participants = conn.execute(
+            "SELECT * FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name",
+            (group_id,),
+        ).fetchall()
+        participants_sessions = [(dict(p), db.measurement_sessions_for(conn, p["id"])) for p in participants]
+        return Response(views.group_achievement_summary_page(coach, dict(group), participants_sessions))
+    finally:
+        conn.close()
+
+
 @router.get("/coach/participants/<int:participant_id>/progress")
 def coach_participant_progress(req, participant_id):
     coach = require_role(req, "coach")

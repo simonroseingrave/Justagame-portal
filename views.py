@@ -365,6 +365,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
             icon_url = None
         icon_html = (f'<img src="{esc(icon_url)}" style="width:22px;height:22px;object-fit:contain;border-radius:3px;flex-shrink:0;" '
                      f'onerror="this.style.display=\'none\'">')  if icon_url else "&#128193;"
+        summary_link = f'<a href="/coach/groups/{group["id"]}/achievement-summary" class="btn btn-ghost btn-sm" style="font-size:12px;">&#128200; Group Stats</a>'
         admin_btns = f"""
             <a href="/coach/groups/{group['id']}/edit" class="btn btn-ghost btn-sm" style="font-size:12px;">Edit</a>
             <form method="post" action="/coach/groups/{group['id']}/delete" style="display:inline"
@@ -381,6 +382,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
               {count_badge}
               <span class="res-folder-chevron">&#9654;</span>
             </button>
+            {summary_link}
             {admin_btns}
           </div>
           <div class="res-list" data-group-list-id="{group['id']}" style="display:none">{list_html}</div>
@@ -879,6 +881,93 @@ def group_progress_page(coach, group, participants_sessions):
     </div>
     {sections_html}"""
     return layout(f"{group['name'] if group else 'Group'} Progress", body, user=coach, active_nav="progress")
+
+
+def group_achievement_summary_page(coach, group, participants_sessions):
+    """One-page collective summary: average % improvement per field across all group members."""
+    # Only athletes with at least 2 sessions contribute to the averages
+    active = [(p, s) for p, s in participants_sessions if len(s) >= 2]
+    gname = esc(group["name"]) if group else "Group"
+
+    if not active:
+        body = f"""
+        <div class="page-head">
+          <div><h1>{gname} &mdash; Achievement Summary</h1></div>
+          <a class="btn btn-ghost" href="/coach">&larr; Dashboard</a>
+        </div>
+        <div class="card"><p class="muted">No athletes in this group have two or more test sessions yet — come back after the second round of measurements.</p></div>"""
+        return layout(f"{group['name']} Achievement Summary", body, user=coach, active_nav="progress")
+
+    athlete_count = len(active)
+    sections_html = ""
+
+    for section in MEASUREMENT_GAMES:
+        game_cards = ""
+        for game in section["games"]:
+            all_fields = game["fields"] + game.get("computed", [])
+            rows = ""
+            for field in all_fields:
+                fkey  = field["key"]
+                ftype = field["type"]
+                pcts  = []
+                for _p, sessions in active:
+                    first_s  = sessions[-1]   # oldest (list is newest-first)
+                    latest_s = sessions[0]
+                    fv = first_s["results"].get((game["key"], fkey))
+                    lv = latest_s["results"].get((game["key"], fkey))
+                    if fv is not None and lv is not None and fv != 0:
+                        pcts.append((lv - fv) / fv * 100)
+
+                if not pcts:
+                    continue
+
+                n      = len(pcts)
+                avg    = sum(pcts) / n
+                # For time fields lower is better; for everything else higher is better
+                improved = (avg < 0) if ftype == "time" else (avg > 0)
+                colour   = "#0f6e62" if improved else "#9b1c1c"
+                arrow    = "&#9650;" if avg > 0 else "&#9660;"
+                sign     = "+" if avg > 0 else ""
+                coverage = f'{n} of {athlete_count} athlete{"s" if athlete_count != 1 else ""}'
+
+                rows += f"""<tr>
+                  <td style="font-size:13px;">{esc(field['label'])}</td>
+                  <td style="color:{colour}; font-weight:700; white-space:nowrap; font-size:16px;">
+                    {arrow} {sign}{avg:.1f}%
+                  </td>
+                  <td class="muted" style="font-size:12px;">{coverage}</td>
+                </tr>"""
+
+            if rows:
+                game_cards += f"""
+                <div class="card" style="margin-bottom:16px;">
+                  <h3 style="margin:0 0 12px; font-size:15px;">{esc(game['name'])}</h3>
+                  <table class="table" style="width:100%;">
+                    <thead><tr>
+                      <th>Measurement</th>
+                      <th>Avg improvement</th>
+                      <th>Athletes</th>
+                    </tr></thead>
+                    <tbody>{rows}</tbody>
+                  </table>
+                </div>"""
+
+        if game_cards:
+            sections_html += f'<h2 class="section-title">{esc(section["section"])}</h2>{game_cards}'
+
+    if not sections_html:
+        sections_html = '<div class="card"><p class="muted">No measurements recorded yet.</p></div>'
+
+    body = f"""
+    <div class="page-head">
+      <div>
+        <h1>{gname} &mdash; Achievement Summary</h1>
+        <p class="muted">Average improvement from first to most recent session &mdash; {athlete_count} athlete{"s" if athlete_count != 1 else ""} with 2+ sessions</p>
+      </div>
+      <a class="btn btn-ghost" href="/coach">&larr; Dashboard</a>
+    </div>
+    {sections_html}"""
+    return layout(f"{group['name']} Achievement Summary", body, user=coach, active_nav="progress")
 
 
 def all_progress_page(coach, groups_data):
