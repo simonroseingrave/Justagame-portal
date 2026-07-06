@@ -1121,10 +1121,11 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
         empty_drop = '<div class="res-drop-hint">Drop resources here</div>' if is_admin else '<p class="muted" style="padding:8px 4px; font-size:13px;">No resources yet.</p>'
         list_content = _resource_table(items_html, is_admin=is_admin, list_id=folder['id']) if items_html else empty_drop
         folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder folders">&#9776;</span>' if is_admin else ""
+        is_protected_folder = folder['name'].strip().lower() == "measurement games"
         delete_folder_btn = f"""<form method="post" action="/coach/resources/folders/{folder['id']}/delete" style="display:inline"
               onsubmit="return confirm('Delete folder \\'{esc(folder['name'])}\\'? Resources will move to Ungrouped.');">
               <button type="submit" class="btn btn-ghost btn-sm">Delete Folder</button>
-            </form>""" if is_admin else ""
+            </form>""" if is_admin and not is_protected_folder else ""
         folder_sections += f"""
         <div class="res-folder res-folder--open" data-folder-id="{folder['id']}">
           <div class="res-folder-tab">
