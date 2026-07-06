@@ -365,7 +365,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
             icon_url = None
         icon_html = (f'<img src="{esc(icon_url)}" style="width:22px;height:22px;object-fit:contain;border-radius:3px;flex-shrink:0;" '
                      f'onerror="this.style.display=\'none\'">')  if icon_url else "&#128193;"
-        summary_link = f'<a href="/coach/groups/{group["id"]}/achievement-summary" class="btn btn-ghost btn-sm" style="font-size:12px;">&#128200; Group Stats</a>'
+        summary_link = f'<a href="/coach/groups/{group["id"]}/achievement-summary" class="btn btn-sm" style="font-size:12px; background:var(--jag-green); color:var(--jag-navy); font-weight:600; border:none;">&#128200; Group Stats</a>'
         admin_btns = f"""
             <a href="/coach/groups/{group['id']}/edit" class="btn btn-ghost btn-sm" style="font-size:12px;">Edit</a>
             <form method="post" action="/coach/groups/{group['id']}/delete" style="display:inline"
