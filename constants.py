@@ -89,18 +89,6 @@ MEASUREMENT_GAMES = [
                     {"key": "lb_underarm_defender",        "label": "Large Ball - Under Arm Bounce (Defender)",       "type": "points"},
                     {"key": "lb_kick_attacker",            "label": "Large Ball - Kick (Attacker)",                   "type": "points"},
                     {"key": "lb_kick_defender",            "label": "Large Ball - Kick (Defender)",                   "type": "points"},
-                    {"key": "step_sb_throw_attacker",      "label": "Step Over Gate - Small Ball Throw (Attacker)",   "type": "points"},
-                    {"key": "step_sb_throw_defender",      "label": "Step Over Gate - Small Ball Throw (Defender)",   "type": "points"},
-                    {"key": "step_lb_throw_attacker",      "label": "Step Over Gate - Large Ball Throw (Attacker)",   "type": "points"},
-                    {"key": "step_lb_throw_defender",      "label": "Step Over Gate - Large Ball Throw (Defender)",   "type": "points"},
-                    {"key": "step_kick_attacker",          "label": "Step Over Gate - Kick (Attacker)",               "type": "points"},
-                    {"key": "step_kick_defender",          "label": "Step Over Gate - Kick (Defender)",               "type": "points"},
-                    {"key": "two_gate_sb_throw_attacker",  "label": "Two Gate - SB Throw (Attacker)",                 "type": "points"},
-                    {"key": "two_gate_sb_throw_defender",  "label": "Two Gate - SB Throw (Defender)",                 "type": "points"},
-                    {"key": "two_gate_lb_throw_attacker",  "label": "Two Gate - LB Throw (Attacker)",                 "type": "points"},
-                    {"key": "two_gate_lb_throw_defender",  "label": "Two Gate - LB Throw (Defender)",                 "type": "points"},
-                    {"key": "two_gate_kick_attacker",      "label": "Two Gate - Kick (Attacker)",                     "type": "points"},
-                    {"key": "two_gate_kick_defender",      "label": "Two Gate - Kick (Defender)",                     "type": "points"},
                 ],
             },
             {
@@ -132,6 +120,22 @@ MEASUREMENT_GAMES = [
                 "fields": [
                     {"key": "step_bench",  "label": "Step / Bench", "type": "number", "unit": "Number of Gates"},
                     {"key": "low_hurdle",  "label": "Low Hurdle",   "type": "number", "unit": "Number of Gates"},
+                ],
+            },
+        ],
+    },
+    {
+        "section": "Throw Up",
+        "games": [
+            {
+                "key": "throw_up",
+                "name": "Throw Up",
+                "fields": [
+                    {"key": "attempt_1", "label": "Attempt 1", "type": "points"},
+                    {"key": "attempt_2", "label": "Attempt 2", "type": "points"},
+                    {"key": "attempt_3", "label": "Attempt 3", "type": "points"},
+                    {"key": "attempt_4", "label": "Attempt 4", "type": "points"},
+                    {"key": "attempt_5", "label": "Attempt 5", "type": "points"},
                 ],
             },
         ],
