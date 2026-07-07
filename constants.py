@@ -125,6 +125,23 @@ MEASUREMENT_GAMES = [
         ],
     },
     {
+        "section": "Throw Down",
+        "games": [
+            {
+                "key": "throw_down",
+                "name": "Throw Down",
+                "fields": [
+                    {"key": "sb_attempt_1", "label": "Small Ball - Attempt 1", "type": "points"},
+                    {"key": "sb_attempt_2", "label": "Small Ball - Attempt 2", "type": "points"},
+                    {"key": "sb_attempt_3", "label": "Small Ball - Attempt 3", "type": "points"},
+                    {"key": "lb_attempt_1", "label": "Large Ball - Attempt 1", "type": "points"},
+                    {"key": "lb_attempt_2", "label": "Large Ball - Attempt 2", "type": "points"},
+                    {"key": "lb_attempt_3", "label": "Large Ball - Attempt 3", "type": "points"},
+                ],
+            },
+        ],
+    },
+    {
         "section": "Throw Up",
         "games": [
             {
