@@ -22,6 +22,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
                     ("/coach/participants/new", "Add Participant", "new_participant"),
                     ("/coach/coaches", "Coaches", "coaches"),
                 ]
+            links.append(("/coach/session", "Record Session", "session"))
             links.append(("/coach/progress", "Achievement Statistics", "progress"))
             links.append(("/coach/resources", "Resources", "resources"))
         else:
@@ -1228,6 +1229,173 @@ def all_progress_page(coach, groups_data):
     {body_sections}
     {overall_report}"""
     return layout("Achievement Statistics", body, user=coach, active_nav="progress")
+
+
+def group_session_page(coach, participants):
+    """Rapid-fire session entry: select athlete → select game → fields appear → quick-save.
+    All saves for the same athlete+date land in one session (find-or-create).
+    """
+    import json as _json
+
+    # Athlete options
+    athlete_opts = '<option value="">— Select athlete —</option>' + "".join(
+        f'<option value="{p["id"]}">{esc(p["name"])}</option>' for p in participants
+    )
+
+    # Game options grouped by section + JS data map
+    game_opts = '<option value="">— Select game —</option>'
+    games_data = {}
+    for section in MEASUREMENT_GAMES:
+        game_opts += f'<optgroup label="{esc(section["section"])}">'
+        for game in section["games"]:
+            game_opts += f'<option value="{esc(game["key"])}">{esc(game["name"])}</option>'
+            games_data[game["key"]] = {
+                "name": game["name"],
+                "fields": [
+                    {"key": f["key"], "label": f["label"], "type": f["type"]}
+                    for f in game["fields"]
+                ],
+            }
+        game_opts += '</optgroup>'
+
+    games_js = _json.dumps(games_data)
+    today = __import__("datetime").date.today().isoformat()
+
+    body = f"""
+    <div class="page-head"><h1>Record Session</h1></div>
+
+    <div class="card form-card" style="max-width:560px;">
+      <label for="qs-date">Date</label>
+      <input type="date" id="qs-date" value="{today}" style="max-width:200px; margin-bottom:16px;" />
+
+      <label for="qs-athlete">Athlete</label>
+      <select id="qs-athlete" style="margin-bottom:16px;">{athlete_opts}</select>
+
+      <label for="qs-game">Measurement Game</label>
+      <select id="qs-game" style="margin-bottom:16px;">{game_opts}</select>
+
+      <div id="qs-fields" style="margin-top:4px;"></div>
+    </div>
+
+    <div class="card" style="max-width:560px; margin-top:16px;">
+      <h3 style="margin:0 0 10px; font-size:15px;">Session log</h3>
+      <div id="qs-log" style="font-size:13px; color:var(--jag-muted);">Nothing saved yet.</div>
+    </div>
+
+    <script>
+    (function() {{
+      var GAMES = {games_js};
+      var saveUrl = '/coach/session/save';
+      var sessionIds = {{}}; // athlete_id -> session_id (cached per page load)
+
+      var dateEl    = document.getElementById('qs-date');
+      var athleteEl = document.getElementById('qs-athlete');
+      var gameEl    = document.getElementById('qs-game');
+      var fieldsEl  = document.getElementById('qs-fields');
+      var logEl     = document.getElementById('qs-log');
+      var logEmpty  = true;
+
+      function renderFields(gameKey) {{
+        fieldsEl.innerHTML = '';
+        if (!gameKey || !GAMES[gameKey]) return;
+        var game = GAMES[gameKey];
+        game.fields.forEach(function(f) {{
+          var step = (f.type === 'time') ? '0.01' : '1';
+          var suffix = (f.type === 'time') ? ' (seconds)' : '';
+          var div = document.createElement('div');
+          div.className = 'mg-field';
+          div.style.marginBottom = '12px';
+          div.innerHTML =
+            '<label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">' +
+              f.label + suffix +
+            '</label>' +
+            '<div class="mg-field-row">' +
+              '<input type="number" step="' + step + '" min="0" id="qs-input-' + f.key + '" ' +
+                     'data-field="' + f.key + '" style="max-width:140px;" />' +
+              '<button type="button" class="mg-save-btn" data-field="' + f.key + '">&#10003; Save</button>' +
+            '</div>';
+          fieldsEl.appendChild(div);
+        }});
+
+        // Wire save buttons
+        fieldsEl.querySelectorAll('.mg-save-btn').forEach(function(btn) {{
+          btn.addEventListener('click', function() {{
+            var fieldKey  = btn.dataset.field;
+            var input     = document.getElementById('qs-input-' + fieldKey);
+            var value     = input ? input.value.trim() : '';
+            var athleteId = athleteEl.value;
+            var gameKey2  = gameEl.value;
+            if (!athleteId) {{ alert('Please select an athlete first.'); return; }}
+            if (!value)     {{ alert('Please enter a value first.'); return; }}
+            doSave(athleteId, gameKey2, fieldKey, value, btn, input);
+          }});
+          // Enter key
+          var inp = document.getElementById('qs-input-' + btn.dataset.field);
+          if (inp) inp.addEventListener('keydown', function(e) {{
+            if (e.key === 'Enter') {{ e.preventDefault(); btn.click(); }}
+          }});
+        }});
+      }}
+
+      function markBtn(btn, state) {{
+        if (state === 'saving') {{
+          btn.textContent = '...'; btn.disabled = true; btn.style.background = '';
+        }} else if (state === 'ok') {{
+          btn.textContent = '\\u2713 Saved'; btn.disabled = false;
+          btn.style.background = '#0f6e62'; btn.style.color = '#fff'; btn.style.borderColor = '#0f6e62';
+          setTimeout(function() {{
+            btn.textContent = '\\u2713 Save';
+            btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = '';
+          }}, 2000);
+        }} else {{
+          btn.textContent = '! Error'; btn.disabled = false;
+          btn.style.background = '#9b1c1c'; btn.style.color = '#fff'; btn.style.borderColor = '#9b1c1c';
+          setTimeout(function() {{
+            btn.textContent = '\\u2713 Save';
+            btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = '';
+          }}, 3000);
+        }}
+      }}
+
+      async function doSave(athleteId, gameKey, fieldKey, value, btn, input) {{
+        markBtn(btn, 'saving');
+        try {{
+          var game   = GAMES[gameKey] || {{}};
+          var field  = (game.fields || []).find(function(f) {{ return f.key === fieldKey; }}) || {{}};
+          var athleteName = athleteEl.options[athleteEl.selectedIndex].text;
+          var body = 'athlete_id=' + encodeURIComponent(athleteId) +
+                     '&date='       + encodeURIComponent(dateEl.value) +
+                     '&game_key='   + encodeURIComponent(gameKey) +
+                     '&field_key='  + encodeURIComponent(fieldKey) +
+                     '&value='      + encodeURIComponent(value);
+          var resp = await fetch(saveUrl, {{
+            method: 'POST',
+            headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+            body: body,
+          }});
+          var data = await resp.json();
+          if (!resp.ok || !data.ok) throw new Error(data.error || 'Save failed');
+          markBtn(btn, 'ok');
+          input.value = '';
+          // Log entry
+          if (logEmpty) {{ logEl.innerHTML = ''; logEmpty = false; }}
+          var entry = document.createElement('div');
+          entry.style.cssText = 'padding:6px 0; border-bottom:1px solid var(--jag-border); display:flex; gap:8px; align-items:baseline;';
+          entry.innerHTML =
+            '<span style="font-weight:700; color:var(--jag-text);">' + athleteName + '</span>' +
+            '<span style="color:var(--jag-muted);">' + (game.name || gameKey) + ' &rarr; ' + (field.label || fieldKey) + '</span>' +
+            '<span style="margin-left:auto; font-weight:700; color:var(--jag-navy);">' + value + (field.type === 'time' ? 's' : '') + '</span>';
+          logEl.insertBefore(entry, logEl.firstChild);
+        }} catch(e) {{
+          markBtn(btn, 'error');
+        }}
+      }}
+
+      gameEl.addEventListener('change', function() {{ renderFields(gameEl.value); }});
+    }})();
+    </script>
+    """
+    return layout("Record Session", body, user=coach, active_nav="session")
 
 
 def simple_message_page(title, message, user=None):

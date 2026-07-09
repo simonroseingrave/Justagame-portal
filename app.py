@@ -422,6 +422,78 @@ def coach_participant_progress(req, participant_id):
         conn.close()
 
 
+@router.get("/coach/session")
+def group_session_get(req):
+    """Rapid-fire group session entry page."""
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        if coach.get("is_admin"):
+            participants = conn.execute(
+                "SELECT * FROM users WHERE role='participant' AND active=1 ORDER BY name"
+            ).fetchall()
+        else:
+            coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
+            if not coach_group_ids:
+                participants = []
+            else:
+                placeholders = ",".join("?" * len(coach_group_ids))
+                participants = conn.execute(
+                    f"SELECT * FROM users WHERE role='participant' AND active=1 AND group_id IN ({placeholders}) ORDER BY name",
+                    coach_group_ids,
+                ).fetchall()
+        return Response(views.group_session_page(coach, [dict(p) for p in participants]))
+    finally:
+        conn.close()
+
+
+@router.post("/coach/session/save")
+def group_session_save(req):
+    """Rapid-fire save: find-or-create session for athlete+date, upsert one field."""
+    import json
+    from constants import find_measurement_game
+    coach = require_role(req, "coach")
+    if not coach:
+        return Response('{"error":"unauthenticated"}', status=401, content_type="application/json")
+    try:
+        athlete_id = int(req.form_get("athlete_id"))
+    except (ValueError, TypeError):
+        return Response('{"error":"invalid athlete"}', status=400, content_type="application/json")
+    date      = req.form_get("date") or db.today()
+    game_key  = req.form_get("game_key")
+    field_key = req.form_get("field_key")
+    raw       = req.form_get("value").strip()
+    try:
+        value = float(raw)
+    except (ValueError, TypeError):
+        return Response('{"error":"invalid value"}', status=400, content_type="application/json")
+    conn = db.get_conn()
+    try:
+        session_id = db.find_or_create_session(conn, athlete_id, date, coach["id"])
+        db.upsert_measurement_result(conn, session_id, game_key, field_key, value)
+        # Recalculate computed fields
+        computed_updates = {}
+        game = find_measurement_game(game_key)
+        if game:
+            rows = conn.execute(
+                "SELECT field_key, value FROM measurement_results WHERE session_id = ? AND game_key = ?",
+                (session_id, game_key),
+            ).fetchall()
+            current = {r["field_key"]: r["value"] for r in rows}
+            for comp in game.get("computed", []):
+                inputs = [current.get(k) for k in comp["of"]]
+                if all(v is not None for v in inputs):
+                    avg = round(sum(inputs) / len(inputs), 2)
+                    db.upsert_measurement_result(conn, session_id, game_key, comp["key"], avg)
+                    computed_updates[comp["key"]] = avg
+        return Response(json.dumps({"ok": True, "session_id": session_id, "computed": computed_updates}),
+                        content_type="application/json")
+    finally:
+        conn.close()
+
+
 @router.post("/coach/participants/<int:participant_id>/measurement/start")
 def start_measurement_session(req, participant_id):
     """Quick-save: create a bare session and return its id as JSON."""

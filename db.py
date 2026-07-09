@@ -285,6 +285,17 @@ def delete_measurement_session(conn, session_id):
     conn.commit()
 
 
+def find_or_create_session(conn, participant_id, date, logged_by):
+    """Return the existing session id for this athlete+date, or create one."""
+    existing = conn.execute(
+        "SELECT id FROM measurement_sessions WHERE participant_id = ? AND date = ? ORDER BY id DESC LIMIT 1",
+        (participant_id, date),
+    ).fetchone()
+    if existing:
+        return existing["id"]
+    return create_bare_session(conn, participant_id, date, logged_by)
+
+
 def create_bare_session(conn, participant_id, date, logged_by):
     """Create a session with no results yet (used by quick-save flow)."""
     session_id = conn.execute(
