@@ -104,14 +104,9 @@ MEASUREMENT_GAMES = [
                 "key": "diamond_games",
                 "name": "Diamond Games - 1 minute",
                 "fields": [
-                    {"key": "running_room",             "label": "Running Room (2 per diamond)",           "type": "number", "unit": "Number of Gates"},
                     {"key": "no_spare_gates",           "label": "No Spare Gates (4 per diamond)",         "type": "number", "unit": "Number of Gates"},
                     {"key": "mass_running",             "label": "Mass Running (6 per diamond)",           "type": "number", "unit": "Number of Gates"},
-                    {"key": "no_room_running",          "label": "No Room Running (8 per diamond)",        "type": "number", "unit": "Number of Gates"},
-                    {"key": "dribbling_room",           "label": "Dribbling Room (2 per diamond)",         "type": "number", "unit": "Number of Gates"},
-                    {"key": "no_spare_gates_dribbling", "label": "No Spare Gates Dribbling (4 per diamond)", "type": "number", "unit": "Number of Gates"},
-                    {"key": "mass_dribbling",           "label": "Mass Dribbling (6 per diamond)",         "type": "number", "unit": "Number of Gates"},
-                    {"key": "no_room_dribbling",        "label": "No Room Dribbling (8 per diamond)",      "type": "number", "unit": "Number of Gates"},
+                    {"key": "dribbling_room",           "label": "Dribbling Room (3 per diamond)",         "type": "number", "unit": "Number of Gates"},
                 ],
             },
             {
