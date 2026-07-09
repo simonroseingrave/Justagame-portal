@@ -138,13 +138,16 @@ def login_get(req):
 
 @router.post("/login")
 def login_post(req):
-    email = req.form_get("email").strip().lower()
+    login = req.form_get("login").strip()
     password = req.form_get("password")
     conn = db.get_conn()
     try:
-        row = conn.execute("SELECT * FROM users WHERE lower(email) = ? AND active = 1", (email,)).fetchone()
+        row = conn.execute(
+            "SELECT * FROM users WHERE (lower(email) = ? OR lower(username) = ?) AND active = 1",
+            (login.lower(), login.lower()),
+        ).fetchone()
         if not row or not verify_password(password, row["password_hash"]):
-            return Response(views.login_page(error="Incorrect email or password.", prefill_email=email), status=401)
+            return Response(views.login_page(error="Incorrect email, username or password.", prefill_login=login), status=401)
 
         token = new_session_token()
         conn.execute(
@@ -527,21 +530,29 @@ def account_profile_post(req):
     if not user:
         return redirect("/login")
 
-    name = req.form_get("name").strip()
-    email = req.form_get("email").strip().lower()
+    name     = req.form_get("name").strip()
+    email    = req.form_get("email").strip().lower()
+    username = req.form_get("username").strip()
 
     if not name or not email:
         return Response(views.account_page(user, profile_error="Name and email are required."), status=400)
 
     conn = db.get_conn()
     try:
-        existing = conn.execute(
+        existing_email = conn.execute(
             "SELECT id FROM users WHERE lower(email) = ? AND id != ?", (email, user["id"]),
         ).fetchone()
-        if existing:
+        if existing_email:
             return Response(views.account_page(user, profile_error="That email is already used by another account."), status=400)
 
-        db.update_profile(conn, user["id"], name, email)
+        if username:
+            existing_username = conn.execute(
+                "SELECT id FROM users WHERE lower(username) = ? AND id != ?", (username.lower(), user["id"]),
+            ).fetchone()
+            if existing_username:
+                return Response(views.account_page(user, profile_error="That username is already taken."), status=400)
+
+        db.update_profile(conn, user["id"], name, email, username or None)
         updated_user = get_current_user(req)
         return Response(views.account_page(updated_user, profile_success="Details updated."))
     finally:

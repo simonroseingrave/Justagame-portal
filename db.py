@@ -143,6 +143,7 @@ def init_db():
         "ALTER TABLE users ADD COLUMN group_id INTEGER REFERENCES participant_groups(id)",
         "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE participant_groups ADD COLUMN icon_url TEXT",
+        "ALTER TABLE users ADD COLUMN username TEXT",
     ]:
         try:
             conn.execute(sql)
@@ -292,10 +293,10 @@ def update_password(conn, user_id, new_password):
     conn.commit()
 
 
-def update_profile(conn, user_id, name, email):
+def update_profile(conn, user_id, name, email, username=None):
     conn.execute(
-        "UPDATE users SET name = ?, email = ? WHERE id = ?",
-        (name, email, user_id),
+        "UPDATE users SET name = ?, email = ?, username = ? WHERE id = ?",
+        (name, email, username or None, user_id),
     )
     conn.commit()
 
