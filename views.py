@@ -1231,15 +1231,22 @@ def all_progress_page(coach, groups_data):
     return layout("Achievement Statistics", body, user=coach, active_nav="progress")
 
 
-def group_session_page(coach, participants):
-    """Rapid-fire session entry: select athlete → select game → fields appear → quick-save.
+def group_session_page(coach, participants, groups=None):
+    """Rapid-fire session entry: select group → select athlete → select game → fields appear → quick-save.
     All saves for the same athlete+date land in one session (find-or-create).
     """
     import json as _json
+    groups = groups or []
 
-    # Athlete options
+    # Group options
+    group_opts = '<option value="">— All athletes —</option>' + "".join(
+        f'<option value="{g["id"]}">{esc(g["name"])}</option>' for g in groups
+    )
+
+    # Athlete options — each carries data-group attribute for JS filtering
     athlete_opts = '<option value="">— Select athlete —</option>' + "".join(
-        f'<option value="{p["id"]}">{esc(p["name"])}</option>' for p in participants
+        f'<option value="{p["id"]}" data-group="{p.get("group_id") or ""}">{esc(p["name"])}</option>'
+        for p in participants
     )
 
     # Game options grouped by section + JS data map
@@ -1260,6 +1267,7 @@ def group_session_page(coach, participants):
 
     games_js = _json.dumps(games_data)
     today = __import__("datetime").date.today().isoformat()
+    show_group_filter = "block" if groups else "none"
 
     body = f"""
     <div class="page-head"><h1>Record Session</h1></div>
@@ -1267,6 +1275,11 @@ def group_session_page(coach, participants):
     <div class="card form-card" style="max-width:560px;">
       <label for="qs-date">Date</label>
       <input type="date" id="qs-date" value="{today}" style="max-width:200px; margin-bottom:16px;" />
+
+      <div id="qs-group-wrap" style="display:{show_group_filter}; margin-bottom:16px;">
+        <label for="qs-group">Group</label>
+        <select id="qs-group">{group_opts}</select>
+      </div>
 
       <label for="qs-athlete">Athlete</label>
       <select id="qs-athlete" style="margin-bottom:16px;">{athlete_opts}</select>
@@ -1289,11 +1302,37 @@ def group_session_page(coach, participants):
       var sessionIds = {{}}; // athlete_id -> session_id (cached per page load)
 
       var dateEl    = document.getElementById('qs-date');
+      var groupEl   = document.getElementById('qs-group');
       var athleteEl = document.getElementById('qs-athlete');
       var gameEl    = document.getElementById('qs-game');
       var fieldsEl  = document.getElementById('qs-fields');
       var logEl     = document.getElementById('qs-log');
       var logEmpty  = true;
+
+      // All original athlete <option> elements (cached before any filtering)
+      var allAthleteOpts = Array.from(athleteEl.querySelectorAll('option'));
+
+      function filterAthletes() {{
+        if (!groupEl) return;
+        var gid = groupEl.value;
+        var prev = athleteEl.value;
+        // Rebuild options
+        athleteEl.innerHTML = '';
+        allAthleteOpts.forEach(function(opt) {{
+          if (!opt.value || !gid || opt.dataset.group === String(gid)) {{
+            athleteEl.appendChild(opt.cloneNode(true));
+          }}
+        }});
+        // Restore previous selection if still valid, else reset
+        if (Array.from(athleteEl.options).some(function(o) {{ return o.value === prev; }})) {{
+          athleteEl.value = prev;
+        }} else {{
+          athleteEl.value = '';
+          fieldsEl.innerHTML = '';
+        }}
+      }}
+
+      if (groupEl) groupEl.addEventListener('change', filterAthletes);
 
       function renderFields(gameKey) {{
         fieldsEl.innerHTML = '';

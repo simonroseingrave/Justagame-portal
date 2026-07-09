@@ -434,17 +434,25 @@ def group_session_get(req):
             participants = conn.execute(
                 "SELECT * FROM users WHERE role='participant' AND active=1 ORDER BY name"
             ).fetchall()
+            groups = conn.execute(
+                "SELECT * FROM participant_groups ORDER BY sort_order, name"
+            ).fetchall()
         else:
             coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
             if not coach_group_ids:
                 participants = []
+                groups = []
             else:
                 placeholders = ",".join("?" * len(coach_group_ids))
                 participants = conn.execute(
                     f"SELECT * FROM users WHERE role='participant' AND active=1 AND group_id IN ({placeholders}) ORDER BY name",
                     coach_group_ids,
                 ).fetchall()
-        return Response(views.group_session_page(coach, [dict(p) for p in participants]))
+                groups = conn.execute(
+                    f"SELECT * FROM participant_groups WHERE id IN ({placeholders}) ORDER BY sort_order, name",
+                    coach_group_ids,
+                ).fetchall()
+        return Response(views.group_session_page(coach, [dict(p) for p in participants], [dict(g) for g in groups]))
     finally:
         conn.close()
 
