@@ -422,6 +422,73 @@ def coach_participant_progress(req, participant_id):
         conn.close()
 
 
+@router.post("/coach/participants/<int:participant_id>/measurement/start")
+def start_measurement_session(req, participant_id):
+    """Quick-save: create a bare session and return its id as JSON."""
+    import json
+    coach = require_role(req, "coach")
+    if not coach:
+        return Response('{"error":"unauthenticated"}', status=401, content_type="application/json")
+    date = req.form_get("date") or db.today()
+    conn = db.get_conn()
+    try:
+        session_id = db.create_bare_session(conn, participant_id, date, coach["id"])
+        return Response(json.dumps({"session_id": session_id}), content_type="application/json")
+    finally:
+        conn.close()
+
+
+@router.post("/coach/participants/<int:participant_id>/measurement/<int:session_id>/save-field")
+def save_measurement_field(req, participant_id, session_id):
+    """Quick-save: upsert one field and return updated computed values as JSON."""
+    import json
+    from constants import find_measurement_game
+    coach = require_role(req, "coach")
+    if not coach:
+        return Response('{"error":"unauthenticated"}', status=401, content_type="application/json")
+    game_key  = req.form_get("game_key")
+    field_key = req.form_get("field_key")
+    raw       = req.form_get("value").strip()
+    try:
+        value = float(raw)
+    except (ValueError, TypeError):
+        return Response('{"error":"invalid value"}', status=400, content_type="application/json")
+
+    conn = db.get_conn()
+    try:
+        # Verify session belongs to this participant
+        session = conn.execute(
+            "SELECT id FROM measurement_sessions WHERE id = ? AND participant_id = ?",
+            (session_id, participant_id),
+        ).fetchone()
+        if not session:
+            return Response('{"error":"not found"}', status=404, content_type="application/json")
+
+        db.upsert_measurement_result(conn, session_id, game_key, field_key, value)
+
+        # Recalculate computed fields for this game (e.g. skipping rope average)
+        computed_updates = {}
+        game = find_measurement_game(game_key)
+        if game:
+            # Load current values for all fields in this game
+            rows = conn.execute(
+                "SELECT field_key, value FROM measurement_results WHERE session_id = ? AND game_key = ?",
+                (session_id, game_key),
+            ).fetchall()
+            current = {r["field_key"]: r["value"] for r in rows}
+            for comp in game.get("computed", []):
+                inputs = [current.get(k) for k in comp["of"]]
+                if all(v is not None for v in inputs):
+                    avg = round(sum(inputs) / len(inputs), 2)
+                    db.upsert_measurement_result(conn, session_id, game_key, comp["key"], avg)
+                    computed_updates[comp["key"]] = avg
+
+        return Response(json.dumps({"ok": True, "computed": computed_updates}),
+                        content_type="application/json")
+    finally:
+        conn.close()
+
+
 @router.post("/coach/participants/<int:participant_id>/measurement")
 def log_measurement_session(req, participant_id):
     coach = require_role(req, "coach")

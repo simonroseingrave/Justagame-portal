@@ -176,9 +176,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
   margin-bottom: 14px;
 }
 .mg-game legend { font-weight: 700; font-size: 14px; padding: 0 4px; }
-.mg-field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-top: 6px; }
-.mg-field label { font-size: 12px; margin: 0 0 4px; font-weight: 600; }
-.mg-field input { padding: 8px 10px; }
+.mg-field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-top: 6px; }
+.mg-field label { font-size: 12px; margin: 0 0 4px; font-weight: 600; display: block; }
+.mg-field-row { display: flex; gap: 6px; align-items: center; }
+.mg-field-row input { flex: 1; min-width: 0; padding: 8px 10px; }
+.mg-save-btn { white-space: nowrap; font-size: 12px; padding: 7px 10px; border: 1px solid var(--jag-border); border-radius: 6px; background: var(--jag-bg); color: var(--jag-text); cursor: pointer; transition: background 0.15s, color 0.15s; flex-shrink: 0; }
+.mg-save-btn:hover { background: var(--jag-green); color: var(--jag-navy); border-color: var(--jag-green); }
 
 /* ---- Measurement Games (results history) ---- */
 .mg-session-card { margin-bottom: 14px; }

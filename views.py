@@ -109,7 +109,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
 </html>"""
 
 
-def login_page(error=None, prefill_email=""):
+def login_page(error=None, prefill_login=""):
     error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
     body = f"""
     <div class="login-wrap">
@@ -119,8 +119,8 @@ def login_page(error=None, prefill_email=""):
         <p class="muted">Log in to view your progress, or manage athletes as a coach.</p>
         {error_html}
         <form method="post" action="/login">
-          <label for="email">Email</label>
-          <input type="email" id="email" name="email" value="{esc(prefill_email)}" required autofocus />
+          <label for="login">Email or username</label>
+          <input type="text" id="login" name="login" value="{esc(prefill_login)}" required autofocus autocomplete="username" />
           <label for="password">Password</label>
           <input type="password" id="password" name="password" required />
           <button type="submit" class="btn btn-primary btn-block">Log in</button>
@@ -157,15 +157,21 @@ def forgot_password_page():
 
 
 def _measurement_field_input(game_key, field):
-    """One labelled number input for a single Measurement Games field."""
+    """One labelled number input with an inline quick-save button."""
     ftype = field["type"]
     step = "0.01" if ftype == "time" else "1"
     suffix = " (seconds)" if ftype == "time" else (f" ({field['unit']})" if field.get("unit") else "")
-    input_name = f"mg__{game_key}__{field['key']}"
+    input_id = f"mg__{game_key}__{field['key']}"
     return f"""
     <div class="mg-field">
-      <label for="{input_name}">{esc(field['label'])}{esc(suffix)}</label>
-      <input type="number" step="{step}" min="0" id="{input_name}" name="{input_name}" />
+      <label for="{input_id}">{esc(field['label'])}{esc(suffix)}</label>
+      <div class="mg-field-row">
+        <input type="number" step="{step}" min="0" id="{input_id}" name="{input_id}"
+               data-game="{esc(game_key)}" data-field="{esc(field['key'])}" />
+        <button type="button" class="btn btn-sm mg-save-btn"
+                data-game="{esc(game_key)}" data-field="{esc(field['key'])}"
+                title="Save this field">&#10003; Save</button>
+      </div>
     </div>
     """
 
@@ -183,8 +189,9 @@ def _measurement_game_fieldset(game):
 def measurement_games_form(participant_id):
     """The coach-facing entry form for recording a Measurement Games test
     session -- one date, with a fieldset per game grouped under each
-    section. Coaches can leave any game blank if it wasn't tested that
-    day; only filled-in fields get saved (see app.py)."""
+    section. Each field has its own quick-save button; the session is
+    created lazily on the first save. A bulk-submit fallback is also
+    available via the full form."""
     sections_html = "".join(f"""
     <div class="mg-section">
       <h4>{esc(section['section'])}</h4>
@@ -192,17 +199,127 @@ def measurement_games_form(participant_id):
     </div>
     """ for section in MEASUREMENT_GAMES)
 
+    quick_save_js = f"""
+    <script>
+    (function() {{
+      var sessionId = null;
+      var baseUrl = '/coach/participants/{participant_id}/measurement';
+
+      function getDate() {{
+        var d = document.getElementById('mg-date').value;
+        return d || new Date().toISOString().slice(0, 10);
+      }}
+
+      function markBtn(btn, state) {{
+        if (state === 'saving') {{
+          btn.textContent = '...';
+          btn.disabled = true;
+          btn.style.background = '';
+        }} else if (state === 'ok') {{
+          btn.textContent = '\\u2713 Saved';
+          btn.disabled = false;
+          btn.style.background = '#0f6e62';
+          btn.style.color = '#fff';
+          btn.style.borderColor = '#0f6e62';
+          setTimeout(function() {{
+            btn.textContent = '\\u2713 Save';
+            btn.style.background = '';
+            btn.style.color = '';
+            btn.style.borderColor = '';
+          }}, 2000);
+        }} else if (state === 'error') {{
+          btn.textContent = '! Error';
+          btn.disabled = false;
+          btn.style.background = '#9b1c1c';
+          btn.style.color = '#fff';
+          btn.style.borderColor = '#9b1c1c';
+          setTimeout(function() {{
+            btn.textContent = '\\u2713 Save';
+            btn.style.background = '';
+            btn.style.color = '';
+            btn.style.borderColor = '';
+          }}, 3000);
+        }}
+      }}
+
+      async function ensureSession() {{
+        if (sessionId) return sessionId;
+        var resp = await fetch(baseUrl + '/start', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+          body: 'date=' + encodeURIComponent(getDate()),
+        }});
+        if (!resp.ok) throw new Error('Could not create session');
+        var data = await resp.json();
+        sessionId = data.session_id;
+        // Show the "Done" button once session is started
+        var doneBtn = document.getElementById('mg-done-btn');
+        if (doneBtn) doneBtn.style.display = 'inline-block';
+        return sessionId;
+      }}
+
+      async function saveField(gameKey, fieldKey, value, btn) {{
+        markBtn(btn, 'saving');
+        try {{
+          var sid = await ensureSession();
+          var resp = await fetch(baseUrl + '/' + sid + '/save-field', {{
+            method: 'POST',
+            headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+            body: 'game_key=' + encodeURIComponent(gameKey) +
+                  '&field_key=' + encodeURIComponent(fieldKey) +
+                  '&value=' + encodeURIComponent(value),
+          }});
+          var data = await resp.json();
+          if (!resp.ok || !data.ok) throw new Error('Save failed');
+          // Update any computed fields returned by the server
+          Object.keys(data.computed || {{}}).forEach(function(compKey) {{
+            var el = document.getElementById('mg__' + gameKey + '__' + compKey);
+            if (el) el.value = data.computed[compKey];
+          }});
+          markBtn(btn, 'ok');
+        }} catch(e) {{
+          markBtn(btn, 'error');
+        }}
+      }}
+
+      document.querySelectorAll('.mg-save-btn').forEach(function(btn) {{
+        btn.addEventListener('click', function() {{
+          var gameKey  = btn.dataset.game;
+          var fieldKey = btn.dataset.field;
+          var input    = document.getElementById('mg__' + gameKey + '__' + fieldKey);
+          var value    = input ? input.value.trim() : '';
+          if (!value) {{ alert('Please enter a value first.'); return; }}
+          saveField(gameKey, fieldKey, value, btn);
+        }});
+      }});
+
+      // Allow pressing Enter in a field to trigger its save button
+      document.querySelectorAll('input[data-game][data-field]').forEach(function(inp) {{
+        inp.addEventListener('keydown', function(e) {{
+          if (e.key === 'Enter') {{
+            e.preventDefault();
+            var btn = inp.parentElement.querySelector('.mg-save-btn');
+            if (btn) btn.click();
+          }}
+        }});
+      }});
+    }})();
+    </script>"""
+
     return f"""
     <div class="card form-card">
       <h3>Measurement Games</h3>
-      <p class="muted">Fill in whichever games were tested this session &mdash; leave the rest blank.
+      <p class="muted">Enter a value and click <strong>&#10003; Save</strong> next to each field.
       The Skipping Rope Sprint average is calculated automatically from Time 1/2/3.</p>
-      <form method="post" action="/coach/participants/{participant_id}/measurement">
-        <label for="mg-date">Date</label>
-        <input type="date" id="mg-date" name="date" required />
-        {sections_html}
-        <button type="submit" class="btn btn-primary">Save Results</button>
-      </form>
+      <label for="mg-date">Session date</label>
+      <input type="date" id="mg-date" name="date" style="max-width:200px; margin-bottom:16px;" />
+      {sections_html}
+      <div style="margin-top:16px; display:flex; gap:12px; align-items:center;">
+        <a id="mg-done-btn" href="/coach/participants/{participant_id}" class="btn btn-primary"
+           style="display:none;">&#10003; Done &mdash; View Results</a>
+        <span class="muted" style="font-size:13px;" id="mg-hint">Save at least one field to finish the session.</span>
+      </div>
+      {quick_save_js}
     </div>
     """
 
@@ -1135,6 +1252,8 @@ def account_page(user, profile_error=None, profile_success=None, password_error=
         <input type="text" id="name" name="name" required value="{esc(user['name'])}" />
         <label for="email">Email</label>
         <input type="email" id="email" name="email" required value="{esc(user['email'])}" />
+        <label for="username">Username <span class="muted" style="font-weight:400;">(optional — can use instead of email to log in)</span></label>
+        <input type="text" id="username" name="username" value="{esc(user['username'] or '' if 'username' in user.keys() else '')}" autocomplete="username" placeholder="e.g. coachsimon" />
         <button type="submit" class="btn btn-primary btn-block">Save Details</button>
       </form>
     </div>

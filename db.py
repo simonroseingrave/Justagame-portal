@@ -285,6 +285,32 @@ def delete_measurement_session(conn, session_id):
     conn.commit()
 
 
+def create_bare_session(conn, participant_id, date, logged_by):
+    """Create a session with no results yet (used by quick-save flow)."""
+    session_id = conn.execute(
+        "INSERT INTO measurement_sessions (participant_id, date, logged_by, created_at) VALUES (?, ?, ?, ?)",
+        (participant_id, date, logged_by, now()),
+    ).lastrowid
+    conn.commit()
+    return session_id
+
+
+def upsert_measurement_result(conn, session_id, game_key, field_key, value):
+    """Insert or update a single field result in an existing session."""
+    existing = conn.execute(
+        "SELECT id FROM measurement_results WHERE session_id = ? AND game_key = ? AND field_key = ?",
+        (session_id, game_key, field_key),
+    ).fetchone()
+    if existing:
+        conn.execute("UPDATE measurement_results SET value = ? WHERE id = ?", (value, existing["id"]))
+    else:
+        conn.execute(
+            "INSERT INTO measurement_results (session_id, game_key, field_key, value) VALUES (?, ?, ?, ?)",
+            (session_id, game_key, field_key, value),
+        )
+    conn.commit()
+
+
 def update_password(conn, user_id, new_password):
     conn.execute(
         "UPDATE users SET password_hash = ? WHERE id = ?",
