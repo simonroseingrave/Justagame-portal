@@ -170,6 +170,72 @@ def find_measurement_game(key):
     return None
 
 
+# ----------------------------------------------------------------------
+# Sport-Specific Measurement Games
+# Same structure as MEASUREMENT_GAMES but keyed by sport name.
+# Add new sports here as they are defined.
+SPORT_SPECIFIC_GAMES = {
+    "Cricket": [
+        {
+            "section": "Cricket",
+            "games": [
+                {
+                    "key": "clipncatch",
+                    "name": "ClipNCatch (Catches within 1 minute)",
+                    "fields": [
+                        {"key": "catches", "label": "Catches", "type": "number"},
+                    ],
+                },
+                {
+                    "key": "straight_lofting",
+                    "name": "Straight Lofting",
+                    "fields": [
+                        {"key": "points", "label": "Points", "type": "points"},
+                    ],
+                },
+                {
+                    "key": "under_pressure",
+                    "name": "Under Pressure (gates in 1 minute)",
+                    "fields": [
+                        {"key": "gates", "label": "Gates", "type": "number"},
+                    ],
+                },
+                {
+                    "key": "pull_away",
+                    "name": "Pull Away",
+                    "fields": [
+                        {"key": "points", "label": "Points", "type": "points"},
+                    ],
+                },
+            ],
+        },
+    ],
+}
+
+
+def all_sport_games(sport):
+    """Flat list of every game dict for a given sport."""
+    games = []
+    for section in SPORT_SPECIFIC_GAMES.get(sport, []):
+        games.extend(section["games"])
+    return games
+
+
+def find_sport_game(key):
+    """Find a sport-specific game by key across all sports."""
+    for sport_sections in SPORT_SPECIFIC_GAMES.values():
+        for section in sport_sections:
+            for game in section["games"]:
+                if game["key"] == key:
+                    return game
+    return None
+
+
+def find_any_game(key):
+    """Find a game by key in base games or any sport-specific games."""
+    return find_measurement_game(key) or find_sport_game(key)
+
+
 # Points thresholds -> level name. Must stay sorted ascending by points.
 LEVELS = [
     (0, "Rookie"),

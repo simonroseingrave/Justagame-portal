@@ -8,6 +8,7 @@ from html import escape as esc
 from constants import (
     APP_NAME,
     MEASUREMENT_GAMES,
+    SPORT_SPECIFIC_GAMES,
     all_measurement_games,
 )
 
@@ -200,6 +201,44 @@ def measurement_games_form(participant_id):
     </div>
     """ for section in MEASUREMENT_GAMES)
 
+    # Build hidden sport-specific sections (revealed by JS when checkbox ticked)
+    sport_sections_html = ""
+    for sport, sport_sections in SPORT_SPECIFIC_GAMES.items():
+        sport_fieldsets = "".join(
+            f"""<div class="mg-section">
+              <h4>{esc(section['section'])}</h4>
+              {''.join(_measurement_game_fieldset(g) for g in section['games'])}
+            </div>"""
+            for section in sport_sections
+        )
+        sport_sections_html += (
+            f'<div class="sport-fields" data-sport="{esc(sport)}" style="display:none;">'
+            f'{sport_fieldsets}</div>'
+        )
+
+    # Sport selector options
+    sport_opts = "".join(
+        f'<option value="{esc(s)}">{esc(s)}</option>'
+        for s in SPORT_SPECIFIC_GAMES
+    )
+
+    sport_ui_html = f"""
+    <div style="margin:20px 0 10px; padding-top:18px; border-top:2px solid var(--jag-border);">
+      <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin:0 0 12px; font-size:14px; font-weight:600;">
+        <input type="checkbox" id="mg-sport-check" style="width:auto; margin:0;" />
+        Sport Specific Testing
+      </label>
+      <div id="mg-sport-wrap" style="display:none; margin-bottom:16px;">
+        <label for="mg-sport-select" style="font-size:13px; font-weight:600; margin:0 0 6px;">Select Sport</label>
+        <select id="mg-sport-select" style="max-width:220px;">
+          <option value="">— Select sport —</option>
+          {sport_opts}
+        </select>
+      </div>
+    </div>
+    {sport_sections_html}
+    """
+
     quick_save_js = f"""
     <script>
     (function() {{
@@ -304,17 +343,40 @@ def measurement_games_form(participant_id):
           }}
         }});
       }});
+
+      // Sport-specific toggle
+      var sportCheck  = document.getElementById('mg-sport-check');
+      var sportWrap   = document.getElementById('mg-sport-wrap');
+      var sportSelect = document.getElementById('mg-sport-select');
+      if (sportCheck) {{
+        sportCheck.addEventListener('change', function() {{
+          sportWrap.style.display = sportCheck.checked ? 'block' : 'none';
+          if (!sportCheck.checked && sportSelect) {{
+            sportSelect.value = '';
+            document.querySelectorAll('.sport-fields').forEach(function(el) {{ el.style.display = 'none'; }});
+          }}
+        }});
+      }}
+      if (sportSelect) {{
+        sportSelect.addEventListener('change', function() {{
+          var chosen = sportSelect.value;
+          document.querySelectorAll('.sport-fields').forEach(function(el) {{
+            el.style.display = (el.dataset.sport === chosen) ? 'block' : 'none';
+          }});
+        }});
+      }}
     }})();
     </script>"""
 
     return f"""
     <div class="card form-card">
-      <h3>Measurement Games</h3>
+      <h3>Base Adaptability Testing</h3>
       <p class="muted">Enter a value and click <strong>&#10003; Save</strong> next to each field.
       The Skipping Rope Sprint average is calculated automatically from Time 1/2/3.</p>
       <label for="mg-date">Session date</label>
       <input type="date" id="mg-date" name="date" style="max-width:200px; margin-bottom:16px;" />
       {sections_html}
+      {sport_ui_html}
       <div style="margin-top:16px; display:flex; gap:12px; align-items:center;">
         <a id="mg-done-btn" href="/coach/participants/{participant_id}" class="btn btn-primary"
            style="display:none;">&#10003; Done &mdash; View Results</a>
@@ -1265,7 +1327,32 @@ def group_session_page(coach, participants, groups=None):
             }
         game_opts += '</optgroup>'
 
+    # Sport-specific game data for JS (keyed by sport name → list of games)
+    sport_games_data = {}
+    for sport, sport_sections in SPORT_SPECIFIC_GAMES.items():
+        sport_games_data[sport] = []
+        for section in sport_sections:
+            for game in section["games"]:
+                games_data[game["key"]] = {
+                    "name": game["name"],
+                    "fields": [
+                        {"key": f["key"], "label": f["label"], "type": f["type"]}
+                        for f in game["fields"]
+                    ],
+                }
+                sport_games_data[sport].append({
+                    "key": game["key"],
+                    "name": game["name"],
+                })
+
+    # Sport selector options for the checkbox UI
+    qs_sport_opts = "".join(
+        f'<option value="{esc(s)}">{esc(s)}</option>'
+        for s in SPORT_SPECIFIC_GAMES
+    )
+
     games_js = _json.dumps(games_data)
+    sport_games_js = _json.dumps(sport_games_data)
     today = __import__("datetime").date.today().isoformat()
     show_group_filter = "block" if groups else "none"
 
@@ -1284,6 +1371,20 @@ def group_session_page(coach, participants, groups=None):
       <label for="qs-athlete">Athlete</label>
       <select id="qs-athlete" style="margin-bottom:16px;">{athlete_opts}</select>
 
+      <div style="padding-top:14px; border-top:1px solid var(--jag-border); margin-bottom:12px;">
+        <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin:0 0 12px; font-size:14px; font-weight:600;">
+          <input type="checkbox" id="qs-sport-check" style="width:auto; margin:0;" />
+          Sport Specific Testing
+        </label>
+        <div id="qs-sport-wrap" style="display:none; margin-bottom:12px;">
+          <label for="qs-sport-select" style="font-size:13px; font-weight:600; margin:0 0 6px;">Select Sport</label>
+          <select id="qs-sport-select" style="max-width:220px;">
+            <option value="">— Select sport —</option>
+            {qs_sport_opts}
+          </select>
+        </div>
+      </div>
+
       <label for="qs-game">Measurement Game</label>
       <select id="qs-game" style="margin-bottom:16px;">{game_opts}</select>
 
@@ -1297,17 +1398,24 @@ def group_session_page(coach, participants, groups=None):
 
     <script>
     (function() {{
-      var GAMES = {games_js};
+      var GAMES       = {games_js};
+      var SPORT_GAMES = {sport_games_js};
       var saveUrl = '/coach/session/save';
       var sessionIds = {{}}; // athlete_id -> session_id (cached per page load)
 
-      var dateEl    = document.getElementById('qs-date');
-      var groupEl   = document.getElementById('qs-group');
-      var athleteEl = document.getElementById('qs-athlete');
-      var gameEl    = document.getElementById('qs-game');
-      var fieldsEl  = document.getElementById('qs-fields');
-      var logEl     = document.getElementById('qs-log');
-      var logEmpty  = true;
+      var dateEl       = document.getElementById('qs-date');
+      var groupEl      = document.getElementById('qs-group');
+      var athleteEl    = document.getElementById('qs-athlete');
+      var gameEl       = document.getElementById('qs-game');
+      var fieldsEl     = document.getElementById('qs-fields');
+      var logEl        = document.getElementById('qs-log');
+      var logEmpty     = true;
+      var sportCheckEl = document.getElementById('qs-sport-check');
+      var sportWrapEl  = document.getElementById('qs-sport-wrap');
+      var sportSelEl   = document.getElementById('qs-sport-select');
+
+      // Cache original base game options
+      var baseGameOpts = Array.from(gameEl.querySelectorAll('option, optgroup')).map(function(el) {{ return el.cloneNode(true); }});
 
       // All original athlete <option> elements (cached before any filtering)
       var allAthleteOpts = Array.from(athleteEl.querySelectorAll('option'));
@@ -1330,6 +1438,47 @@ def group_session_page(coach, participants, groups=None):
           athleteEl.value = '';
           fieldsEl.innerHTML = '';
         }}
+      }}
+
+      function rebuildGameDropdown() {{
+        var prevVal = gameEl.value;
+        gameEl.innerHTML = '';
+        baseGameOpts.forEach(function(el) {{ gameEl.appendChild(el.cloneNode(true)); }});
+        // If sport specific is checked and a sport selected, append sport games
+        if (sportCheckEl && sportCheckEl.checked && sportSelEl && sportSelEl.value) {{
+          var sport   = sportSelEl.value;
+          var sgames  = SPORT_GAMES[sport] || [];
+          if (sgames.length) {{
+            var grp = document.createElement('optgroup');
+            grp.label = sport + ' — Sport Specific';
+            sgames.forEach(function(g) {{
+              var opt = document.createElement('option');
+              opt.value       = g.key;
+              opt.textContent = g.name;
+              grp.appendChild(opt);
+            }});
+            gameEl.appendChild(grp);
+          }}
+        }}
+        // Restore previous selection if still valid
+        if (Array.from(gameEl.options).some(function(o) {{ return o.value === prevVal; }})) {{
+          gameEl.value = prevVal;
+        }} else {{
+          gameEl.value = '';
+          fieldsEl.innerHTML = '';
+        }}
+      }}
+
+      // Sport specific toggle
+      if (sportCheckEl) {{
+        sportCheckEl.addEventListener('change', function() {{
+          sportWrapEl.style.display = sportCheckEl.checked ? 'block' : 'none';
+          if (!sportCheckEl.checked && sportSelEl) {{ sportSelEl.value = ''; }}
+          rebuildGameDropdown();
+        }});
+      }}
+      if (sportSelEl) {{
+        sportSelEl.addEventListener('change', rebuildGameDropdown);
       }}
 
       if (groupEl) groupEl.addEventListener('change', filterAthletes);
