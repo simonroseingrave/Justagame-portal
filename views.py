@@ -1311,39 +1311,44 @@ def group_session_page(coach, participants, groups=None):
         for p in participants
     )
 
-    # Game options grouped by section + JS data map
-    game_opts = '<option value="">— Select game —</option>'
-    games_data = {}
-    for section in MEASUREMENT_GAMES:
-        game_opts += f'<optgroup label="{esc(section["section"])}">'
-        for game in section["games"]:
-            game_opts += f'<option value="{esc(game["key"])}">{esc(game["name"])}</option>'
-            games_data[game["key"]] = {
-                "name": game["name"],
-                "fields": [
-                    {"key": f["key"], "label": f["label"], "type": f["type"]}
-                    for f in game["fields"]
-                ],
-            }
-        game_opts += '</optgroup>'
+    # Field options: each individual field as its own option, grouped under the game name.
+    # Option value = "game_key||field_key" so JS can split them apart.
+    field_opts = '<option value="">— Select field —</option>'
+    fields_data = {}   # composite_key -> {game_key, game_name, field_key, label, type}
 
-    # Sport-specific game data for JS (keyed by sport name → list of games)
-    sport_games_data = {}
+    for section in MEASUREMENT_GAMES:
+        for game in section["games"]:
+            field_opts += f'<optgroup label="{esc(game["name"])}">'
+            for f in game["fields"]:
+                composite = f'{game["key"]}||{f["key"]}'
+                field_opts += f'<option value="{esc(composite)}">{esc(f["label"])}</option>'
+                fields_data[composite] = {
+                    "game_key":   game["key"],
+                    "game_name":  game["name"],
+                    "field_key":  f["key"],
+                    "label":      f["label"],
+                    "type":       f["type"],
+                }
+            field_opts += '</optgroup>'
+
+    # Sport-specific fields for JS (keyed by sport → flat list of composite-key entries)
+    sport_fields_data = {}
     for sport, sport_sections in SPORT_SPECIFIC_GAMES.items():
-        sport_games_data[sport] = []
+        sport_fields_data[sport] = []
         for section in sport_sections:
             for game in section["games"]:
-                games_data[game["key"]] = {
-                    "name": game["name"],
-                    "fields": [
-                        {"key": f["key"], "label": f["label"], "type": f["type"]}
-                        for f in game["fields"]
-                    ],
-                }
-                sport_games_data[sport].append({
-                    "key": game["key"],
-                    "name": game["name"],
-                })
+                for f in game["fields"]:
+                    composite = f'{game["key"]}||{f["key"]}'
+                    entry = {
+                        "composite":  composite,
+                        "game_key":   game["key"],
+                        "game_name":  game["name"],
+                        "field_key":  f["key"],
+                        "label":      f["label"],
+                        "type":       f["type"],
+                    }
+                    fields_data[composite] = entry
+                    sport_fields_data[sport].append(entry)
 
     # Sport selector options for the checkbox UI
     qs_sport_opts = "".join(
@@ -1351,8 +1356,8 @@ def group_session_page(coach, participants, groups=None):
         for s in SPORT_SPECIFIC_GAMES
     )
 
-    games_js = _json.dumps(games_data)
-    sport_games_js = _json.dumps(sport_games_data)
+    fields_js      = _json.dumps(fields_data)
+    sport_fields_js = _json.dumps(sport_fields_data)
     today = __import__("datetime").date.today().isoformat()
     show_group_filter = "block" if groups else "none"
 
@@ -1385,8 +1390,8 @@ def group_session_page(coach, participants, groups=None):
         </div>
       </div>
 
-      <label for="qs-game">Measurement Game</label>
-      <select id="qs-game" style="margin-bottom:16px;">{game_opts}</select>
+      <label for="qs-field">Measurement Field</label>
+      <select id="qs-field" style="margin-bottom:16px;">{field_opts}</select>
 
       <div id="qs-fields" style="margin-top:4px;"></div>
     </div>
@@ -1398,15 +1403,14 @@ def group_session_page(coach, participants, groups=None):
 
     <script>
     (function() {{
-      var GAMES       = {games_js};
-      var SPORT_GAMES = {sport_games_js};
+      var FIELDS        = {fields_js};
+      var SPORT_FIELDS  = {sport_fields_js};
       var saveUrl = '/coach/session/save';
-      var sessionIds = {{}}; // athlete_id -> session_id (cached per page load)
 
       var dateEl       = document.getElementById('qs-date');
       var groupEl      = document.getElementById('qs-group');
       var athleteEl    = document.getElementById('qs-athlete');
-      var gameEl       = document.getElementById('qs-game');
+      var fieldEl      = document.getElementById('qs-field');
       var fieldsEl     = document.getElementById('qs-fields');
       var logEl        = document.getElementById('qs-log');
       var logEmpty     = true;
@@ -1414,24 +1418,21 @@ def group_session_page(coach, participants, groups=None):
       var sportWrapEl  = document.getElementById('qs-sport-wrap');
       var sportSelEl   = document.getElementById('qs-sport-select');
 
-      // Cache original base game options
-      var baseGameOpts = Array.from(gameEl.querySelectorAll('option, optgroup')).map(function(el) {{ return el.cloneNode(true); }});
+      // Cache original base field options (optgroups + options)
+      var baseFieldOpts = Array.from(fieldEl.childNodes).map(function(n) {{ return n.cloneNode(true); }});
 
-      // All original athlete <option> elements (cached before any filtering)
+      // Cache all athlete options
       var allAthleteOpts = Array.from(athleteEl.querySelectorAll('option'));
 
       function filterAthletes() {{
         if (!groupEl) return;
-        var gid = groupEl.value;
+        var gid  = groupEl.value;
         var prev = athleteEl.value;
-        // Rebuild options
         athleteEl.innerHTML = '';
         allAthleteOpts.forEach(function(opt) {{
-          if (!opt.value || !gid || opt.dataset.group === String(gid)) {{
+          if (!opt.value || !gid || opt.dataset.group === String(gid))
             athleteEl.appendChild(opt.cloneNode(true));
-          }}
         }});
-        // Restore previous selection if still valid, else reset
         if (Array.from(athleteEl.options).some(function(o) {{ return o.value === prev; }})) {{
           athleteEl.value = prev;
         }} else {{
@@ -1440,88 +1441,78 @@ def group_session_page(coach, participants, groups=None):
         }}
       }}
 
-      function rebuildGameDropdown() {{
-        var prevVal = gameEl.value;
-        gameEl.innerHTML = '';
-        baseGameOpts.forEach(function(el) {{ gameEl.appendChild(el.cloneNode(true)); }});
-        // If sport specific is checked and a sport selected, append sport games
+      function rebuildFieldDropdown() {{
+        var prevVal = fieldEl.value;
+        fieldEl.innerHTML = '';
+        baseFieldOpts.forEach(function(n) {{ fieldEl.appendChild(n.cloneNode(true)); }});
+        // Append sport-specific fields if checkbox is checked and sport is selected
         if (sportCheckEl && sportCheckEl.checked && sportSelEl && sportSelEl.value) {{
-          var sport   = sportSelEl.value;
-          var sgames  = SPORT_GAMES[sport] || [];
-          if (sgames.length) {{
+          var sport  = sportSelEl.value;
+          var sfields = SPORT_FIELDS[sport] || [];
+          if (sfields.length) {{
             var grp = document.createElement('optgroup');
             grp.label = sport + ' — Sport Specific';
-            sgames.forEach(function(g) {{
+            sfields.forEach(function(f) {{
               var opt = document.createElement('option');
-              opt.value       = g.key;
-              opt.textContent = g.name;
+              opt.value       = f.composite;
+              opt.textContent = f.game_name + ' — ' + f.label;
               grp.appendChild(opt);
             }});
-            gameEl.appendChild(grp);
+            fieldEl.appendChild(grp);
           }}
         }}
-        // Restore previous selection if still valid
-        if (Array.from(gameEl.options).some(function(o) {{ return o.value === prevVal; }})) {{
-          gameEl.value = prevVal;
+        if (Array.from(fieldEl.options).some(function(o) {{ return o.value === prevVal; }})) {{
+          fieldEl.value = prevVal;
         }} else {{
-          gameEl.value = '';
+          fieldEl.value = '';
           fieldsEl.innerHTML = '';
         }}
       }}
 
-      // Sport specific toggle
+      // Sport toggle
       if (sportCheckEl) {{
         sportCheckEl.addEventListener('change', function() {{
           sportWrapEl.style.display = sportCheckEl.checked ? 'block' : 'none';
-          if (!sportCheckEl.checked && sportSelEl) {{ sportSelEl.value = ''; }}
-          rebuildGameDropdown();
+          if (!sportCheckEl.checked && sportSelEl) sportSelEl.value = '';
+          rebuildFieldDropdown();
         }});
       }}
-      if (sportSelEl) {{
-        sportSelEl.addEventListener('change', rebuildGameDropdown);
-      }}
+      if (sportSelEl) {{ sportSelEl.addEventListener('change', rebuildFieldDropdown); }}
 
       if (groupEl) groupEl.addEventListener('change', filterAthletes);
 
-      function renderFields(gameKey) {{
+      function renderField(composite) {{
         fieldsEl.innerHTML = '';
-        if (!gameKey || !GAMES[gameKey]) return;
-        var game = GAMES[gameKey];
-        game.fields.forEach(function(f) {{
-          var step = (f.type === 'time') ? '0.01' : '1';
-          var suffix = (f.type === 'time') ? ' (seconds)' : '';
-          var div = document.createElement('div');
-          div.className = 'mg-field';
-          div.style.marginBottom = '12px';
-          div.innerHTML =
-            '<label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">' +
-              f.label + suffix +
-            '</label>' +
-            '<div class="mg-field-row">' +
-              '<input type="number" step="' + step + '" min="0" id="qs-input-' + f.key + '" ' +
-                     'data-field="' + f.key + '" style="max-width:140px;" />' +
-              '<button type="button" class="mg-save-btn" data-field="' + f.key + '">&#10003; Save</button>' +
-            '</div>';
-          fieldsEl.appendChild(div);
-        }});
+        if (!composite || !FIELDS[composite]) return;
+        var f    = FIELDS[composite];
+        var step = (f.type === 'time') ? '0.01' : '1';
+        var suffix = (f.type === 'time') ? ' (seconds)' : '';
+        var div  = document.createElement('div');
+        div.className = 'mg-field';
+        div.style.marginBottom = '12px';
+        div.innerHTML =
+          '<label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">' +
+            f.label + suffix +
+          '</label>' +
+          '<div class="mg-field-row">' +
+            '<input type="number" step="' + step + '" min="0" id="qs-single-input" style="max-width:160px;" />' +
+            '<button type="button" class="mg-save-btn" id="qs-single-btn">&#10003; Save</button>' +
+          '</div>';
+        fieldsEl.appendChild(div);
 
-        // Wire save buttons
-        fieldsEl.querySelectorAll('.mg-save-btn').forEach(function(btn) {{
-          btn.addEventListener('click', function() {{
-            var fieldKey  = btn.dataset.field;
-            var input     = document.getElementById('qs-input-' + fieldKey);
-            var value     = input ? input.value.trim() : '';
-            var athleteId = athleteEl.value;
-            var gameKey2  = gameEl.value;
-            if (!athleteId) {{ alert('Please select an athlete first.'); return; }}
-            if (!value)     {{ alert('Please enter a value first.'); return; }}
-            doSave(athleteId, gameKey2, fieldKey, value, btn, input);
-          }});
-          // Enter key
-          var inp = document.getElementById('qs-input-' + btn.dataset.field);
-          if (inp) inp.addEventListener('keydown', function(e) {{
-            if (e.key === 'Enter') {{ e.preventDefault(); btn.click(); }}
-          }});
+        var btn = div.querySelector('.mg-save-btn');
+        var inp = div.querySelector('input');
+        inp.focus();
+
+        btn.addEventListener('click', function() {{
+          var athleteId = athleteEl.value;
+          var value     = inp.value.trim();
+          if (!athleteId) {{ alert('Please select an athlete first.'); return; }}
+          if (!value)     {{ alert('Please enter a value first.'); return; }}
+          doSave(athleteId, f.game_key, f.field_key, f.game_name, f.label, f.type, value, btn, inp);
+        }});
+        inp.addEventListener('keydown', function(e) {{
+          if (e.key === 'Enter') {{ e.preventDefault(); btn.click(); }}
         }});
       }}
 
@@ -1545,17 +1536,15 @@ def group_session_page(coach, participants, groups=None):
         }}
       }}
 
-      async function doSave(athleteId, gameKey, fieldKey, value, btn, input) {{
+      async function doSave(athleteId, gameKey, fieldKey, gameName, fieldLabel, fieldType, value, btn, inp) {{
         markBtn(btn, 'saving');
         try {{
-          var game   = GAMES[gameKey] || {{}};
-          var field  = (game.fields || []).find(function(f) {{ return f.key === fieldKey; }}) || {{}};
           var athleteName = athleteEl.options[athleteEl.selectedIndex].text;
           var body = 'athlete_id=' + encodeURIComponent(athleteId) +
-                     '&date='       + encodeURIComponent(dateEl.value) +
-                     '&game_key='   + encodeURIComponent(gameKey) +
-                     '&field_key='  + encodeURIComponent(fieldKey) +
-                     '&value='      + encodeURIComponent(value);
+                     '&date='      + encodeURIComponent(dateEl.value) +
+                     '&game_key='  + encodeURIComponent(gameKey) +
+                     '&field_key=' + encodeURIComponent(fieldKey) +
+                     '&value='     + encodeURIComponent(value);
           var resp = await fetch(saveUrl, {{
             method: 'POST',
             headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
@@ -1564,22 +1553,23 @@ def group_session_page(coach, participants, groups=None):
           var data = await resp.json();
           if (!resp.ok || !data.ok) throw new Error(data.error || 'Save failed');
           markBtn(btn, 'ok');
-          input.value = '';
+          inp.value = '';
+          inp.focus();
           // Log entry
           if (logEmpty) {{ logEl.innerHTML = ''; logEmpty = false; }}
           var entry = document.createElement('div');
-          entry.style.cssText = 'padding:6px 0; border-bottom:1px solid var(--jag-border); display:flex; gap:8px; align-items:baseline;';
+          entry.style.cssText = 'padding:6px 0; border-bottom:1px solid var(--jag-border); display:flex; gap:8px; align-items:baseline; flex-wrap:wrap;';
           entry.innerHTML =
             '<span style="font-weight:700; color:var(--jag-text);">' + athleteName + '</span>' +
-            '<span style="color:var(--jag-muted);">' + (game.name || gameKey) + ' &rarr; ' + (field.label || fieldKey) + '</span>' +
-            '<span style="margin-left:auto; font-weight:700; color:var(--jag-navy);">' + value + (field.type === 'time' ? 's' : '') + '</span>';
+            '<span style="color:var(--jag-muted);">' + gameName + ' &rarr; ' + fieldLabel + '</span>' +
+            '<span style="margin-left:auto; font-weight:700; color:var(--jag-navy);">' + value + (fieldType === 'time' ? 's' : '') + '</span>';
           logEl.insertBefore(entry, logEl.firstChild);
         }} catch(e) {{
           markBtn(btn, 'error');
         }}
       }}
 
-      gameEl.addEventListener('change', function() {{ renderFields(gameEl.value); }});
+      fieldEl.addEventListener('change', function() {{ renderField(fieldEl.value); }});
     }})();
     </script>
     """
