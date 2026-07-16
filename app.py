@@ -493,9 +493,9 @@ def group_session_save(req):
             for comp in game.get("computed", []):
                 inputs = [current.get(k) for k in comp["of"]]
                 if all(v is not None for v in inputs):
-                    avg = round(sum(inputs) / len(inputs), 2)
-                    db.upsert_measurement_result(conn, session_id, game_key, comp["key"], avg)
-                    computed_updates[comp["key"]] = avg
+                    result = round(sum(inputs) if comp.get("formula") == "sum_of" else sum(inputs) / len(inputs), 2)
+                    db.upsert_measurement_result(conn, session_id, game_key, comp["key"], result)
+                    computed_updates[comp["key"]] = result
         return Response(json.dumps({"ok": True, "session_id": session_id, "computed": computed_updates}),
                         content_type="application/json")
     finally:
@@ -559,9 +559,9 @@ def save_measurement_field(req, participant_id, session_id):
             for comp in game.get("computed", []):
                 inputs = [current.get(k) for k in comp["of"]]
                 if all(v is not None for v in inputs):
-                    avg = round(sum(inputs) / len(inputs), 2)
-                    db.upsert_measurement_result(conn, session_id, game_key, comp["key"], avg)
-                    computed_updates[comp["key"]] = avg
+                    result = round(sum(inputs) if comp.get("formula") == "sum_of" else sum(inputs) / len(inputs), 2)
+                    db.upsert_measurement_result(conn, session_id, game_key, comp["key"], result)
+                    computed_updates[comp["key"]] = result
 
         return Response(json.dumps({"ok": True, "computed": computed_updates}),
                         content_type="application/json")
@@ -605,8 +605,8 @@ def log_measurement_session(req, participant_id):
         for computed in game.get("computed", []):
             inputs = [field_values.get(k) for k in computed["of"]]
             if all(v is not None for v in inputs):
-                avg = round(sum(inputs) / len(inputs), 2)
-                results.append((game["key"], computed["key"], avg))
+                result = round(sum(inputs) if computed.get("formula") == "sum_of" else sum(inputs) / len(inputs), 2)
+                results.append((game["key"], computed["key"], result))
 
     if not results:
         return flash_redirect(

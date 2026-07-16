@@ -71,12 +71,12 @@ MEASUREMENT_GAMES = [
             },
             {
                 "key": "leap_catching_throwing",
-                "name": "Leap High - 20 attempts",
+                "name": "Grid Leap (20 attempts)",
                 "fields": [
-                    {"key": "stationary_small_ball", "label": "Stationary Small Ball", "type": "number"},
-                    {"key": "stationary_large_ball", "label": "Stationary Large Ball", "type": "number"},
-                    {"key": "short_run_small_ball", "label": "Short Run Small Ball", "type": "number"},
-                    {"key": "short_run_large_ball", "label": "Short Run Large Ball", "type": "number"},
+                    {"key": "stationary_small_ball", "label": "Stationary Small Ball", "type": "points", "unit": "out of 14"},
+                    {"key": "stationary_large_ball", "label": "Stationary Large Ball", "type": "points", "unit": "out of 14"},
+                    {"key": "short_run_small_ball",  "label": "Short Run Small Ball",  "type": "points", "unit": "out of 14"},
+                    {"key": "short_run_large_ball",  "label": "Short Run Large Ball",  "type": "points", "unit": "out of 14"},
                 ],
             },
             {
@@ -157,6 +157,10 @@ MEASUREMENT_GAMES = [
                     {"key": "attempt_3", "label": "Attempt 3", "type": "points"},
                     {"key": "attempt_4", "label": "Attempt 4", "type": "points"},
                     {"key": "attempt_5", "label": "Attempt 5", "type": "points"},
+                ],
+                "computed": [
+                    {"key": "total", "label": "Total", "type": "points",
+                     "formula": "sum_of", "of": ["attempt_1", "attempt_2", "attempt_3", "attempt_4", "attempt_5"]},
                 ],
             },
         ],
