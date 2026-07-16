@@ -102,11 +102,20 @@ MEASUREMENT_GAMES = [
             },
             {
                 "key": "diamond_games",
-                "name": "Diamond Games - 1 minute",
+                "name": "Diamond Gates - 1 minute",
                 "fields": [
-                    {"key": "no_spare_gates",           "label": "No Spare Gates (4 per diamond)",         "type": "number", "unit": "Number of Gates"},
-                    {"key": "mass_running",             "label": "Mass Running (6 per diamond)",           "type": "number", "unit": "Number of Gates"},
-                    {"key": "dribbling_room",           "label": "Dribbling Room (3 per diamond)",         "type": "number", "unit": "Number of Gates"},
+                    {"key": "running_room",   "label": "Running Room (4 participants)",    "type": "number", "unit": "Number of Gates"},
+                    {"key": "no_spare_gates", "label": "No Spare Gates (5 participants)",  "type": "number", "unit": "Number of Gates"},
+                    {"key": "mass_running",   "label": "Mass Running (6 participants)",    "type": "number", "unit": "Number of Gates"},
+                ],
+            },
+            {
+                "key": "diamond_dribble",
+                "name": "Diamond Dribble - 1 minute",
+                "fields": [
+                    {"key": "dribble_room",        "label": "Dribble Room (4 participants)",        "type": "number", "unit": "Number of Gates"},
+                    {"key": "no_vacancy_dribbling", "label": "No Vacancy Dribbling (5 participants)", "type": "number", "unit": "Number of Gates"},
+                    {"key": "mass_dribbling",       "label": "Mass Dribbling (6 participants)",      "type": "number", "unit": "Number of Gates"},
                 ],
             },
             {
