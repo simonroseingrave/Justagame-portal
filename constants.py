@@ -73,10 +73,7 @@ MEASUREMENT_GAMES = [
                 "key": "leap_catching_throwing",
                 "name": "Grid Leap (20 attempts)",
                 "fields": [
-                    {"key": "stationary_small_ball", "label": "Stationary Small Ball", "type": "points", "unit": "out of 14"},
-                    {"key": "stationary_large_ball", "label": "Stationary Large Ball", "type": "points", "unit": "out of 14"},
-                    {"key": "short_run_small_ball",  "label": "Short Run Small Ball",  "type": "points", "unit": "out of 14"},
-                    {"key": "short_run_large_ball",  "label": "Short Run Large Ball",  "type": "points", "unit": "out of 14"},
+                    {"key": "points", "label": "Points", "type": "points", "unit": "out of 14"},
                 ],
             },
             {
