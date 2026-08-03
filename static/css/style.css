@@ -141,6 +141,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
 .login-card form { text-align: left; margin-top: 16px; }
 .demo-creds { margin-top: 18px; font-size: 13px; color: var(--jag-muted); text-align: left; }
 .demo-creds summary { cursor: pointer; }
+.forgot-link { text-align: center; font-size: 13px; margin: 14px 0 0; }
 
 /* ---- Alerts / flash ---- */
 .alert { background: #fdecea; color: #9b1c1c; border: 1px solid #f5c6c0; border-radius: 8px; padding: 10px 14px; margin-bottom: 14px; font-size: 14px; }
@@ -175,9 +176,12 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
   margin-bottom: 14px;
 }
 .mg-game legend { font-weight: 700; font-size: 14px; padding: 0 4px; }
-.mg-field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; margin-top: 6px; }
-.mg-field label { font-size: 12px; margin: 0 0 4px; font-weight: 600; }
-.mg-field input { padding: 8px 10px; }
+.mg-field-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; margin-top: 6px; }
+.mg-field label { font-size: 12px; margin: 0 0 4px; font-weight: 600; display: block; }
+.mg-field-row { display: flex; gap: 6px; align-items: center; }
+.mg-field-row input { flex: 1; min-width: 0; padding: 8px 10px; }
+.mg-save-btn { white-space: nowrap; font-size: 12px; padding: 7px 10px; border: 1px solid var(--jag-border); border-radius: 6px; background: var(--jag-bg); color: var(--jag-text); cursor: pointer; transition: background 0.15s, color 0.15s; flex-shrink: 0; }
+.mg-save-btn:hover { background: var(--jag-green); color: var(--jag-navy); border-color: var(--jag-green); }
 
 /* ---- Measurement Games (results history) ---- */
 .mg-session-card { margin-bottom: 14px; }
@@ -195,7 +199,103 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
 .table th { text-align: left; padding: 10px 12px; border-bottom: 2px solid var(--jag-border); color: var(--jag-muted); font-size: 12px; text-transform: uppercase; letter-spacing: 0.03em; }
 .table td { padding: 10px 12px; border-bottom: 1px solid var(--jag-border); vertical-align: top; }
 .tag { background: var(--jag-border); padding: 2px 8px; border-radius: 999px; font-size: 12px; }
+.tag-active { background: #e9faf6; color: #0f6e62; }
+.tag-inactive { background: #fdecea; color: #9b1c1c; }
 .pts-cell { font-weight: 700; color: var(--jag-green-dark); white-space: nowrap; }
+
+/* ---- Folder cards (Resources + Participant Groups) ---- */
+
+/* The card body sits below the tab */
+.res-folder {
+  background: var(--jag-card);
+  border: 2px solid var(--jag-border);
+  border-radius: 0 var(--radius) var(--radius) var(--radius);
+  box-shadow: var(--shadow);
+  margin-bottom: 32px;
+  margin-top: 50px;
+  position: relative;
+}
+
+/* Folder tab — protrudes above the card */
+.res-folder-tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px 10px 14px;
+  background: var(--jag-green);
+  color: var(--jag-navy);
+  border-radius: var(--radius) var(--radius) 0 0;
+  position: absolute;
+  top: -50px;
+  left: -2px;
+  min-width: 220px;
+  max-width: 80%;
+  border: 2px solid var(--jag-green);
+  border-bottom: 2px solid var(--jag-card);
+  font-size: 21px;
+  cursor: pointer;
+  user-select: none;
+}
+.res-folder-tab--ungrouped {
+  background: var(--jag-bg);
+  border-color: var(--jag-border);
+  border-bottom-color: var(--jag-card);
+  color: var(--jag-muted);
+}
+.res-folder-icon { font-size: 21px; flex-shrink: 0; line-height: 1; }
+.res-folder-toggle {
+  display: flex; align-items: center; gap: 10px;
+  background: none; border: none; padding: 0; margin: 0;
+  cursor: pointer; color: inherit; font: inherit;
+  flex: 1; min-width: 0; text-align: left;
+}
+.res-folder-name { font-weight: 700; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.res-count {
+  background: rgba(0,0,0,0.13);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 14px;
+  font-weight: 700;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.res-folder-tab--ungrouped .res-count { background: var(--jag-border); color: var(--jag-muted); }
+.res-folder-chevron {
+  flex-shrink: 0;
+  font-size: 14px;
+  transition: transform 0.2s ease;
+  opacity: 0.7;
+}
+.res-folder--open .res-folder-chevron { transform: rotate(90deg); }
+
+/* Folder body — hidden by default, shown when open */
+.res-list {
+  padding: 4px 12px 8px;
+  min-height: 52px;
+  display: none;
+}
+.res-folder--open .res-list { display: block; }
+.res-drop-hint {
+  text-align: center;
+  color: var(--jag-muted);
+  font-size: 13px;
+  padding: 14px;
+  border: 2px dashed var(--jag-border);
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+/* Resource / participant rows */
+.res-item { display: flex; align-items: center; gap: 10px; padding: 10px 4px; border-bottom: 1px solid var(--jag-border); transition: background 0.1s; }
+.res-item:last-child { border-bottom: none; }
+.res-item:hover { background: var(--jag-bg); border-radius: 6px; }
+.res-item--ghost { opacity: 0.35; background: var(--jag-green) !important; border-radius: 6px; }
+.res-item-body { flex: 1; min-width: 0; }
+.res-item-body a { font-weight: 600; font-size: 14px; }
+.res-desc { display: block; font-size: 12px; margin-top: 2px; color: var(--jag-muted); }
+.res-item-actions { display: flex; gap: 4px; flex-shrink: 0; }
+.drag-handle { cursor: grab; color: var(--jag-muted); font-size: 16px; padding: 0 4px; user-select: none; flex-shrink: 0; }
+.drag-handle:active { cursor: grabbing; }
 
 /* ---- Footer ---- */
 .footer { text-align: center; color: var(--jag-muted); font-size: 13px; padding: 20px; }

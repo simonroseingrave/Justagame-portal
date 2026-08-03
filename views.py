@@ -507,6 +507,11 @@ def edit_group_page(user, group, error=None):
         icon_url = group["icon_url"] or ""
     except Exception:
         icon_url = ""
+    icon_preview = (
+        '<img src="' + esc(icon_url) + '" style="margin-top:8px;width:32px;height:32px;'
+        'object-fit:contain;border-radius:4px;border:1px solid var(--jag-border);"'
+        ' onerror="this.style.display=\'none\'">'
+    ) if icon_url else ""
     body = f"""
     <div class="page-head">
       <h1>Edit Group</h1>
@@ -519,7 +524,7 @@ def edit_group_page(user, group, error=None):
         <input type="text" id="group_name" name="group_name" required value="{esc(group['name'])}" />
         <label for="icon_url">Icon URL <span class="muted" style="font-weight:400;">(optional — paste a favicon or logo URL)</span></label>
         <input type="url" id="icon_url" name="icon_url" value="{esc(icon_url)}" placeholder="https://example.com/favicon.ico" />
-        {f'<img src="{esc(icon_url)}" style="margin-top:8px;width:32px;height:32px;object-fit:contain;border-radius:4px;border:1px solid var(--jag-border);" onerror="this.style.display=\'none\'">' if icon_url else ""}
+        {icon_preview}
         <button type="submit" class="btn btn-primary btn-block" style="margin-top:16px;">Save Changes</button>
       </form>
     </div>
