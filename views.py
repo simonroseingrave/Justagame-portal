@@ -1762,8 +1762,21 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
         is_protected_folder = folder['name'].strip().lower() == "measurement games"
         delete_folder_btn = f"""<form method="post" action="/coach/resources/folders/{folder['id']}/delete" style="display:inline"
               onsubmit="return confirm('Delete folder \\'{esc(folder['name'])}\\'? Resources will move to Ungrouped.');">
-              <button type="submit" class="btn btn-ghost btn-sm">Delete Folder</button>
+              <button type="submit" class="btn btn-ghost btn-sm">Delete</button>
             </form>""" if is_admin and not is_protected_folder else ""
+        rename_btn = f"""
+            <button type="button" class="btn btn-ghost btn-sm"
+              onclick="var w=document.getElementById('rename-wrap-{folder['id']}');w.style.display=w.style.display==='none'?'inline-flex':'none';"
+              title="Rename folder">&#9998;</button>
+            <span id="rename-wrap-{folder['id']}" style="display:none; align-items:center; gap:4px;">
+              <form method="post" action="/coach/resources/folders/{folder['id']}/rename"
+                    style="display:inline-flex; gap:4px; align-items:center;">
+                <input type="text" name="folder_name" value="{esc(folder['name'])}"
+                       style="padding:4px 8px; font-size:13px; width:160px; border-radius:6px; border:1px solid var(--jag-border);"
+                       onclick="event.stopPropagation();" />
+                <button type="submit" class="btn btn-primary btn-sm">Save</button>
+              </form>
+            </span>""" if is_admin and not is_protected_folder else ""
         folder_sections += f"""
         <div class="res-folder res-folder--open" data-folder-id="{folder['id']}">
           <div class="res-folder-tab">
@@ -1773,6 +1786,7 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
               <strong class="res-folder-name">{esc(folder['name'])}</strong>
               {count_badge}
             </div>
+            {rename_btn}
             {delete_folder_btn}
           </div>
           <div class="res-list" data-list-id="{folder['id']}">{list_content}</div>

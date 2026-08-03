@@ -455,6 +455,11 @@ def add_folder(conn, name, created_by):
     conn.commit()
 
 
+def rename_folder(conn, folder_id, name):
+    conn.execute("UPDATE resource_folders SET name = ? WHERE id = ?", (name, folder_id))
+    conn.commit()
+
+
 def delete_folder(conn, folder_id):
     # Move resources in this folder to ungrouped rather than deleting them
     conn.execute("UPDATE resources SET folder_id = NULL WHERE folder_id = ?", (folder_id,))

@@ -1139,6 +1139,22 @@ def folder_new(req):
         conn.close()
 
 
+@router.post("/coach/resources/folders/<int:folder_id>/rename")
+def folder_rename(req, folder_id):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    name = req.form_get("folder_name").strip()
+    if not name:
+        return flash_redirect("/coach/resources", "Folder name cannot be empty.")
+    conn = db.get_conn()
+    try:
+        db.rename_folder(conn, folder_id, name)
+        return flash_redirect("/coach/resources", f'Folder renamed to "{name}".')
+    finally:
+        conn.close()
+
+
 @router.post("/coach/resources/folders/<int:folder_id>/delete")
 def folder_delete(req, folder_id):
     coach = require_admin(req)
