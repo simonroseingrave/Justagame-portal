@@ -1809,8 +1809,12 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     </div>""" if ungrouped or is_admin else ""
 
     manage_forms = f"""
-    <div class="two-col" style="gap:16px; align-items:flex-start; margin-bottom:24px;">
-      <div class="card form-card">
+    <div style="display:flex; gap:10px; margin-bottom:28px; flex-wrap:wrap;">
+      <button type="button" class="btn btn-primary" onclick="var p=document.getElementById('res-add-panel');p.style.display=p.style.display==='none'?'block':'none';">+ Add Resource</button>
+      <button type="button" class="btn btn-ghost" onclick="var p=document.getElementById('folder-add-panel');p.style.display=p.style.display==='none'?'block':'none';">+ Create Folder</button>
+    </div>
+    <div id="res-add-panel" style="display:none; margin-bottom:24px;">
+      <div class="card form-card" style="max-width:480px;">
         <h2 style="margin-top:0; font-size:16px;">Add a resource</h2>
         <form method="post" action="/coach/resources/new">
           <label for="res_name">Name</label>
@@ -1824,8 +1828,10 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
           <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Add Resource</button>
         </form>
       </div>
-      <div class="card form-card">
-        <h2 style="margin-top:0; font-size:16px;">Add a folder</h2>
+    </div>
+    <div id="folder-add-panel" style="display:none; margin-bottom:24px;">
+      <div class="card form-card" style="max-width:360px;">
+        <h2 style="margin-top:0; font-size:16px;">Create a folder</h2>
         <form method="post" action="/coach/resources/folders/new">
           <label for="folder_name">Folder name</label>
           <input type="text" id="folder_name" name="folder_name" required placeholder="e.g. Coaching Guides" />
