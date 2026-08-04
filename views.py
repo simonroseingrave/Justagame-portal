@@ -474,31 +474,24 @@ def participant_dashboard(user, measurement_sessions):
     return layout("My Dashboard", body, user=user, active_nav="dashboard")
 
 
-def _participant_row(p, is_admin=False):
-    drag = '<span class="drag-handle" title="Drag to move group">&#9776;</span>' if is_admin else ""
-    sport_prog = esc(p['sport'] or '')
+def _athlete_tile(p, is_admin=False):
+    """Render a single athlete as a clickable tile with initials avatar."""
+    name = p['name']
+    parts = name.strip().split()
+    inits = (parts[0][0] + parts[-1][0]).upper() if len(parts) >= 2 else name[0].upper()
+    sport_prog = esc(p.get('sport') or '')
     if p.get('programme'):
         sport_prog += f' &middot; {esc(p["programme"])}'
-    return f"""<tr class="res-item" data-id="{p['id']}">
-      <td style="width:20px; padding-right:0;">{drag}</td>
-      <td><a href="/coach/participants/{p['id']}" style="font-weight:600;">{esc(p['name'])}</a></td>
-      <td class="muted" style="font-size:13px;">{sport_prog}</td>
-      <td style="white-space:nowrap;">{p['test_count']} test{"s" if p['test_count'] != 1 else ""}</td>
-      <td style="text-align:right;"><a href="/coach/participants/{p['id']}" class="btn btn-ghost btn-sm">Manage</a></td>
-    </tr>"""
-
-
-def _participant_table(rows_html, is_admin=False):
-    """Wrap participant rows in a table with column headers."""
-    if not rows_html:
-        return ""
-    return f"""<table class="table" style="width:100%;">
-      <thead><tr>
-        {"<th style='width:20px;'></th>" if is_admin else ""}
-        <th>Name</th><th>Sport / Programme</th><th>Tests</th><th></th>
-      </tr></thead>
-      <tbody>{rows_html}</tbody>
-    </table>"""
+    tile_colors = ['#1d6fa4', '#7c3aed', '#c2410c', '#15803d', '#be185d', '#0e7490', '#92400e']
+    color = tile_colors[p['id'] % len(tile_colors)]
+    drag = '<span class="drag-handle" title="Drag to move group" style="position:absolute;top:5px;right:6px;font-size:11px;color:#bbb;line-height:1;">&#9776;</span>' if is_admin else ""
+    sub = f'<span style="font-size:11px;color:var(--jag-muted);text-align:center;line-height:1.3;">{sport_prog}</span>' if sport_prog else ''
+    return f"""<a href="/coach/participants/{p['id']}" class="athlete-tile" data-id="{p['id']}" style="position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 10px 12px;background:var(--jag-card);border:1.5px solid var(--jag-border);border-radius:12px;text-decoration:none;color:inherit;min-width:100px;max-width:130px;cursor:pointer;" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.12)';this.style.borderColor='var(--jag-green)';" onmouseout="this.style.boxShadow='';this.style.borderColor='var(--jag-border)';">
+      {drag}
+      <div style="width:42px;height:42px;border-radius:50%;background:{color};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;color:#fff;flex-shrink:0;">{inits}</div>
+      <span style="font-weight:600;font-size:13px;text-align:center;line-height:1.3;word-break:break-word;">{esc(name)}</span>
+      {sub}
+    </a>"""
 
 
 def edit_group_page(user, group, error=None):
@@ -539,75 +532,57 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     group_sections = ""
     for group, participants in group_summaries:
         count = len(participants)
-        count_badge = f'<span class="res-count">{count} athlete{"s" if count != 1 else ""}</span>'
-        items_html = "".join(_participant_row(p, is_admin=is_admin) for p in participants)
-        empty = '<div class="res-drop-hint">Drop participants here</div>' if is_admin else '<p class="muted" style="padding:8px 4px; font-size:13px;">No participants in this group.</p>'
-        list_html = _participant_table(items_html, is_admin=is_admin) if items_html else empty
-        folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder groups">&#9776;</span>' if is_admin else ""
-        try:
-            icon_url = group["icon_url"]
-        except Exception:
-            icon_url = None
-        icon_html = (f'<img src="{esc(icon_url)}" style="width:22px;height:22px;object-fit:contain;border-radius:3px;flex-shrink:0;" '
-                     f'onerror="this.style.display=\'none\'">')  if icon_url else "&#128193;"
-        summary_link = f'<a href="/coach/groups/{group["id"]}/achievement-summary" class="btn btn-sm" style="font-size:12px; background:var(--jag-green); color:var(--jag-navy); font-weight:600; border:none;">&#128200; Group Stats</a>'
-        admin_btns = f"""
-            <a href="/coach/groups/{group['id']}/edit" class="btn btn-ghost btn-sm" style="font-size:12px;">Edit</a>
+        tiles_html = "".join(_athlete_tile(p, is_admin=is_admin) for p in participants)
+        empty_msg = '<p class="muted" style="font-size:13px;padding:8px 0;">No athletes in this group yet.</p>'
+        tiles_wrap = f'<div class="athlete-tiles-wrap" data-group-list-id="{group["id"]}" style="display:flex;flex-wrap:wrap;gap:10px;padding:10px 0 4px;">{tiles_html or empty_msg}</div>'
+        folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder groups" style="color:var(--jag-muted);cursor:grab;font-size:16px;">&#9776;</span>' if is_admin else ""
+        summary_link = f'<a href="/coach/groups/{group["id"]}/achievement-summary" class="btn btn-sm" style="font-size:12px;background:var(--jag-green);color:var(--jag-navy);font-weight:600;border:none;">&#128200; Group Stats</a>'
+        admin_btns = f"""<a href="/coach/groups/{group['id']}/edit" class="btn btn-ghost btn-sm" style="font-size:12px;">Edit</a>
             <form method="post" action="/coach/groups/{group['id']}/delete" style="display:inline"
               onsubmit="return confirm('Delete group \\'{esc(group['name'])}\\'? Participants move to ungrouped.');">
               <button type="submit" class="btn btn-ghost btn-sm" style="font-size:12px;">Delete</button>
             </form>""" if is_admin else ""
         group_sections += f"""
-        <div class="res-folder" data-group-id="{group['id']}">
-          <div class="res-folder-tab">
+        <div class="group-section" data-group-id="{group['id']}" style="margin-bottom:40px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
             {folder_handle}
-            <button type="button" class="res-folder-toggle" onclick="var f=this.closest('.res-folder'),l=f.querySelector('.res-list'),o=f.classList.toggle('res-folder--open');if(l)l.style.display=o?'block':'none';" title="Expand / collapse">
-              <span class="res-folder-icon">{icon_html}</span>
-              <strong class="res-folder-name">{esc(group['name'])}</strong>
-              {count_badge}
-              <span class="res-folder-chevron">&#9654;</span>
-            </button>
-            {summary_link}
-            {admin_btns}
+            <h2 style="margin:0;font-size:20px;color:var(--jag-navy);">{esc(group['name'])}</h2>
+            <span class="muted group-count" style="font-size:14px;">({count} athlete{"s" if count != 1 else ""})</span>
+            <div style="margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+              {summary_link}
+              {admin_btns}
+            </div>
           </div>
-          <div class="res-list" data-group-list-id="{group['id']}" style="display:none">{list_html}</div>
+          <hr style="border:none;border-top:2px solid var(--jag-green);margin:0 0 4px;" />
+          {tiles_wrap}
         </div>"""
 
-    ungrouped_count = len(ungrouped_summaries)
-    ug_badge = f'<span class="res-count">{ungrouped_count} athlete{"s" if ungrouped_count != 1 else ""}</span>'
-    ug_items = "".join(_participant_row(p, is_admin=is_admin) for p in ungrouped_summaries)
-    ug_empty = '<div class="res-drop-hint">Drop participants here</div>' if is_admin else '<p class="muted" style="padding:8px 4px; font-size:13px;">No ungrouped participants.</p>'
-    ug_list_html = _participant_table(ug_items, is_admin=is_admin) if ug_items else ug_empty
-
+    # Ungrouped section
+    ug_count = len(ungrouped_summaries)
+    ug_tiles = "".join(_athlete_tile(p, is_admin=is_admin) for p in ungrouped_summaries)
+    ug_empty = '<p class="muted" style="font-size:13px;padding:8px 0;">No ungrouped athletes.</p>'
+    ug_wrap = f'<div class="athlete-tiles-wrap" data-group-list-id="ungrouped" style="display:flex;flex-wrap:wrap;gap:10px;padding:10px 0 4px;">{ug_tiles or ug_empty}</div>'
     ungrouped_section = f"""
-    <div class="res-folder res-folder--open res-ungrouped">
-      <div class="res-folder-tab res-folder-tab--ungrouped">
-        <button type="button" class="res-folder-toggle" onclick="var f=this.closest('.res-folder'),l=f.querySelector('.res-list'),o=f.classList.toggle('res-folder--open');if(l)l.style.display=o?'block':'none';" title="Expand / collapse">
-          <span class="res-folder-icon">&#128193;</span>
-          <strong class="res-folder-name">{"Participants" if not group_summaries else "Ungrouped"}</strong>
-          {ug_badge}
-          <span class="res-folder-chevron" style="transform:rotate(90deg);">&#9654;</span>
-        </button>
+    <div class="group-section" style="margin-bottom:40px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+        <h2 style="margin:0;font-size:20px;color:var(--jag-muted);">{"Athletes" if not group_summaries else "Ungrouped"}</h2>
+        <span class="muted group-count" style="font-size:14px;">({ug_count} athlete{"s" if ug_count != 1 else ""})</span>
       </div>
-      <div class="res-list" data-group-list-id="ungrouped">{ug_list_html}</div>
+      <hr style="border:none;border-top:2px solid var(--jag-border);margin:0 0 4px;" />
+      {ug_wrap}
     </div>"""
 
     if not group_summaries and not ungrouped_summaries:
-        if is_admin:
-            content = '<div class="card"><p class="muted">No participants yet. Add one to get started.</p></div>' + ungrouped_section
-        else:
-            content = '<div class="card"><p class="muted">You haven\'t been assigned to a group yet. Contact an admin to be assigned.</p></div>'
+        content = '<p class="muted">No participants yet. Add one to get started.</p>' if is_admin else '<p class="muted">You haven\'t been assigned to a group yet. Contact an admin.</p>'
     else:
         content = f'<div id="groups-container">{group_sections}</div>{ungrouped_section}'
 
     add_btn = '<a class="btn btn-primary" href="/coach/participants/new">+ Add Participant</a>' if is_admin else ""
-
     create_group_form = f"""
-    <div class="card form-card" style="max-width:360px; margin-top:8px;">
-      <h3 style="margin-top:0; font-size:15px;">Create Group</h3>
-      <form method="post" action="/coach/groups/new" style="display:flex; gap:8px;">
-        <input type="text" name="group_name" placeholder="e.g. Class 5A" required style="flex:1;" />
-        <button type="submit" class="btn btn-primary btn-sm" style="white-space:nowrap;">+ Group</button>
+    <div style="margin-top:8px;">
+      <form method="post" action="/coach/groups/new" style="display:flex;gap:8px;max-width:360px;">
+        <input type="text" name="group_name" placeholder="New group name…" required style="flex:1;" />
+        <button type="submit" class="btn btn-ghost btn-sm" style="white-space:nowrap;">+ Group</button>
       </form>
     </div>""" if is_admin else ""
 
@@ -617,46 +592,42 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     function post(url, body) {
       fetch(url, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: body });
     }
-    // Reorder groups
     var gc = document.getElementById('groups-container');
     if (gc) {
       Sortable.create(gc, {
         handle: '.folder-handle', animation: 150,
         onEnd: function() {
-          var ids = Array.from(gc.querySelectorAll('.res-folder[data-group-id]'))
+          var ids = Array.from(gc.querySelectorAll('.group-section[data-group-id]'))
                         .map(function(el){ return el.dataset.groupId; });
           post('/coach/groups/reorder', 'ids=' + ids.join(','));
         }
       });
     }
-    // Cross-group participant drag
-    document.querySelectorAll('[data-group-list-id]').forEach(function(list) {
-      Sortable.create(list, {
+    document.querySelectorAll('.athlete-tiles-wrap').forEach(function(wrap) {
+      Sortable.create(wrap, {
         group: { name:'participants', pull:true, put:true },
         handle: '.drag-handle:not(.folder-handle)',
         animation: 150,
-        ghostClass: 'res-item--ghost',
+        ghostClass: 'athlete-tile-ghost',
         onEnd: function(evt) {
-          var fromList = evt.from, toList = evt.to, itemId = evt.item.dataset.id;
-          if (fromList !== toList) {
-            var newGroupId = toList.dataset.groupListId;
+          var fromWrap = evt.from, toWrap = evt.to, itemId = evt.item.dataset.id;
+          if (fromWrap !== toWrap) {
+            var newGroupId = toWrap.dataset.groupListId;
             post('/coach/participants/' + itemId + '/move-group',
                  'group_id=' + (newGroupId === 'ungrouped' ? '' : newGroupId));
-            updateGroupCount(fromList);
-            updateGroupCount(toList);
+            updateCount(fromWrap);
+            updateCount(toWrap);
           }
         }
       });
     });
-    function updateGroupCount(list) {
-      var folder = list.closest('.res-folder');
-      if (!folder) return;
-      var badge = folder.querySelector('.res-count');
+    function updateCount(wrap) {
+      var section = wrap.closest('.group-section');
+      if (!section) return;
+      var badge = section.querySelector('.group-count');
       if (!badge) return;
-      var n = list.querySelectorAll('.res-item').length;
-      badge.textContent = n + (n === 1 ? ' athlete' : ' athletes');
-      var hint = list.querySelector('.res-drop-hint');
-      if (hint) hint.style.display = n > 0 ? 'none' : '';
+      var n = wrap.querySelectorAll('.athlete-tile').length;
+      badge.textContent = '(' + n + (n === 1 ? ' athlete' : ' athletes') + ')';
     }
     </script>""" if is_admin else ""
 
@@ -674,24 +645,12 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         <h1>Coach Dashboard</h1>
         <p class="muted">{subtitle}</p>
       </div>
-      <div style="display:flex; gap:8px; flex-wrap:wrap;">{add_btn}</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">{add_btn}</div>
     </div>
     {message_html}
     {content}
     {create_group_form}
     {sortable_js}
-    <script>
-    document.querySelectorAll('.res-folder-tab').forEach(function(tab) {{
-      tab.addEventListener('click', function(e) {{
-        if (e.target.closest('button, a, input, select, form')) return;
-        var folder = tab.closest('.res-folder');
-        var list = folder.querySelector('.res-list');
-        var isOpen = folder.classList.contains('res-folder--open');
-        folder.classList.toggle('res-folder--open');
-        if (list) list.style.display = isOpen ? 'none' : 'block';
-      }});
-    }});
-    </script>
     """
     return layout("Coach Dashboard", body, user=user, active_nav="dashboard")
 
