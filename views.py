@@ -1696,6 +1696,8 @@ def new_coach_form(user, error=None):
 
 def _resource_tile(r, is_admin=False):
     """Render a single resource as a link tile card."""
+    tile_colors = ['#1d6fa4', '#7c3aed', '#c2410c', '#15803d', '#be185d', '#0e7490', '#92400e', '#b45309']
+    border_color = tile_colors[r['id'] % len(tile_colors)]
     name_q = esc(r['name']).replace("'", "\\'")
     desc = f'<span style="font-size:12px;color:var(--jag-muted);display:block;margin-top:4px;line-height:1.4;">{esc(r["description"])}</span>' if r['description'] else ''
     drag = '<span class="drag-handle" title="Drag to reorder" style="position:absolute;top:6px;left:8px;font-size:11px;color:#ccc;cursor:grab;">&#9776;</span>' if is_admin else ""
@@ -1706,7 +1708,7 @@ def _resource_tile(r, is_admin=False):
           <button type="submit" class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;">Delete</button>
         </form>
       </div>""" if is_admin else ""
-    return f"""<div class="res-tile" data-id="{r['id']}" style="position:relative;background:var(--jag-card);border:1.5px solid var(--jag-border);border-radius:10px;padding:{'20px 14px 12px 28px' if is_admin else '14px'};display:flex;flex-direction:column;min-width:160px;max-width:240px;word-break:break-word;">
+    return f"""<div class="res-tile" data-id="{r['id']}" style="position:relative;background:var(--jag-card);border:2.5px solid {border_color};border-radius:10px;padding:{'20px 14px 12px 28px' if is_admin else '14px'};display:flex;flex-direction:column;min-width:160px;max-width:240px;word-break:break-word;">
       {drag}
       <a href="{esc(r['url'])}" target="_blank" rel="noopener" style="font-weight:700;font-size:14px;color:var(--jag-navy);text-decoration:none;line-height:1.3;" onmouseover="this.style.textDecoration='underline';" onmouseout="this.style.textDecoration='none';">{esc(r['name'])} <span style="font-size:11px;opacity:0.5;">&#8599;</span></a>
       {desc}
