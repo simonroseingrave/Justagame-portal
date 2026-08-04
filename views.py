@@ -575,14 +575,22 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     else:
         content = f'<div id="groups-container">{group_sections}</div>{ungrouped_section}'
 
-    add_btn = '<a class="btn btn-primary" href="/coach/participants/new">+ Add Participant</a>' if is_admin else ""
     create_group_form = f"""
-    <div style="margin-top:8px;">
-      <form method="post" action="/coach/groups/new" style="display:flex;gap:8px;max-width:360px;">
-        <input type="text" name="group_name" placeholder="New group name…" required style="flex:1;" />
-        <button type="submit" class="btn btn-ghost btn-sm" style="white-space:nowrap;">+ Group</button>
+    <div id="create-group-panel" style="display:none; margin-top:10px; max-width:400px;">
+      <form method="post" action="/coach/groups/new" style="display:flex;gap:8px;">
+        <input type="text" name="group_name" placeholder="Group name…" required style="flex:1;" />
+        <button type="submit" class="btn btn-primary btn-sm" style="white-space:nowrap;">Create</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('create-group-panel').style.display='none';">Cancel</button>
       </form>
     </div>""" if is_admin else ""
+
+    action_btns = f"""
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+      <a class="btn btn-primary" href="/coach/participants/new">+ Add Participant</a>
+      <button type="button" class="btn btn-primary" onclick="var p=document.getElementById('create-group-panel');p.style.display=p.style.display==='none'?'block':'none';">+ Create Group</button>
+      <a class="btn btn-primary" href="/coach/session">Record Session</a>
+    </div>
+    {create_group_form}""" if is_admin else ""
 
     sortable_js = """
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
@@ -643,11 +651,12 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         <h1>Coach Dashboard</h1>
         <p class="muted">{subtitle}</p>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;">{add_btn}</div>
     </div>
+    {action_btns}
     {message_html}
-    {content}
-    {create_group_form}
+    <div style="margin-top:28px;">
+      {content}
+    </div>
     {sortable_js}
     """
     return layout("Coach Dashboard", body, user=user, active_nav="dashboard")
