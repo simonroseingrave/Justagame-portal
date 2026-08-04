@@ -1755,60 +1755,58 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
         f'<option value="{f["id"]}">{esc(f["name"])}</option>' for f in folders
     )
 
-    # Build folder sections
+    # Build folder sections — clean heading-based layout
     folder_sections = ""
     for folder, resources in folder_groups:
         items_html = "".join(_resource_row(r, is_admin=is_admin) for r in resources)
         count = len(resources)
-        count_badge = f'<span class="res-count">{count} link{"s" if count != 1 else ""}</span>'
-        empty_drop = '<div class="res-drop-hint">Drop resources here</div>' if is_admin else '<p class="muted" style="padding:8px 4px; font-size:13px;">No resources yet.</p>'
-        list_content = _resource_table(items_html, is_admin=is_admin, list_id=folder['id']) if items_html else empty_drop
-        folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder folders">&#9776;</span>' if is_admin else ""
+        count_text = f'<span class="muted" style="font-size:14px; font-weight:400;">&nbsp;({count} link{"s" if count != 1 else ""})</span>'
+        list_content = _resource_table(items_html, is_admin=is_admin, list_id=folder['id']) if items_html else '<p class="muted" style="margin:8px 0 0; font-size:13px;">No resources in this folder yet.</p>'
+        folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder folders" style="cursor:grab; color:var(--jag-muted); font-size:16px;">&#9776;</span>' if is_admin else ""
         is_protected_folder = folder['name'].strip().lower() in (
             "measurement games",
             "general athleticism measurement games",
         )
-        delete_folder_btn = f"""<form method="post" action="/coach/resources/folders/{folder['id']}/delete" style="display:inline"
+        delete_btn = f"""<form method="post" action="/coach/resources/folders/{folder['id']}/delete" style="display:inline"
               onsubmit="return confirm('Delete folder \\'{esc(folder['name'])}\\'? Resources will move to Ungrouped.');">
-              <button type="submit" class="btn btn-ghost btn-sm">Delete folder</button>
+              <button type="submit" class="btn btn-ghost btn-sm" style="font-size:12px;">Delete folder</button>
             </form>""" if is_admin and not is_protected_folder else ""
-        rename_section = f"""
-            <button type="button" class="btn btn-ghost btn-sm"
+        rename_html = f"""<button type="button" class="btn btn-ghost btn-sm" style="font-size:12px;"
               onclick="var w=document.getElementById('rename-wrap-{folder['id']}');w.style.display=w.style.display==='none'?'flex':'none';"
               title="Rename folder">&#9998; Rename</button>
-            <span id="rename-wrap-{folder['id']}" style="display:none; align-items:center; gap:4px;">
+            <span id="rename-wrap-{folder['id']}" style="display:none; align-items:center; gap:4px; margin-top:4px;">
               <form method="post" action="/coach/resources/folders/{folder['id']}/rename"
                     style="display:inline-flex; gap:4px; align-items:center;">
                 <input type="text" name="folder_name" value="{esc(folder['name'])}"
-                       style="padding:4px 8px; font-size:13px; width:180px; border-radius:6px; border:1px solid var(--jag-border);" />
+                       style="padding:4px 8px; font-size:13px; width:200px; border-radius:6px; border:1px solid var(--jag-border);" />
                 <button type="submit" class="btn btn-primary btn-sm">Save</button>
               </form>
             </span>""" if is_admin else ""
-        admin_row = f"""
-          <div style="display:flex; gap:6px; align-items:center; padding:6px 12px 2px; flex-wrap:wrap;">
-            {rename_section}
-            {delete_folder_btn}
-          </div>""" if is_admin and (rename_section or delete_folder_btn) else ""
+        admin_actions = f'<div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-left:auto;">{rename_html}{delete_btn}</div>' if is_admin else ""
         folder_sections += f"""
-        <div class="res-folder res-folder--open" data-folder-id="{folder['id']}">
-          <div class="res-folder-tab">
+        <div class="res-section" data-folder-id="{folder['id']}" style="margin-bottom:36px;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px; flex-wrap:wrap;">
             {folder_handle}
-            <div class="res-folder-toggle">
-              <span class="res-folder-icon">&#128193;</span>
-              <strong class="res-folder-name">{esc(folder['name'])}</strong>
-              {count_badge}
-            </div>
+            <h2 style="margin:0; font-size:18px; color:var(--jag-navy);">&#128193; {esc(folder['name'])}{count_text}</h2>
+            {admin_actions}
           </div>
-          {admin_row}
-          <div class="res-list" data-list-id="{folder['id']}">{list_content}</div>
+          <hr style="border:none; border-top:2px solid var(--jag-green); margin:0 0 10px;" />
+          {list_content}
         </div>"""
 
-    # Ungrouped section — open by default
+    # Ungrouped section
     ungrouped_html = "".join(_resource_row(r, is_admin=is_admin) for r in ungrouped)
     ug_count = len(ungrouped)
-    ug_count_badge = f'<span class="res-count">{ug_count} link{"s" if ug_count != 1 else ""}</span>'
-    ug_empty = '<div class="res-drop-hint">Drop resources here</div>' if is_admin else '<p class="muted" style="padding:8px 4px; font-size:13px;">No ungrouped resources.</p>'
-    ungrouped_list_html = _resource_table(ungrouped_html, is_admin=is_admin) if ungrouped_html else ug_empty
+    ug_count_text = f'<span class="muted" style="font-size:14px; font-weight:400;">&nbsp;({ug_count} link{"s" if ug_count != 1 else ""})</span>'
+    ungrouped_list_html = _resource_table(ungrouped_html, is_admin=is_admin, list_id="ungrouped") if ungrouped_html else '<p class="muted" style="margin:8px 0 0; font-size:13px;">No ungrouped resources.</p>'
+    ungrouped_section = f"""
+    <div class="res-section" style="margin-bottom:36px;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+        <h2 style="margin:0; font-size:18px; color:var(--jag-muted);">Ungrouped{ug_count_text}</h2>
+      </div>
+      <hr style="border:none; border-top:2px solid var(--jag-border); margin:0 0 10px;" />
+      {ungrouped_list_html}
+    </div>""" if ungrouped or is_admin else ""
 
     manage_forms = f"""
     <div class="two-col" style="gap:16px; align-items:flex-start; margin-bottom:24px;">
@@ -1855,15 +1853,14 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
         handle: '.folder-handle',
         animation: 150,
         onEnd: function() {
-          var ids = Array.from(foldersContainer.querySelectorAll('.res-folder[data-folder-id]'))
+          var ids = Array.from(foldersContainer.querySelectorAll('.res-section[data-folder-id]'))
                         .map(function(el) { return el.dataset.folderId; });
           postOrder('/coach/resources/folders/reorder', ids);
         }
       });
     }
 
-    // Drag resources within and between lists (cross-folder)
-    // Target <tbody data-list-id> because resource rows are <tr> elements
+    // Drag resources within and between lists
     document.querySelectorAll('tbody[data-list-id]').forEach(function(list) {
       Sortable.create(list, {
         group: { name: 'resources', pull: true, put: true },
@@ -1874,36 +1871,17 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
           var fromList = evt.from;
           var toList   = evt.to;
           var itemId   = evt.item.dataset.id;
-
           if (fromList !== toList) {
-            // Moved to a different folder — update folder_id on the server
             var newListId = toList.dataset.listId;
             var folderId  = (newListId === 'ungrouped') ? '' : newListId;
             post('/coach/resources/' + itemId + '/move', 'folder_id=' + folderId);
-
-            // Update the count badges on both affected folders
-            updateCount(fromList);
-            updateCount(toList);
           }
-          // Always persist the new order of the destination list
           var destIds = Array.from(toList.querySelectorAll('.res-item'))
                             .map(function(el) { return el.dataset.id; });
           postOrder('/coach/resources/reorder', destIds);
         }
       });
     });
-
-    function updateCount(list) {
-      var folder = list.closest('.res-folder');
-      if (!folder) return;
-      var badge = folder.querySelector('.res-count');
-      if (!badge) return;
-      var n = list.querySelectorAll('.res-item').length;
-      badge.textContent = n + (n === 1 ? ' link' : ' links');
-      // Show/hide the drop hint
-      var hint = list.querySelector('.res-drop-hint');
-      if (hint) hint.style.display = n > 0 ? 'none' : '';
-    }
     </script>""" if is_admin else ""
 
     body = f"""
@@ -1911,6 +1889,7 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     {message_html}{error_html}
     {manage_forms}
     <div id="folders-container">{folder_sections}</div>
+    {ungrouped_section}
     {sortable_js}
     """
     return layout("Resources", body, user=user, active_nav="resources")
