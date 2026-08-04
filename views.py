@@ -19,13 +19,12 @@ def layout(title, body, user=None, flash=None, active_nav=None):
         if user["role"] == "coach":
             links = [("/coach", "Dashboard", "dashboard")]
             if user.get("is_admin"):
-                links += [
-                    ("/coach/participants/new", "Add Participant", "new_participant"),
-                    ("/coach/coaches", "Coaches", "coaches"),
-                ]
+                links.append(("/coach/participants/new", "Add Participant", "new_participant"))
             links.append(("/coach/session", "Record Session", "session"))
-            links.append(("/coach/progress", "Achievement Statistics", "progress"))
             links.append(("/coach/resources", "Resources", "resources"))
+            if user.get("is_admin"):
+                links.append(("/coach/coaches", "Coaches", "coaches"))
+            links.append(("/coach/progress", "Achievement Statistics", "progress"))
         else:
             links = [("/dashboard", "My Dashboard", "dashboard")]
         nav_items = "".join(
@@ -41,7 +40,6 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             </a>
             <nav class="nav">{nav_items}</nav>
             <div class="user-pill">
-              <span>{esc(user['name'])}</span>
               <a href="/account/password" class="btn btn-ghost btn-sm">My Account</a>
               <a href="/logout" class="btn btn-ghost btn-sm">Log out</a>
             </div>
