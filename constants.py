@@ -77,27 +77,6 @@ MEASUREMENT_GAMES = [
                 ],
             },
             {
-                "key": "gate_dive",
-                "name": "Split Decision - 20 attempts for each",
-                "fields": [
-                    {"key": "sb_underarm_attacker",        "label": "Small Ball - Under Arm Bounce (Attacker)",       "type": "points"},
-                    {"key": "sb_underarm_defender",        "label": "Small Ball - Under Arm Bounce (Defender)",       "type": "points"},
-                    {"key": "lb_underarm_attacker",        "label": "Large Ball - Under Arm Bounce (Attacker)",       "type": "points"},
-                    {"key": "lb_underarm_defender",        "label": "Large Ball - Under Arm Bounce (Defender)",       "type": "points"},
-                    {"key": "lb_kick_attacker",            "label": "Large Ball - Kick (Attacker)",                   "type": "points"},
-                    {"key": "lb_kick_defender",            "label": "Large Ball - Kick (Defender)",                   "type": "points"},
-                ],
-            },
-            {
-                "key": "chase_it",
-                "name": "Chase It",
-                "fields": [
-                    {"key": "attempt_1", "label": "Attempt 1", "type": "number", "unit": "Number of Gates"},
-                    {"key": "attempt_2", "label": "Attempt 2", "type": "number", "unit": "Number of Gates"},
-                    {"key": "attempt_3", "label": "Attempt 3", "type": "number", "unit": "Number of Gates"},
-                ],
-            },
-            {
                 "key": "diamond_games",
                 "name": "Diamond Gates - 1 minute",
                 "fields": [
