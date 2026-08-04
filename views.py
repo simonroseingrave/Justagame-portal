@@ -1722,13 +1722,13 @@ def _resource_row(r, is_admin=False):
             onsubmit="return confirm('Delete \\'{name_q}\\'?');">
         <button type="submit" class="btn btn-ghost btn-sm">Delete</button>
       </form>""" if is_admin else ""
-    drag_handle = '<span class="drag-handle" title="Drag to reorder">&#9776;</span>' if is_admin else ""
-    desc = f'<span class="muted" style="font-size:13px;">{esc(r["description"])}</span>' if r['description'] else ''
+    drag_handle = '<span class="drag-handle" title="Drag to reorder" style="color:var(--jag-muted); margin-right:8px;">&#9776;</span>' if is_admin else ""
+    desc = f'<br><span class="muted" style="font-size:12px;">{esc(r["description"])}</span>' if r['description'] else ''
     return f"""<tr class="res-item" data-id="{r['id']}">
-      <td style="width:20px; padding-right:0;">{drag_handle}</td>
-      <td><a href="{esc(r['url'])}" target="_blank" rel="noopener" style="font-weight:600;">{esc(r['name'])}</a></td>
-      <td>{desc}</td>
-      <td style="text-align:right; white-space:nowrap;">{admin_actions}</td>
+      <td style="padding:10px 4px; vertical-align:middle;">
+        {drag_handle}<a href="{esc(r['url'])}" target="_blank" rel="noopener" style="font-weight:600;">{esc(r['name'])}</a>{desc}
+      </td>
+      <td style="text-align:right; white-space:nowrap; vertical-align:middle; padding:10px 4px;">{admin_actions}</td>
     </tr>"""
 
 
@@ -1737,11 +1737,7 @@ def _resource_table(rows_html, is_admin=False, list_id=None):
     if not rows_html:
         return ""
     tbody_attr = f' data-list-id="{list_id}"' if list_id is not None else ""
-    return f"""<table class="table" style="width:100%;">
-      <thead><tr>
-        {"<th style='width:20px;'></th>" if is_admin else ""}
-        <th>Name</th><th>Description</th><th></th>
-      </tr></thead>
+    return f"""<table style="width:100%; border-collapse:collapse;">
       <tbody{tbody_attr}>{rows_html}</tbody>
     </table>"""
 
