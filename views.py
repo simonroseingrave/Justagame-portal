@@ -546,14 +546,14 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         <div class="group-section" data-group-id="{group['id']}" style="margin-bottom:40px;">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
             {folder_handle}
-            <h2 style="margin:0;font-size:20px;color:var(--jag-navy);">{esc(group['name'])}</h2>
+            <h2 style="margin:0;font-size:24px;font-weight:800;color:var(--jag-navy);letter-spacing:-0.3px;">{esc(group['name'])}</h2>
             <span class="muted group-count" style="font-size:14px;">({count} athlete{"s" if count != 1 else ""})</span>
             <div style="margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
               {summary_link}
               {admin_btns}
             </div>
           </div>
-          <hr style="border:none;border-top:2px solid var(--jag-green);margin:0 0 4px;" />
+          <hr style="border:none;border-top:3px solid var(--jag-green);margin:0 0 8px;" />
           {tiles_wrap}
         </div>"""
 
@@ -670,17 +670,31 @@ def new_participant_form(user, error=None, groups=None):
       <form method="post" action="/coach/participants/new">
         <label for="name">Full name</label>
         <input type="text" id="name" name="name" required />
-        <label for="email">Email (used to log in)</label>
-        <input type="email" id="email" name="email" required />
-        <label for="password">Temporary password</label>
-        <input type="text" id="password" name="password" required value="Athlete123!" />
         <label for="sport">Sport</label>
         <select id="sport" name="sport">{sport_options}</select>
         <label for="programme">Programme / notes</label>
         <input type="text" id="programme" name="programme" placeholder="e.g. Athlete Adaptability Programme - Masterton 2026" />
         <label for="group_id">Group (optional)</label>
         <select id="group_id" name="group_id">{group_opts}</select>
-        <button type="submit" class="btn btn-primary">Create Participant</button>
+
+        <div style="margin:20px 0 10px; padding-top:16px; border-top:1px solid var(--jag-border);">
+          <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:600;">
+            <input type="checkbox" id="setup-login" name="setup_login" value="1"
+                   style="width:auto; margin:0;"
+                   onchange="document.getElementById('login-fields').style.display=this.checked?'block':'none';" />
+            Set up login account
+          </label>
+          <p class="muted" style="margin:4px 0 0; font-size:13px;">Check this to give the athlete access to their own dashboard.</p>
+        </div>
+
+        <div id="login-fields" style="display:none;">
+          <label for="email">Email (used to log in)</label>
+          <input type="email" id="email" name="email" />
+          <label for="password">Temporary password</label>
+          <input type="text" id="password" name="password" value="Athlete123!" />
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="margin-top:16px;">Add Participant</button>
       </form>
     </div>
     """

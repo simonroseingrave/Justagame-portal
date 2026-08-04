@@ -263,8 +263,9 @@ def new_participant_post(req):
     if not coach:
         return redirect("/login")
     name = req.form_get("name").strip()
-    email = req.form_get("email").strip().lower()
-    password = req.form_get("password") or "Athlete123!"
+    setup_login = req.form_get("setup_login") == "1"
+    email = req.form_get("email").strip().lower() if setup_login else None
+    password = req.form_get("password") or "Athlete123!" if setup_login else None
     sport = req.form_get("sport")
     programme = req.form_get("programme").strip()
     group_id = req.form_get("group_id").strip() or None
@@ -272,19 +273,24 @@ def new_participant_post(req):
     conn = db.get_conn()
     try:
         groups = db.list_participant_groups(conn)
-        if not name or not email:
-            return Response(views.new_participant_form(coach, groups=groups, error="Name and email are required."), status=400)
-
-        existing = conn.execute("SELECT id FROM users WHERE lower(email) = ?", (email,)).fetchone()
-        if existing:
-            return Response(views.new_participant_form(coach, groups=groups, error="A user with that email already exists."), status=400)
+        if not name:
+            return Response(views.new_participant_form(coach, groups=groups, error="Name is required."), status=400)
+        if setup_login:
+            if not email:
+                return Response(views.new_participant_form(coach, groups=groups, error="Email is required when setting up a login."), status=400)
+            existing = conn.execute("SELECT id FROM users WHERE lower(email) = ?", (email,)).fetchone()
+            if existing:
+                return Response(views.new_participant_form(coach, groups=groups, error="A user with that email already exists."), status=400)
         conn.execute(
             "INSERT INTO users (name, email, password_hash, role, sport, programme, group_id, created_at) "
             "VALUES (?, ?, ?, 'participant', ?, ?, ?, ?)",
-            (name, email, hash_password(password), sport, programme, group_id or None, db.now()),
+            (name, email, hash_password(password) if password else None, sport, programme, group_id or None, db.now()),
         )
         conn.commit()
-        return flash_redirect("/coach", f"Added participant {name}. Share their login: {email} / {password}")
+        if setup_login:
+            return flash_redirect("/coach", f"Added {name}. Share their login: {email} / {password}")
+        else:
+            return flash_redirect("/coach", f"Added {name} to the system.")
     finally:
         conn.close()
 
