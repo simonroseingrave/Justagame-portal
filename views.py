@@ -1694,32 +1694,30 @@ def new_coach_form(user, error=None):
     return layout("Add Coach", body, user=user, active_nav="coaches")
 
 
-def _resource_row(r, is_admin=False):
+def _resource_tile(r, is_admin=False):
+    """Render a single resource as a link tile card."""
     name_q = esc(r['name']).replace("'", "\\'")
-    admin_actions = f"""
-      <a href="/coach/resources/{r['id']}/edit" class="btn btn-ghost btn-sm">Edit</a>
-      <form method="post" action="/coach/resources/{r['id']}/delete" style="display:inline"
-            onsubmit="return confirm('Delete \\'{name_q}\\'?');">
-        <button type="submit" class="btn btn-ghost btn-sm">Delete</button>
-      </form>""" if is_admin else ""
-    drag_handle = '<span class="drag-handle" title="Drag to reorder" style="color:var(--jag-muted); margin-right:8px;">&#9776;</span>' if is_admin else ""
-    desc = f'<br><span class="muted" style="font-size:12px;">{esc(r["description"])}</span>' if r['description'] else ''
-    return f"""<tr class="res-item" data-id="{r['id']}">
-      <td style="padding:10px 4px; vertical-align:middle;">
-        {drag_handle}<a href="{esc(r['url'])}" target="_blank" rel="noopener" style="font-weight:600;">{esc(r['name'])}</a>{desc}
-      </td>
-      <td style="text-align:right; white-space:nowrap; vertical-align:middle; padding:10px 4px;">{admin_actions}</td>
-    </tr>"""
+    desc = f'<span style="font-size:12px;color:var(--jag-muted);display:block;margin-top:4px;line-height:1.4;">{esc(r["description"])}</span>' if r['description'] else ''
+    drag = '<span class="drag-handle" title="Drag to reorder" style="position:absolute;top:6px;left:8px;font-size:11px;color:#ccc;cursor:grab;">&#9776;</span>' if is_admin else ""
+    admin_actions = f"""<div style="display:flex;gap:4px;margin-top:8px;padding-top:8px;border-top:1px solid var(--jag-border);">
+        <a href="/coach/resources/{r['id']}/edit" class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;">Edit</a>
+        <form method="post" action="/coach/resources/{r['id']}/delete" style="display:inline"
+              onsubmit="return confirm('Delete \\'{name_q}\\'?');">
+          <button type="submit" class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;">Delete</button>
+        </form>
+      </div>""" if is_admin else ""
+    return f"""<div class="res-tile" data-id="{r['id']}" style="position:relative;background:var(--jag-card);border:1.5px solid var(--jag-border);border-radius:10px;padding:{'20px 14px 12px 28px' if is_admin else '14px'};display:flex;flex-direction:column;min-width:160px;max-width:240px;word-break:break-word;">
+      {drag}
+      <a href="{esc(r['url'])}" target="_blank" rel="noopener" style="font-weight:700;font-size:14px;color:var(--jag-navy);text-decoration:none;line-height:1.3;" onmouseover="this.style.textDecoration='underline';" onmouseout="this.style.textDecoration='none';">{esc(r['name'])} <span style="font-size:11px;opacity:0.5;">&#8599;</span></a>
+      {desc}
+      {admin_actions}
+    </div>"""
 
 
-def _resource_table(rows_html, is_admin=False, list_id=None):
-    """Wrap resource rows in a table with column headers."""
-    if not rows_html:
-        return ""
-    tbody_attr = f' data-list-id="{list_id}"' if list_id is not None else ""
-    return f"""<table style="width:100%; border-collapse:collapse;">
-      <tbody{tbody_attr}>{rows_html}</tbody>
-    </table>"""
+def _resource_tile_wrap(tiles_html, list_id=None):
+    """Wrap resource tiles in a flex container."""
+    list_attr = f' data-list-id="{list_id}"' if list_id is not None else ""
+    return f'<div class="res-tiles-wrap" style="display:flex;flex-wrap:wrap;gap:12px;padding:8px 0 4px;"{list_attr}>{tiles_html}</div>'
 
 
 def resources_page(user, folder_groups, ungrouped, folders, message=None, error=None):
@@ -1731,13 +1729,13 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
         f'<option value="{f["id"]}">{esc(f["name"])}</option>' for f in folders
     )
 
-    # Build folder sections — clean heading-based layout
+    # Build folder sections — link tile layout
     folder_sections = ""
     for folder, resources in folder_groups:
-        items_html = "".join(_resource_row(r, is_admin=is_admin) for r in resources)
+        tiles_html = "".join(_resource_tile(r, is_admin=is_admin) for r in resources)
         count = len(resources)
         count_text = f'<span class="muted" style="font-size:14px; font-weight:400;">&nbsp;({count} link{"s" if count != 1 else ""})</span>'
-        list_content = _resource_table(items_html, is_admin=is_admin, list_id=folder['id']) if items_html else '<p class="muted" style="margin:8px 0 0; font-size:13px;">No resources in this folder yet.</p>'
+        list_content = _resource_tile_wrap(tiles_html, list_id=folder['id']) if tiles_html else '<p class="muted" style="margin:8px 0 0; font-size:13px;">No resources in this folder yet.</p>'
         folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder folders" style="cursor:grab; color:var(--jag-muted); font-size:16px;">&#9776;</span>' if is_admin else ""
         is_protected_folder = folder['name'].strip().lower() in (
             "measurement games",
@@ -1771,10 +1769,10 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
         </div>"""
 
     # Ungrouped section
-    ungrouped_html = "".join(_resource_row(r, is_admin=is_admin) for r in ungrouped)
+    ug_tiles_html = "".join(_resource_tile(r, is_admin=is_admin) for r in ungrouped)
     ug_count = len(ungrouped)
     ug_count_text = f'<span class="muted" style="font-size:14px; font-weight:400;">&nbsp;({ug_count} link{"s" if ug_count != 1 else ""})</span>'
-    ungrouped_list_html = _resource_table(ungrouped_html, is_admin=is_admin, list_id="ungrouped") if ungrouped_html else '<p class="muted" style="margin:8px 0 0; font-size:13px;">No ungrouped resources.</p>'
+    ungrouped_list_html = _resource_tile_wrap(ug_tiles_html, list_id="ungrouped") if ug_tiles_html else '<p class="muted" style="margin:8px 0 0; font-size:13px;">No ungrouped resources.</p>'
     ungrouped_section = f"""
     <div class="res-section" style="margin-bottom:36px;">
       <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
@@ -1843,12 +1841,12 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     }
 
     // Drag resources within and between lists
-    document.querySelectorAll('tbody[data-list-id]').forEach(function(list) {
+    document.querySelectorAll('.res-tiles-wrap[data-list-id]').forEach(function(list) {
       Sortable.create(list, {
         group: { name: 'resources', pull: true, put: true },
         handle: '.drag-handle:not(.folder-handle)',
         animation: 150,
-        ghostClass: 'res-item--ghost',
+        ghostClass: 'res-tile--ghost',
         onEnd: function(evt) {
           var fromList = evt.from;
           var toList   = evt.to;
@@ -1858,7 +1856,7 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
             var folderId  = (newListId === 'ungrouped') ? '' : newListId;
             post('/coach/resources/' + itemId + '/move', 'folder_id=' + folderId);
           }
-          var destIds = Array.from(toList.querySelectorAll('.res-item'))
+          var destIds = Array.from(toList.querySelectorAll('.res-tile'))
                             .map(function(el) { return el.dataset.id; });
           postOrder('/coach/resources/reorder', destIds);
         }

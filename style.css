@@ -290,6 +290,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
 .res-item:last-child { border-bottom: none; }
 .res-item:hover { background: var(--jag-bg); border-radius: 6px; }
 .res-item--ghost { opacity: 0.35; background: var(--jag-green) !important; border-radius: 6px; }
+.res-tile--ghost { opacity: 0.35; background: var(--jag-green) !important; border-radius: 10px; }
 .res-item-body { flex: 1; min-width: 0; }
 .res-item-body a { font-weight: 600; font-size: 14px; }
 .res-desc { display: block; font-size: 12px; margin-top: 2px; color: var(--jag-muted); }
