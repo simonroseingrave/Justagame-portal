@@ -665,7 +665,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
 def new_participant_form(user, error=None, groups=None):
     error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
     sport_options = "".join(f'<option value="{esc(s)}">{esc(s)}</option>' for s in
-                             ["Cricket", "Football", "Hockey", "Multi-sport"])
+                             ["Cricket", "Football", "Hockey", "Touch", "Volleyball", "Multi-sport"])
     groups = groups or []
     group_opts = '<option value="">— No group —</option>' + "".join(
         f'<option value="{g["id"]}">{esc(g["name"])}</option>' for g in groups

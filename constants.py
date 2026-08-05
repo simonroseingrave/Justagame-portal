@@ -199,6 +199,27 @@ SPORT_SPECIFIC_GAMES = {
                         {"key": "points", "label": "Points", "type": "points"},
                     ],
                 },
+                {
+                    "key": "touch_n_go",
+                    "name": "Touch N Go",
+                    "fields": [
+                        {"key": "gates", "label": "Gates", "type": "number"},
+                    ],
+                },
+            ],
+        },
+    ],
+    "Touch / Rugby": [
+        {
+            "section": "Touch / Rugby",
+            "games": [
+                {
+                    "key": "touch_n_go_rugby",
+                    "name": "Touch N Go Rugby",
+                    "fields": [
+                        {"key": "gates", "label": "Gates", "type": "number"},
+                    ],
+                },
             ],
         },
     ],
