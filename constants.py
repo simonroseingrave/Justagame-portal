@@ -98,8 +98,14 @@ MEASUREMENT_GAMES = [
                 "key": "diamond_gym",
                 "name": "Step Up",
                 "fields": [
-                    {"key": "step_bench",  "label": "Step / Bench", "type": "number", "unit": "Number of Gates"},
-                    {"key": "low_hurdle",  "label": "Low Hurdle",   "type": "number", "unit": "Number of Gates"},
+                    {"key": "step_bench", "label": "Step / Bench Points", "type": "number", "unit": "Number of Gates"},
+                ],
+            },
+            {
+                "key": "step_over",
+                "name": "Step Over",
+                "fields": [
+                    {"key": "low_hurdle", "label": "Low Hurdle Points", "type": "number", "unit": "Number of Gates"},
                 ],
             },
         ],
