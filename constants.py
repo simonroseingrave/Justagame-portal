@@ -149,6 +149,18 @@ MEASUREMENT_GAMES = [
             },
         ],
     },
+    {
+        "section": "Lob Scotch",
+        "games": [
+            {
+                "key": "lob_scotch",
+                "name": "Lob Scotch",
+                "fields": [
+                    {"key": "squares_scored", "label": "Squares Scored", "type": "number"},
+                ],
+            },
+        ],
+    },
 ]
 
 
