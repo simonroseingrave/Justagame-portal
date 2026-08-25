@@ -565,22 +565,28 @@ def cleanup_demo_data():
                 "DELETE FROM users WHERE email IN ({})".format(",".join("?" * len(demo_emails))),
                 demo_emails,
             )
+            conn.commit()
             print(f"cleanup_demo_data: removed {len(demo_ids)} demo participants", flush=True)
 
-        # Delete the Demo Group
-        group = conn.execute(
-            "SELECT id FROM participant_groups WHERE lower(name) = 'demo group'"
-        ).fetchone()
-        if group:
-            conn.execute(
-                "UPDATE users SET group_id = NULL WHERE group_id = ?", (group["id"],)
-            )
-            conn.execute("DELETE FROM participant_groups WHERE id = ?", (group["id"],))
-            print("cleanup_demo_data: removed Demo Group", flush=True)
-        else:
-            print("cleanup_demo_data: Demo Group not found, nothing to do", flush=True)
+        # Delete the Demo Group (best-effort — skip on any error)
+        try:
+            group = conn.execute(
+                "SELECT id FROM participant_groups WHERE lower(name) = 'demo group'"
+            ).fetchone()
+            if group:
+                gid = group["id"]
+                # Remove coach-group assignments first (FK constraint)
+                conn.execute("DELETE FROM coach_groups WHERE group_id = ?", (gid,))
+                # Unlink any participants still in this group
+                conn.execute("UPDATE users SET group_id = NULL WHERE group_id = ?", (gid,))
+                conn.execute("DELETE FROM participant_groups WHERE id = ?", (gid,))
+                conn.commit()
+                print("cleanup_demo_data: removed Demo Group", flush=True)
+            else:
+                print("cleanup_demo_data: Demo Group not found, nothing to do", flush=True)
+        except Exception as e:
+            print(f"cleanup_demo_data: could not remove Demo Group ({e}), skipping", flush=True)
 
-        conn.commit()
         print("cleanup_demo_data: complete", flush=True)
     finally:
         conn.close()
