@@ -526,151 +526,62 @@ def reorder_items(conn, table, ordered_ids):
     conn.commit()
 
 
-def patch_demo_data():
-    """Idempotent patch applied on every startup.
-
-    1. Ensures all three demo participants belong to a "Demo Group".
-    2. Ensures Alex Taylor has extra Measurement Games sessions so progression
-       statistics pages have data to display.
-    """
-    print("patch_demo_data: starting", flush=True)
+def cleanup_demo_data():
+    """One-time cleanup: removes demo participants, their sessions/results,
+    and the Demo Group from the live database.
+    Idempotent — safe to run on every startup, does nothing once already clean."""
+    print("cleanup_demo_data: starting", flush=True)
     conn = get_conn()
     try:
-        # ---- 1. Ensure "Demo Group" exists and demo participants are in it
         demo_emails = [
             "alex.demo@example.com",
             "jess.demo@example.com",
             "sam.demo@example.com",
         ]
-        demo_participants = []
+        # Find demo participant IDs
+        demo_ids = []
         for email in demo_emails:
             row = conn.execute(
-                "SELECT id, group_id FROM users WHERE email = ? AND role = 'participant'", (email,)
+                "SELECT id FROM users WHERE email = ? AND role = 'participant'", (email,)
             ).fetchone()
             if row:
-                demo_participants.append(row)
+                demo_ids.append(row["id"])
 
-        print(f"patch_demo_data: found {len(demo_participants)} demo participants", flush=True)
-        if not demo_participants:
-            print("patch_demo_data: no demo participants found, skipping", flush=True)
-            return  # DB not seeded yet -- nothing to patch
+        if not demo_ids:
+            print("cleanup_demo_data: no demo participants found, nothing to do", flush=True)
+        else:
+            # Delete measurement results and sessions for demo participants
+            for pid in demo_ids:
+                session_ids = [
+                    r["id"] for r in conn.execute(
+                        "SELECT id FROM measurement_sessions WHERE participant_id = ?", (pid,)
+                    ).fetchall()
+                ]
+                for sid in session_ids:
+                    conn.execute("DELETE FROM measurement_results WHERE session_id = ?", (sid,))
+                conn.execute("DELETE FROM measurement_sessions WHERE participant_id = ?", (pid,))
+            # Delete the demo participant accounts
+            conn.execute(
+                "DELETE FROM users WHERE email IN ({})".format(",".join("?" * len(demo_emails))),
+                demo_emails,
+            )
+            print(f"cleanup_demo_data: removed {len(demo_ids)} demo participants", flush=True)
 
-        coach = conn.execute(
-            "SELECT id FROM users WHERE role = 'coach' ORDER BY id LIMIT 1"
+        # Delete the Demo Group
+        group = conn.execute(
+            "SELECT id FROM participant_groups WHERE lower(name) = 'demo group'"
         ).fetchone()
-        coach_id = coach["id"] if coach else None
+        if group:
+            conn.execute(
+                "UPDATE users SET group_id = NULL WHERE group_id = ?", (group["id"],)
+            )
+            conn.execute("DELETE FROM participant_groups WHERE id = ?", (group["id"],))
+            print("cleanup_demo_data: removed Demo Group", flush=True)
+        else:
+            print("cleanup_demo_data: Demo Group not found, nothing to do", flush=True)
 
-        def _insert_session(participant_id, date, results):
-            """Insert a session + results if that date doesn't already exist."""
-            existing = conn.execute(
-                "SELECT COUNT(*) AS c FROM measurement_sessions WHERE participant_id = ? AND date = ?",
-                (participant_id, date),
-            ).fetchone()["c"]
-            if existing:
-                print(f"patch_demo_data: session {date} already exists for pid={participant_id}", flush=True)
-                return
-            sid = conn.execute(
-                "INSERT INTO measurement_sessions (participant_id, date, logged_by, created_at) VALUES (?, ?, ?, ?)",
-                (participant_id, date, coach_id, now()),
-            ).lastrowid
-            for game_key, field_key, value in results:
-                conn.execute(
-                    "INSERT INTO measurement_results (session_id, game_key, field_key, value) VALUES (?, ?, ?, ?)",
-                    (sid, game_key, field_key, value),
-                )
-            conn.commit()
-            print(f"patch_demo_data: inserted session {date} for pid={participant_id}", flush=True)
-
-        # ---- 2. Alex Taylor — 3 sessions
-        alex = conn.execute("SELECT id FROM users WHERE email = 'alex.demo@example.com'").fetchone()
-        if alex:
-            aid = alex["id"]
-            t1, t2, t3 = 4.95, 4.82, 4.78
-            _insert_session(aid, "2026-07-03", [
-                ("skipping_rope_sprint", "time_1", t1),
-                ("skipping_rope_sprint", "time_2", t2),
-                ("skipping_rope_sprint", "time_3", t3),
-                ("skipping_rope_sprint", "average", round((t1+t2+t3)/3, 2)),
-                ("balance_ball_catching", "small_ball_two_hands", 18),
-                ("balance_ball_catching", "large_ball_two_hands", 26),
-                ("diamond_games", "running_room", 12),
-            ])
-            t1, t2, t3 = 4.71, 4.65, 4.60
-            _insert_session(aid, "2026-07-05", [
-                ("skipping_rope_sprint", "time_1", t1),
-                ("skipping_rope_sprint", "time_2", t2),
-                ("skipping_rope_sprint", "time_3", t3),
-                ("skipping_rope_sprint", "average", round((t1+t2+t3)/3, 2)),
-                ("balance_ball_catching", "small_ball_two_hands", 22),
-                ("balance_ball_catching", "large_ball_two_hands", 29),
-                ("diamond_games", "running_room", 15),
-            ])
-
-        # ---- 3. Jess Nguyen — 3 sessions
-        jess = conn.execute("SELECT id FROM users WHERE email = 'jess.demo@example.com'").fetchone()
-        if jess:
-            jid = jess["id"]
-            _insert_session(jid, "2026-06-23", [
-                ("skipping_rope_sprint", "time_1", 5.60),
-                ("skipping_rope_sprint", "time_2", 5.48),
-                ("skipping_rope_sprint", "time_3", 5.41),
-                ("skipping_rope_sprint", "average", round((5.60+5.48+5.41)/3, 2)),
-                ("balance_ball_catching", "small_ball_two_hands", 11),
-                ("balance_ball_catching", "large_ball_two_hands", 18),
-                ("diamond_games", "running_room", 6),
-            ])
-            _insert_session(jid, "2026-07-03", [
-                ("skipping_rope_sprint", "time_1", 5.32),
-                ("skipping_rope_sprint", "time_2", 5.19),
-                ("skipping_rope_sprint", "time_3", 5.11),
-                ("skipping_rope_sprint", "average", round((5.32+5.19+5.11)/3, 2)),
-                ("balance_ball_catching", "small_ball_two_hands", 14),
-                ("balance_ball_catching", "large_ball_two_hands", 21),
-                ("diamond_games", "running_room", 9),
-            ])
-            _insert_session(jid, "2026-07-05", [
-                ("skipping_rope_sprint", "time_1", 5.08),
-                ("skipping_rope_sprint", "time_2", 4.97),
-                ("skipping_rope_sprint", "time_3", 4.91),
-                ("skipping_rope_sprint", "average", round((5.08+4.97+4.91)/3, 2)),
-                ("balance_ball_catching", "small_ball_two_hands", 17),
-                ("balance_ball_catching", "large_ball_two_hands", 24),
-                ("diamond_games", "running_room", 11),
-            ])
-
-        # ---- 4. Sam Wilson — 3 sessions
-        sam = conn.execute("SELECT id FROM users WHERE email = 'sam.demo@example.com'").fetchone()
-        if sam:
-            sid = sam["id"]
-            _insert_session(sid, "2026-06-23", [
-                ("skipping_rope_sprint", "time_1", 6.10),
-                ("skipping_rope_sprint", "time_2", 5.98),
-                ("skipping_rope_sprint", "time_3", 5.85),
-                ("skipping_rope_sprint", "average", round((6.10+5.98+5.85)/3, 2)),
-                ("balance_ball_catching", "small_ball_two_hands", 9),
-                ("balance_ball_catching", "large_ball_two_hands", 15),
-                ("diamond_games", "running_room", 5),
-            ])
-            _insert_session(sid, "2026-07-03", [
-                ("skipping_rope_sprint", "time_1", 5.79),
-                ("skipping_rope_sprint", "time_2", 5.61),
-                ("skipping_rope_sprint", "time_3", 5.52),
-                ("skipping_rope_sprint", "average", round((5.79+5.61+5.52)/3, 2)),
-                ("balance_ball_catching", "small_ball_two_hands", 13),
-                ("balance_ball_catching", "large_ball_two_hands", 19),
-                ("diamond_games", "running_room", 8),
-            ])
-            _insert_session(sid, "2026-07-05", [
-                ("skipping_rope_sprint", "time_1", 5.44),
-                ("skipping_rope_sprint", "time_2", 5.29),
-                ("skipping_rope_sprint", "time_3", 5.20),
-                ("skipping_rope_sprint", "average", round((5.44+5.29+5.20)/3, 2)),
-                ("balance_ball_catching", "small_ball_two_hands", 16),
-                ("balance_ball_catching", "large_ball_two_hands", 22),
-                ("diamond_games", "running_room", 10),
-            ])
-
-        print("patch_demo_data: complete", flush=True)
+        conn.commit()
+        print("cleanup_demo_data: complete", flush=True)
     finally:
         conn.close()
 
