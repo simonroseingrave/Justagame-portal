@@ -997,8 +997,12 @@ def group_delete(req, group_id):
 def _resources_page_response(coach, conn, message=None, error=None, status=200):
     folder_groups, ungrouped = db.list_resources_by_folder(conn)
     folders = db.list_folders(conn)
+    tags = db.list_tags(conn)
+    all_resources = [r for _, rs in folder_groups for r in rs] + list(ungrouped)
+    all_ids = [r["id"] for r in all_resources]
+    tags_by_resource = db.get_tags_for_resources(conn, all_ids)
     return Response(
-        views.resources_page(coach, folder_groups, ungrouped, folders, message=message, error=error),
+        views.resources_page(coach, folder_groups, ungrouped, folders, tags, tags_by_resource, message=message, error=error),
         status=status,
     )
 
@@ -1025,6 +1029,7 @@ def resources_new(req):
     url = req.form_get("url").strip()
     description = req.form_get("description").strip()
     folder_id = req.form_get("folder_id").strip() or None
+    tag_ids = [int(t) for t in req.form_get_list("tag_ids") if t.strip().isdigit()]
     if not name or not url:
         conn = db.get_conn()
         try:
@@ -1033,7 +1038,13 @@ def resources_new(req):
             conn.close()
     conn = db.get_conn()
     try:
-        db.add_resource(conn, name, description, url, coach["id"], folder_id)
+        resource_id = conn.execute(
+            "INSERT INTO resources (name, description, url, added_by, folder_id, sort_order, created_at) "
+            "VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order),-1)+1 FROM resources), ?)",
+            (name, description or None, url, coach["id"], folder_id or None, db.now()),
+        ).lastrowid
+        conn.commit()
+        db.set_resource_tags(conn, resource_id, tag_ids)
         return flash_redirect("/coach/resources", f'"{name}" added.')
     finally:
         conn.close()
@@ -1050,7 +1061,9 @@ def resource_edit_get(req, resource_id):
         if not resource:
             return flash_redirect("/coach/resources", "Resource not found.")
         folders = db.list_folders(conn)
-        return Response(views.edit_resource_page(coach, dict(resource), folders))
+        all_tags = db.list_tags(conn)
+        selected_tag_ids = db.get_resource_tag_ids(conn, resource_id)
+        return Response(views.edit_resource_page(coach, dict(resource), folders, all_tags, selected_tag_ids))
     finally:
         conn.close()
 
@@ -1064,13 +1077,16 @@ def resource_edit_post(req, resource_id):
     url = req.form_get("url").strip()
     description = req.form_get("description").strip()
     folder_id = req.form_get("folder_id").strip() or None
+    tag_ids = [int(t) for t in req.form_get_list("tag_ids") if t.strip().isdigit()]
     if not name or not url:
         conn = db.get_conn()
         try:
             resource = conn.execute("SELECT * FROM resources WHERE id = ?", (resource_id,)).fetchone()
             folders = db.list_folders(conn)
+            all_tags = db.list_tags(conn)
+            selected_tag_ids = db.get_resource_tag_ids(conn, resource_id)
             return Response(
-                views.edit_resource_page(coach, dict(resource), folders, error="Name and URL are required."),
+                views.edit_resource_page(coach, dict(resource), folders, all_tags, selected_tag_ids, error="Name and URL are required."),
                 status=400,
             )
         finally:
@@ -1078,6 +1094,7 @@ def resource_edit_post(req, resource_id):
     conn = db.get_conn()
     try:
         db.update_resource(conn, resource_id, name, description, url, folder_id)
+        db.set_resource_tags(conn, resource_id, tag_ids)
         return flash_redirect("/coach/resources", f'"{name}" updated.')
     finally:
         conn.close()
@@ -1191,6 +1208,37 @@ def folders_reorder(req):
         except ValueError:
             pass
     return Response("ok")
+
+
+@router.post("/coach/resources/tags/new")
+def tag_new(req):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    name = req.form_get("tag_name").strip()
+    if not name:
+        return flash_redirect("/coach/resources", "Tag name is required.")
+    conn = db.get_conn()
+    try:
+        db.add_tag(conn, name)
+        return flash_redirect("/coach/resources", f'Tag "{name}" created.')
+    except Exception:
+        return flash_redirect("/coach/resources", f'Tag "{name}" already exists.')
+    finally:
+        conn.close()
+
+
+@router.post("/coach/resources/tags/<int:tag_id>/delete")
+def tag_delete(req, tag_id):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        db.delete_tag(conn, tag_id)
+        return flash_redirect("/coach/resources", "Tag deleted.")
+    finally:
+        conn.close()
 
 
 # ------------------------------------------------------------------- bootstrap

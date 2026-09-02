@@ -106,6 +106,19 @@ CREATE TABLE IF NOT EXISTS coach_groups (
     group_id INTEGER NOT NULL REFERENCES participant_groups(id),
     PRIMARY KEY (coach_id, group_id)
 );
+
+CREATE TABLE IF NOT EXISTS resource_tags (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS resource_tag_assignments (
+    resource_id INTEGER NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
+    tag_id INTEGER NOT NULL REFERENCES resource_tags(id) ON DELETE CASCADE,
+    PRIMARY KEY (resource_id, tag_id)
+);
 """
 
 
@@ -517,6 +530,61 @@ def update_resource(conn, resource_id, name, description, url, folder_id):
 def delete_resource(conn, resource_id):
     conn.execute("DELETE FROM resources WHERE id = ?", (resource_id,))
     conn.commit()
+
+
+# ---- Resource tags --------------------------------------------------------
+
+def list_tags(conn):
+    return conn.execute("SELECT * FROM resource_tags ORDER BY sort_order, name").fetchall()
+
+
+def add_tag(conn, name):
+    max_order = conn.execute("SELECT COALESCE(MAX(sort_order), -1) FROM resource_tags").fetchone()[0]
+    conn.execute(
+        "INSERT INTO resource_tags (name, sort_order, created_at) VALUES (?, ?, ?)",
+        (name.strip(), max_order + 1, now()),
+    )
+    conn.commit()
+
+
+def delete_tag(conn, tag_id):
+    conn.execute("DELETE FROM resource_tags WHERE id = ?", (tag_id,))
+    conn.commit()
+
+
+def get_resource_tag_ids(conn, resource_id):
+    rows = conn.execute(
+        "SELECT tag_id FROM resource_tag_assignments WHERE resource_id = ?", (resource_id,)
+    ).fetchall()
+    return [r["tag_id"] for r in rows]
+
+
+def set_resource_tags(conn, resource_id, tag_ids):
+    """Replace all tag assignments for a resource."""
+    conn.execute("DELETE FROM resource_tag_assignments WHERE resource_id = ?", (resource_id,))
+    for tid in tag_ids:
+        conn.execute(
+            "INSERT INTO resource_tag_assignments (resource_id, tag_id) VALUES (?, ?)",
+            (resource_id, tid),
+        )
+    conn.commit()
+
+
+def get_tags_for_resources(conn, resource_ids):
+    """Returns dict {resource_id: [tag_row, ...]} for a list of resource IDs."""
+    if not resource_ids:
+        return {}
+    placeholders = ",".join("?" * len(resource_ids))
+    rows = conn.execute(
+        f"SELECT rta.resource_id, rt.id, rt.name FROM resource_tag_assignments rta "
+        f"JOIN resource_tags rt ON rt.id = rta.tag_id "
+        f"WHERE rta.resource_id IN ({placeholders}) ORDER BY rt.name",
+        resource_ids,
+    ).fetchall()
+    result = {rid: [] for rid in resource_ids}
+    for r in rows:
+        result[r["resource_id"]].append(r)
+    return result
 
 
 def reorder_items(conn, table, ordered_ids):

@@ -1694,7 +1694,7 @@ def new_coach_form(user, error=None):
     return layout("Add Coach", body, user=user, active_nav="coaches")
 
 
-def _resource_tile(r, is_admin=False):
+def _resource_tile(r, is_admin=False, tags=None):
     """Render a single resource as a link tile card."""
     tile_colors = ['#1d6fa4', '#7c3aed', '#c2410c', '#15803d', '#be185d', '#0e7490', '#92400e', '#b45309']
     border_color = tile_colors[r['id'] % len(tile_colors)]
@@ -1708,10 +1708,19 @@ def _resource_tile(r, is_admin=False):
           <button type="submit" class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;">Delete</button>
         </form>
       </div>""" if is_admin else ""
-    return f"""<div class="res-tile" data-id="{r['id']}" style="position:relative;background:var(--jag-card);border:2.5px solid {border_color};border-radius:10px;padding:{'20px 14px 12px 28px' if is_admin else '14px'};display:flex;flex-direction:column;min-width:160px;max-width:240px;word-break:break-word;">
+    tag_names = [t["name"] for t in (tags or [])]
+    tag_pills = "".join(
+        f'<span style="font-size:10px;background:var(--jag-green);color:var(--jag-navy);border-radius:999px;padding:1px 7px;font-weight:600;white-space:nowrap;">{esc(t)}</span>'
+        for t in tag_names
+    )
+    tags_html = f'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">{tag_pills}</div>' if tag_pills else ''
+    tag_data = ",".join(t.lower() for t in tag_names)
+    search_data = (r['name'] + " " + (r['description'] or "")).lower()
+    return f"""<div class="res-tile" data-id="{r['id']}" data-tags="{esc(tag_data)}" data-search="{esc(search_data)}" style="position:relative;background:var(--jag-card);border:2.5px solid {border_color};border-radius:10px;padding:{'20px 14px 12px 28px' if is_admin else '14px'};display:flex;flex-direction:column;min-width:160px;max-width:240px;word-break:break-word;">
       {drag}
       <a href="{esc(r['url'])}" target="_blank" rel="noopener" style="font-weight:700;font-size:14px;color:var(--jag-navy);text-decoration:none;line-height:1.3;" onmouseover="this.style.textDecoration='underline';" onmouseout="this.style.textDecoration='none';">{esc(r['name'])} <span style="font-size:11px;opacity:0.5;">&#8599;</span></a>
       {desc}
+      {tags_html}
       {admin_actions}
     </div>"""
 
@@ -1722,10 +1731,12 @@ def _resource_tile_wrap(tiles_html, list_id=None):
     return f'<div class="res-tiles-wrap" style="display:flex;flex-wrap:wrap;gap:12px;padding:8px 0 4px;"{list_attr}>{tiles_html}</div>'
 
 
-def resources_page(user, folder_groups, ungrouped, folders, message=None, error=None):
+def resources_page(user, folder_groups, ungrouped, folders, tags=None, tags_by_resource=None, message=None, error=None):
     message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
     error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
     is_admin = user.get("is_admin")
+    tags = tags or []
+    tags_by_resource = tags_by_resource or {}
 
     folder_opts = '<option value="">— Ungrouped —</option>' + "".join(
         f'<option value="{f["id"]}">{esc(f["name"])}</option>' for f in folders
@@ -1734,7 +1745,7 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     # Build folder sections — link tile layout
     folder_sections = ""
     for folder, resources in folder_groups:
-        tiles_html = "".join(_resource_tile(r, is_admin=is_admin) for r in resources)
+        tiles_html = "".join(_resource_tile(r, is_admin=is_admin, tags=tags_by_resource.get(r['id'], [])) for r in resources)
         count = len(resources)
         count_text = f'<span class="muted" style="font-size:14px; font-weight:400;">&nbsp;({count} link{"s" if count != 1 else ""})</span>'
         list_content = _resource_tile_wrap(tiles_html, list_id=folder['id']) if tiles_html else '<p class="muted" style="margin:8px 0 0; font-size:13px;">No resources in this folder yet.</p>'
@@ -1771,7 +1782,7 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
         </div>"""
 
     # Ungrouped section
-    ug_tiles_html = "".join(_resource_tile(r, is_admin=is_admin) for r in ungrouped)
+    ug_tiles_html = "".join(_resource_tile(r, is_admin=is_admin, tags=tags_by_resource.get(r['id'], [])) for r in ungrouped)
     ug_count = len(ungrouped)
     ug_count_text = f'<span class="muted" style="font-size:14px; font-weight:400;">&nbsp;({ug_count} link{"s" if ug_count != 1 else ""})</span>'
     ungrouped_list_html = _resource_tile_wrap(ug_tiles_html, list_id="ungrouped") if ug_tiles_html else '<p class="muted" style="margin:8px 0 0; font-size:13px;">No ungrouped resources.</p>'
@@ -1784,10 +1795,29 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
       {ungrouped_list_html}
     </div>""" if ungrouped or is_admin else ""
 
+    # Tag checkboxes for the Add Resource form
+    tag_checkboxes_add = "".join(
+        f'<label style="display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:400;margin:0 8px 4px 0;cursor:pointer;">'
+        f'<input type="checkbox" name="tag_ids" value="{t["id"]}" style="width:auto;margin:0;" />{esc(t["name"])}</label>'
+        for t in tags
+    )
+    tag_checkboxes_section = f'<label style="margin-top:10px;">Tags</label><div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:4px;">{tag_checkboxes_add}</div>' if tags else ''
+
+    # Manage Tags section (admin only)
+    tag_rows = "".join(
+        f'<span style="display:inline-flex;align-items:center;gap:4px;background:var(--jag-green);color:var(--jag-navy);border-radius:999px;padding:3px 10px;font-size:13px;font-weight:600;">'
+        f'{esc(t["name"])}'
+        f'<form method="post" action="/coach/resources/tags/{t["id"]}/delete" style="display:inline;margin:0;" onsubmit="return confirm(\'Delete tag \\\'{esc(t["name"])}\\\' ?\');">'
+        f'<button type="submit" style="background:none;border:none;cursor:pointer;font-size:14px;line-height:1;color:var(--jag-navy);padding:0 0 0 4px;" title="Delete tag">&times;</button>'
+        f'</form></span>'
+        for t in tags
+    ) if tags else '<span style="color:var(--jag-muted);font-size:13px;">No tags yet.</span>'
+
     manage_forms = f"""
     <div style="display:flex; gap:10px; margin-bottom:28px; flex-wrap:wrap;">
       <button type="button" class="btn btn-primary" onclick="var p=document.getElementById('res-add-panel');p.style.display=p.style.display==='none'?'block':'none';">+ Add Resource</button>
       <button type="button" class="btn btn-ghost" onclick="var p=document.getElementById('folder-add-panel');p.style.display=p.style.display==='none'?'block':'none';">+ Create Folder</button>
+      <button type="button" class="btn btn-ghost" onclick="var p=document.getElementById('tags-panel');p.style.display=p.style.display==='none'?'block':'none';">&#127991; Manage Tags</button>
     </div>
     <div id="res-add-panel" style="display:none; margin-bottom:24px;">
       <div class="card form-card" style="max-width:480px;">
@@ -1801,6 +1831,7 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
           <input type="text" id="res_desc" name="description" placeholder="A short note" />
           <label for="res_folder">Folder (optional)</label>
           <select id="res_folder" name="folder_id">{folder_opts}</select>
+          {tag_checkboxes_section}
           <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Add Resource</button>
         </form>
       </div>
@@ -1812,6 +1843,19 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
           <label for="folder_name">Folder name</label>
           <input type="text" id="folder_name" name="folder_name" required placeholder="e.g. Coaching Guides" />
           <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Create Folder</button>
+        </form>
+      </div>
+    </div>
+    <div id="tags-panel" style="display:none; margin-bottom:24px;">
+      <div class="card form-card" style="max-width:520px;">
+        <h2 style="margin-top:0; font-size:16px;">Manage Tags</h2>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">{tag_rows}</div>
+        <form method="post" action="/coach/resources/tags/new" style="display:flex;gap:8px;align-items:flex-end;">
+          <div style="flex:1;">
+            <label for="tag_name" style="font-size:13px;font-weight:600;">New tag name</label>
+            <input type="text" id="tag_name" name="tag_name" required placeholder="e.g. Video" style="margin-top:4px;" />
+          </div>
+          <button type="submit" class="btn btn-primary">Add Tag</button>
         </form>
       </div>
     </div>""" if is_admin else ""
@@ -1866,10 +1910,75 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     });
     </script>""" if is_admin else ""
 
+    # Search bar + tag filter buttons
+    tag_filter_btns = "".join(
+        f'<button type="button" class="res-tag-filter btn btn-ghost btn-sm" data-tag="{esc(t["name"].lower())}" '
+        f'style="border-radius:999px;">{esc(t["name"])}</button>'
+        for t in tags
+    )
+    search_bar = f"""
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:20px;">
+      <input type="search" id="res-search" placeholder="Search resources…"
+             style="max-width:260px;padding:8px 12px;border-radius:8px;border:1px solid var(--jag-border);font-size:14px;" />
+      {tag_filter_btns}
+      <button type="button" id="res-clear-filter" class="btn btn-ghost btn-sm" style="display:none;border-radius:999px;">&#10005; Clear</button>
+    </div>
+    <script>
+    (function() {{
+      var searchInput  = document.getElementById('res-search');
+      var clearBtn     = document.getElementById('res-clear-filter');
+      var activeTag    = null;
+
+      function filterTiles() {{
+        var query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+        document.querySelectorAll('.res-tile').forEach(function(tile) {{
+          var matchSearch = !query || (tile.dataset.search || '').indexOf(query) !== -1;
+          var matchTag    = !activeTag || (tile.dataset.tags || '').split(',').indexOf(activeTag) !== -1;
+          tile.style.display = (matchSearch && matchTag) ? '' : 'none';
+        }});
+        if (clearBtn) clearBtn.style.display = (query || activeTag) ? 'inline-block' : 'none';
+      }}
+
+      if (searchInput) searchInput.addEventListener('input', filterTiles);
+
+      document.querySelectorAll('.res-tag-filter').forEach(function(btn) {{
+        btn.addEventListener('click', function() {{
+          if (activeTag === btn.dataset.tag) {{
+            activeTag = null;
+            btn.style.background = '';
+            btn.style.color = '';
+          }} else {{
+            activeTag = btn.dataset.tag;
+            document.querySelectorAll('.res-tag-filter').forEach(function(b) {{
+              b.style.background = '';
+              b.style.color = '';
+            }});
+            btn.style.background = 'var(--jag-green)';
+            btn.style.color = 'var(--jag-navy)';
+          }}
+          filterTiles();
+        }});
+      }});
+
+      if (clearBtn) {{
+        clearBtn.addEventListener('click', function() {{
+          if (searchInput) searchInput.value = '';
+          activeTag = null;
+          document.querySelectorAll('.res-tag-filter').forEach(function(b) {{
+            b.style.background = '';
+            b.style.color = '';
+          }});
+          filterTiles();
+        }});
+      }}
+    }})();
+    </script>"""
+
     body = f"""
     <div class="page-head"><h1>Resources</h1></div>
     {message_html}{error_html}
     {manage_forms}
+    {search_bar}
     <div id="folders-container">{folder_sections}</div>
     {ungrouped_section}
     {sortable_js}
@@ -1877,12 +1986,20 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     return layout("Resources", body, user=user, active_nav="resources")
 
 
-def edit_resource_page(user, resource, folders, error=None):
+def edit_resource_page(user, resource, folders, all_tags=None, selected_tag_ids=None, error=None):
     error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
     folder_opts = '<option value="">— Ungrouped —</option>' + "".join(
         f'<option value="{f["id"]}" {"selected" if resource["folder_id"] == f["id"] else ""}>{esc(f["name"])}</option>'
         for f in folders
     )
+    all_tags = all_tags or []
+    selected_tag_ids = selected_tag_ids or []
+    tag_checkboxes = "".join(
+        f'<label style="display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:400;margin:0 8px 4px 0;cursor:pointer;">'
+        f'<input type="checkbox" name="tag_ids" value="{t["id"]}" {"checked" if t["id"] in selected_tag_ids else ""} style="width:auto;margin:0;" />{esc(t["name"])}</label>'
+        for t in all_tags
+    )
+    tags_section = f'<label style="margin-top:10px;">Tags</label><div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:4px;">{tag_checkboxes}</div>' if all_tags else ''
     body = f"""
     <div class="page-head">
       <h1>Edit Resource</h1>
@@ -1899,6 +2016,7 @@ def edit_resource_page(user, resource, folders, error=None):
         <input type="text" id="description" name="description" value="{esc(resource['description'] or '')}" />
         <label for="folder_id">Folder</label>
         <select id="folder_id" name="folder_id">{folder_opts}</select>
+        {tags_section}
         <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Save Changes</button>
       </form>
     </div>
