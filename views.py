@@ -1732,7 +1732,7 @@ def _resource_tile(r, is_admin=False, tags=None):
     tag_data = ",".join(t.lower() for t in tag_names)
     search_data = (r['name'] + " " + (r['description'] or "")).lower()
     # Google Drive thumbnail (no auth required for publicly shared files)
-    thumb_url = _gdrive_thumbnail(r.get('url', ''))
+    thumb_url = _gdrive_thumbnail(r['url'] or '')
     if thumb_url:
         thumb_html = f'<a href="{esc(r["url"])}" target="_blank" rel="noopener" tabindex="-1"><img src="{thumb_url}" alt="" loading="lazy" style="width:100%;height:160px;object-fit:cover;border-radius:6px;display:block;margin-bottom:8px;" onerror="this.style.display=\'none\'"></a>'
         min_w = "200px"
