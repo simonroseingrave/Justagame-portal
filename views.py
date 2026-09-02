@@ -1715,7 +1715,7 @@ def _resource_tile(r, is_admin=False, tags=None):
     border_color = tile_colors[r['id'] % len(tile_colors)]
     name_q = esc(r['name']).replace("'", "\\'")
     desc = f'<span style="font-size:12px;color:var(--jag-muted);display:block;margin-top:4px;line-height:1.4;">{esc(r["description"])}</span>' if r['description'] else ''
-    drag = '<span class="drag-handle" title="Drag to reorder" style="position:absolute;top:6px;left:8px;font-size:11px;color:#ccc;cursor:grab;">&#9776;</span>' if is_admin else ""
+    drag = '<span class="drag-handle" title="Drag to reorder" style="position:absolute;top:6px;left:8px;font-size:11px;color:#ccc;cursor:grab;z-index:1;">&#9776;</span>' if is_admin else ""
     admin_actions = f"""<div style="display:flex;gap:4px;margin-top:8px;padding-top:8px;border-top:1px solid var(--jag-border);">
         <a href="/coach/resources/{r['id']}/edit" class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;">Edit</a>
         <form method="post" action="/coach/resources/{r['id']}/delete" style="display:inline"
@@ -1728,21 +1728,31 @@ def _resource_tile(r, is_admin=False, tags=None):
         f'<span style="font-size:10px;background:var(--jag-green);color:var(--jag-navy);border-radius:999px;padding:1px 7px;font-weight:600;white-space:nowrap;">{esc(t)}</span>'
         for t in tag_names
     )
-    tags_html = f'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">{tag_pills}</div>' if tag_pills else ''
+    tags_html = f'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:auto;padding-top:8px;">{tag_pills}</div>' if tag_pills else ''
     tag_data = ",".join(t.lower() for t in tag_names)
     search_data = (r['name'] + " " + (r['description'] or "")).lower()
-    # Google Drive thumbnail (no auth required for publicly shared files)
+    # Google Drive thumbnail — or a styled placeholder
     thumb_url = _gdrive_thumbnail(r['url'] or '')
     if thumb_url:
-        thumb_html = f'<a href="{esc(r["url"])}" target="_blank" rel="noopener" tabindex="-1"><img src="{thumb_url}" alt="" loading="lazy" style="width:100%;height:160px;object-fit:cover;border-radius:6px;display:block;margin-bottom:8px;" onerror="this.style.display=\'none\'"></a>'
-        min_w = "200px"
-        max_w = "280px"
+        thumb_html = (
+            f'<a href="{esc(r["url"])}" target="_blank" rel="noopener" tabindex="-1"'
+            f' style="display:block;margin:-14px -14px 12px;border-radius:8px 8px 0 0;overflow:hidden;flex-shrink:0;">'
+            f'<img src="{thumb_url}" alt="" loading="lazy"'
+            f' style="width:100%;height:160px;object-fit:cover;display:block;"'
+            f" onerror=\"this.parentElement.outerHTML='<div style=\\'margin:-14px -14px 12px;height:100px;border-radius:8px 8px 0 0;background:{border_color};display:flex;align-items:center;justify-content:center;\\'><svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'36\\' height=\\'36\\' fill=\\'rgba(255,255,255,0.55)\\' viewBox=\\'0 0 24 24\\'><path d=\\'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z\\'/><path d=\\'M14 2v6h6\\'/></svg></div>'\">"
+            f'</a>'
+        )
     else:
-        thumb_html = ""
-        min_w = "160px"
-        max_w = "240px"
-    pad = '20px 14px 12px 28px' if is_admin else '14px'
-    return f"""<div class="res-tile" data-id="{r['id']}" data-tags="{esc(tag_data)}" data-search="{esc(search_data)}" style="position:relative;background:var(--jag-card);border:2.5px solid {border_color};border-radius:10px;padding:{pad};display:flex;flex-direction:column;min-width:{min_w};max-width:{max_w};word-break:break-word;">
+        thumb_html = (
+            f'<div style="margin:-14px -14px 12px;height:100px;border-radius:8px 8px 0 0;'
+            f'background:{border_color};display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+            f'<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" fill="rgba(255,255,255,0.55)" viewBox="0 0 24 24">'
+            f'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>'
+            f'<path d="M14 2v6h6"/></svg>'
+            f'</div>'
+        )
+    pad = '20px 14px 14px 28px' if is_admin else '14px'
+    return f"""<div class="res-tile" data-id="{r['id']}" data-tags="{esc(tag_data)}" data-search="{esc(search_data)}" style="position:relative;background:var(--jag-card);border:2.5px solid {border_color};border-radius:10px;padding:{pad};display:flex;flex-direction:column;word-break:break-word;overflow:hidden;">
       {drag}
       {thumb_html}
       <a href="{esc(r['url'])}" target="_blank" rel="noopener" style="font-weight:700;font-size:14px;color:var(--jag-navy);text-decoration:none;line-height:1.3;" onmouseover="this.style.textDecoration='underline';" onmouseout="this.style.textDecoration='none';">{esc(r['name'])} <span style="font-size:11px;opacity:0.5;">&#8599;</span></a>
@@ -1753,9 +1763,9 @@ def _resource_tile(r, is_admin=False, tags=None):
 
 
 def _resource_tile_wrap(tiles_html, list_id=None):
-    """Wrap resource tiles in a flex container."""
+    """Wrap resource tiles in a CSS grid container."""
     list_attr = f' data-list-id="{list_id}"' if list_id is not None else ""
-    return f'<div class="res-tiles-wrap" style="display:flex;flex-wrap:wrap;gap:12px;padding:8px 0 4px;"{list_attr}>{tiles_html}</div>'
+    return f'<div class="res-tiles-wrap" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:18px;padding:8px 0 12px;align-items:stretch;"{list_attr}>{tiles_html}</div>'
 
 
 def resources_page(user, folder_groups, ungrouped, folders, tags=None, tags_by_resource=None, message=None, error=None):
@@ -1798,13 +1808,15 @@ def resources_page(user, folder_groups, ungrouped, folders, tags=None, tags_by_r
             </span>""" if is_admin else ""
         admin_actions = f'<div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-left:auto;">{rename_html}{delete_btn}</div>' if is_admin else ""
         folder_sections += f"""
-        <div class="res-section" data-folder-id="{folder['id']}" style="margin-bottom:36px;">
-          <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px; flex-wrap:wrap;">
+        <div class="res-section" data-folder-id="{folder['id']}" style="margin-bottom:44px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
             {folder_handle}
-            <h2 style="margin:0; font-size:18px; color:var(--jag-navy);">&#128193; {esc(folder['name'])}{count_text}</h2>
+            <div style="border-left:4px solid var(--jag-green);padding-left:12px;flex:1;min-width:0;">
+              <h2 style="margin:0;font-size:20px;font-weight:700;color:var(--jag-navy);line-height:1.2;">{esc(folder['name'])}</h2>
+              <span style="font-size:13px;color:var(--jag-muted);">{count} resource{"s" if count != 1 else ""}</span>
+            </div>
             {admin_actions}
           </div>
-          <hr style="border:none; border-top:2px solid var(--jag-green); margin:0 0 10px;" />
           {list_content}
         </div>"""
 
@@ -1814,11 +1826,13 @@ def resources_page(user, folder_groups, ungrouped, folders, tags=None, tags_by_r
     ug_count_text = f'<span class="muted" style="font-size:14px; font-weight:400;">&nbsp;({ug_count} link{"s" if ug_count != 1 else ""})</span>'
     ungrouped_list_html = _resource_tile_wrap(ug_tiles_html, list_id="ungrouped") if ug_tiles_html else '<p class="muted" style="margin:8px 0 0; font-size:13px;">No ungrouped resources.</p>'
     ungrouped_section = f"""
-    <div class="res-section" style="margin-bottom:36px;">
-      <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
-        <h2 style="margin:0; font-size:18px; color:var(--jag-muted);">Ungrouped{ug_count_text}</h2>
+    <div class="res-section" style="margin-bottom:44px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <div style="border-left:4px solid var(--jag-border);padding-left:12px;">
+          <h2 style="margin:0;font-size:20px;font-weight:700;color:var(--jag-muted);line-height:1.2;">Ungrouped</h2>
+          <span style="font-size:13px;color:var(--jag-muted);">{ug_count} resource{"s" if ug_count != 1 else ""}</span>
+        </div>
       </div>
-      <hr style="border:none; border-top:2px solid var(--jag-border); margin:0 0 10px;" />
       {ungrouped_list_html}
     </div>""" if ungrouped or is_admin else ""
 
@@ -2002,12 +2016,18 @@ def resources_page(user, folder_groups, ungrouped, folders, tags=None, tags_by_r
     </script>"""
 
     body = f"""
+    <style>
+    .res-tile {{ transition: box-shadow 0.18s ease, transform 0.18s ease; }}
+    .res-tile:hover {{ box-shadow: 0 8px 28px rgba(0,0,0,0.14); transform: translateY(-3px); }}
+    </style>
+    <div style="max-width:1320px;">
     <div class="page-head"><h1>Resources</h1></div>
     {message_html}{error_html}
     {manage_forms}
     {search_bar}
     <div id="folders-container">{folder_sections}</div>
     {ungrouped_section}
+    </div>
     {sortable_js}
     """
     return layout("Resources", body, user=user, active_nav="resources")
