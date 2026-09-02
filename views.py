@@ -3,6 +3,7 @@ a templating engine, so there is no extra dependency to install. All
 user-supplied text is passed through `esc()` (html.escape) before being
 placed in markup to avoid HTML/script injection.
 """
+import re as _re
 from html import escape as esc
 
 from constants import (
@@ -1694,6 +1695,20 @@ def new_coach_form(user, error=None):
     return layout("Add Coach", body, user=user, active_nav="coaches")
 
 
+def _gdrive_thumbnail(url):
+    """Return a thumbnail URL for a Google Drive file link, or None if not GDrive."""
+    if not url:
+        return None
+    m = _re.search(r'/file/d/([a-zA-Z0-9_-]+)', url)
+    if not m:
+        # Also handle ?id= style links
+        m = _re.search(r'[?&]id=([a-zA-Z0-9_-]+)', url)
+    if m:
+        fid = m.group(1)
+        return f"https://drive.google.com/thumbnail?id={fid}&sz=w400"
+    return None
+
+
 def _resource_tile(r, is_admin=False, tags=None):
     """Render a single resource as a link tile card."""
     tile_colors = ['#1d6fa4', '#7c3aed', '#c2410c', '#15803d', '#be185d', '#0e7490', '#92400e', '#b45309']
@@ -1716,8 +1731,20 @@ def _resource_tile(r, is_admin=False, tags=None):
     tags_html = f'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px;">{tag_pills}</div>' if tag_pills else ''
     tag_data = ",".join(t.lower() for t in tag_names)
     search_data = (r['name'] + " " + (r['description'] or "")).lower()
-    return f"""<div class="res-tile" data-id="{r['id']}" data-tags="{esc(tag_data)}" data-search="{esc(search_data)}" style="position:relative;background:var(--jag-card);border:2.5px solid {border_color};border-radius:10px;padding:{'20px 14px 12px 28px' if is_admin else '14px'};display:flex;flex-direction:column;min-width:160px;max-width:240px;word-break:break-word;">
+    # Google Drive thumbnail (no auth required for publicly shared files)
+    thumb_url = _gdrive_thumbnail(r.get('url', ''))
+    if thumb_url:
+        thumb_html = f'<a href="{esc(r["url"])}" target="_blank" rel="noopener" tabindex="-1"><img src="{thumb_url}" alt="" loading="lazy" style="width:100%;height:160px;object-fit:cover;border-radius:6px;display:block;margin-bottom:8px;" onerror="this.style.display=\'none\'"></a>'
+        min_w = "200px"
+        max_w = "280px"
+    else:
+        thumb_html = ""
+        min_w = "160px"
+        max_w = "240px"
+    pad = '20px 14px 12px 28px' if is_admin else '14px'
+    return f"""<div class="res-tile" data-id="{r['id']}" data-tags="{esc(tag_data)}" data-search="{esc(search_data)}" style="position:relative;background:var(--jag-card);border:2.5px solid {border_color};border-radius:10px;padding:{pad};display:flex;flex-direction:column;min-width:{min_w};max-width:{max_w};word-break:break-word;">
       {drag}
+      {thumb_html}
       <a href="{esc(r['url'])}" target="_blank" rel="noopener" style="font-weight:700;font-size:14px;color:var(--jag-navy);text-decoration:none;line-height:1.3;" onmouseover="this.style.textDecoration='underline';" onmouseout="this.style.textDecoration='none';">{esc(r['name'])} <span style="font-size:11px;opacity:0.5;">&#8599;</span></a>
       {desc}
       {tags_html}
