@@ -902,6 +902,25 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
                   ) if current_group_name else ""
     session_count = len(measurement_sessions)
 
+    # Build group transfer history notice
+    group_lookup = {g["id"]: g["name"] for g in groups} if groups else {}
+    prior_group_ids = {
+        s["group_id"] for s in measurement_sessions
+        if s.get("group_id") and s["group_id"] != current_group_id
+    }
+    transfer_notice = ""
+    if prior_group_ids:
+        prior_names = ", ".join(
+            esc(group_lookup.get(gid, f"Group #{gid}")) for gid in sorted(prior_group_ids)
+        )
+        transfer_notice = f"""
+        <div style="background:rgba(240,168,46,0.1);border:1px solid rgba(240,168,46,0.35);border-radius:8px;
+                    padding:10px 14px;margin-bottom:16px;font-size:13px;color:#7A5800;display:flex;gap:8px;align-items:center;">
+          <span style="font-size:16px;">&#128257;</span>
+          <span>This athlete has measurement history from a previous group: <strong>{prior_names}</strong>.
+          Their full session history is shown below; group stats pages only count sessions recorded while in each group.</span>
+        </div>"""
+
     body = f"""
     <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
       {avatar}
@@ -921,11 +940,12 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
     </div>
     {message_html}
     {group_form}
+    {transfer_notice}
 
     <section class="stat-row">
       <div class="card stat-card">
         <div class="stat-number">{session_count}</div>
-        <div class="stat-label">Test Sessions</div>
+        <div class="stat-label">Test Sessions (all groups)</div>
       </div>
     </section>
 

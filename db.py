@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 CREATE TABLE IF NOT EXISTS measurement_sessions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     participant_id INTEGER NOT NULL REFERENCES users(id),
+    group_id INTEGER REFERENCES participant_groups(id),
     date TEXT NOT NULL,
     logged_by INTEGER REFERENCES users(id),
     created_at TEXT NOT NULL
@@ -157,6 +158,7 @@ def init_db():
         "ALTER TABLE users ADD COLUMN is_admin INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE participant_groups ADD COLUMN icon_url TEXT",
         "ALTER TABLE users ADD COLUMN username TEXT",
+        "ALTER TABLE measurement_sessions ADD COLUMN group_id INTEGER REFERENCES participant_groups(id)",
     ]:
         try:
             conn.execute(sql)
@@ -247,12 +249,13 @@ def seed_demo_data():
 # never needs to change if games/fields are added or removed later.
 
 
-def create_measurement_session(conn, participant_id, date, logged_by, results):
+def create_measurement_session(conn, participant_id, date, logged_by, results, group_id=None):
     """results: an iterable of (game_key, field_key, value) tuples, already
-    filtered down to just the fields the coach actually filled in."""
+    filtered down to just the fields the coach actually filled in.
+    group_id: the group the athlete belonged to at recording time (snapshot)."""
     session_id = conn.execute(
-        "INSERT INTO measurement_sessions (participant_id, date, logged_by, created_at) VALUES (?, ?, ?, ?)",
-        (participant_id, date, logged_by, now()),
+        "INSERT INTO measurement_sessions (participant_id, group_id, date, logged_by, created_at) VALUES (?, ?, ?, ?, ?)",
+        (participant_id, group_id, date, logged_by, now()),
     ).lastrowid
     for game_key, field_key, value in results:
         conn.execute(
@@ -263,14 +266,23 @@ def create_measurement_session(conn, participant_id, date, logged_by, results):
     return session_id
 
 
-def measurement_sessions_for(conn, participant_id):
-    """All Measurement Games sessions for a participant, most recent first,
-    each with its field results nested in a {(game_key, field_key): value}
-    dict for easy lookup when rendering."""
-    sessions = conn.execute(
-        "SELECT * FROM measurement_sessions WHERE participant_id = ? ORDER BY date DESC, id DESC",
-        (participant_id,),
-    ).fetchall()
+def measurement_sessions_for(conn, participant_id, group_id=None):
+    """All Measurement Games sessions for a participant, most recent first.
+    Pass group_id to restrict to sessions recorded while in that group
+    (used by group-level pages so a transferred athlete's old data stays
+    in the group they were in, not the new one).
+    Pass group_id=None (default) to return all sessions — used for the
+    athlete's own profile which shows their full history."""
+    if group_id is not None:
+        sessions = conn.execute(
+            "SELECT * FROM measurement_sessions WHERE participant_id = ? AND group_id = ? ORDER BY date DESC, id DESC",
+            (participant_id, group_id),
+        ).fetchall()
+    else:
+        sessions = conn.execute(
+            "SELECT * FROM measurement_sessions WHERE participant_id = ? ORDER BY date DESC, id DESC",
+            (participant_id,),
+        ).fetchall()
     out = []
     for s in sessions:
         rows = conn.execute(
@@ -280,6 +292,7 @@ def measurement_sessions_for(conn, participant_id):
         out.append({
             "id": s["id"],
             "date": s["date"],
+            "group_id": s["group_id"],
             "results": {(r["game_key"], r["field_key"]): r["value"] for r in rows},
         })
     return out
@@ -298,22 +311,24 @@ def delete_measurement_session(conn, session_id):
     conn.commit()
 
 
-def find_or_create_session(conn, participant_id, date, logged_by):
-    """Return the existing session id for this athlete+date, or create one."""
+def find_or_create_session(conn, participant_id, date, logged_by, group_id=None):
+    """Return the existing session id for this athlete+date, or create one.
+    group_id is snapshotted on creation so the session stays attributed to
+    the group the athlete was in at recording time."""
     existing = conn.execute(
         "SELECT id FROM measurement_sessions WHERE participant_id = ? AND date = ? ORDER BY id DESC LIMIT 1",
         (participant_id, date),
     ).fetchone()
     if existing:
         return existing["id"]
-    return create_bare_session(conn, participant_id, date, logged_by)
+    return create_bare_session(conn, participant_id, date, logged_by, group_id=group_id)
 
 
-def create_bare_session(conn, participant_id, date, logged_by):
+def create_bare_session(conn, participant_id, date, logged_by, group_id=None):
     """Create a session with no results yet (used by quick-save flow)."""
     session_id = conn.execute(
-        "INSERT INTO measurement_sessions (participant_id, date, logged_by, created_at) VALUES (?, ?, ?, ?)",
-        (participant_id, date, logged_by, now()),
+        "INSERT INTO measurement_sessions (participant_id, group_id, date, logged_by, created_at) VALUES (?, ?, ?, ?, ?)",
+        (participant_id, group_id, date, logged_by, now()),
     ).lastrowid
     conn.commit()
     return session_id

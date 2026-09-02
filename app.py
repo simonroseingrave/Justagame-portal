@@ -334,7 +334,7 @@ def all_progress(req):
             group_groups, ungrouped = db.list_participants_by_group(conn)
             groups_data = []
             for group, participants in group_groups:
-                ps_data = [(dict(p), db.measurement_sessions_for(conn, p["id"])) for p in participants]
+                ps_data = [(dict(p), db.measurement_sessions_for(conn, p["id"], group_id=group["id"])) for p in participants]
                 groups_data.append((dict(group), ps_data))
             if ungrouped:
                 ug_data = [(dict(p), db.measurement_sessions_for(conn, p["id"])) for p in ungrouped]
@@ -350,7 +350,7 @@ def all_progress(req):
                 participants = conn.execute(
                     "SELECT * FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name", (gid,)
                 ).fetchall()
-                ps_data = [(dict(p), db.measurement_sessions_for(conn, p["id"])) for p in participants]
+                ps_data = [(dict(p), db.measurement_sessions_for(conn, p["id"], group_id=gid)) for p in participants]
                 groups_data.append((dict(group), ps_data))
         sport_filter = req.query.get("sport", [""])[0].strip() or None
         return Response(views.all_progress_page(coach, groups_data, sport_filter=sport_filter))
@@ -377,7 +377,7 @@ def group_progress(req, group_id):
             "SELECT * FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name",
             (group_id,),
         ).fetchall()
-        participants_sessions = [(dict(p), db.measurement_sessions_for(conn, p["id"])) for p in participants]
+        participants_sessions = [(dict(p), db.measurement_sessions_for(conn, p["id"], group_id=group_id)) for p in participants]
         return Response(views.group_progress_page(coach, dict(group), participants_sessions))
     finally:
         conn.close()
@@ -401,7 +401,7 @@ def group_achievement_summary(req, group_id):
             "SELECT * FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name",
             (group_id,),
         ).fetchall()
-        participants_sessions = [(dict(p), db.measurement_sessions_for(conn, p["id"])) for p in participants]
+        participants_sessions = [(dict(p), db.measurement_sessions_for(conn, p["id"], group_id=group_id)) for p in participants]
         return Response(views.group_achievement_summary_page(coach, dict(group), participants_sessions))
     finally:
         conn.close()
@@ -425,7 +425,7 @@ def group_scores_table(req, group_id):
             "SELECT * FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name",
             (group_id,),
         ).fetchall()
-        participants_sessions = [(dict(p), db.measurement_sessions_for(conn, p["id"])) for p in participants]
+        participants_sessions = [(dict(p), db.measurement_sessions_for(conn, p["id"], group_id=group_id)) for p in participants]
         return Response(views.group_scores_table_page(coach, dict(group), participants_sessions))
     finally:
         conn.close()
@@ -510,7 +510,9 @@ def group_session_save(req):
         return Response('{"error":"invalid value"}', status=400, content_type="application/json")
     conn = db.get_conn()
     try:
-        session_id = db.find_or_create_session(conn, athlete_id, date, coach["id"])
+        athlete = conn.execute("SELECT group_id FROM users WHERE id = ?", (athlete_id,)).fetchone()
+        athlete_group_id = athlete["group_id"] if athlete else None
+        session_id = db.find_or_create_session(conn, athlete_id, date, coach["id"], group_id=athlete_group_id)
         db.upsert_measurement_result(conn, session_id, game_key, field_key, value)
         # Recalculate computed fields
         computed_updates = {}
@@ -543,7 +545,9 @@ def start_measurement_session(req, participant_id):
     date = req.form_get("date") or db.today()
     conn = db.get_conn()
     try:
-        session_id = db.create_bare_session(conn, participant_id, date, coach["id"])
+        participant = conn.execute("SELECT group_id FROM users WHERE id = ?", (participant_id,)).fetchone()
+        participant_group_id = participant["group_id"] if participant else None
+        session_id = db.create_bare_session(conn, participant_id, date, coach["id"], group_id=participant_group_id)
         return Response(json.dumps({"session_id": session_id}), content_type="application/json")
     finally:
         conn.close()
@@ -647,7 +651,9 @@ def log_measurement_session(req, participant_id):
 
     conn = db.get_conn()
     try:
-        db.create_measurement_session(conn, participant_id, date, coach["id"], results)
+        participant = conn.execute("SELECT group_id FROM users WHERE id = ?", (participant_id,)).fetchone()
+        participant_group_id = participant["group_id"] if participant else None
+        db.create_measurement_session(conn, participant_id, date, coach["id"], results, group_id=participant_group_id)
     finally:
         conn.close()
     return flash_redirect(f"/coach/participants/{participant_id}", "Measurement Games results saved.")
