@@ -267,29 +267,50 @@ def find_any_game(key):
     return find_measurement_game(key) or find_sport_game(key)
 
 
-# Points thresholds -> level name. Must stay sorted ascending by points.
-LEVELS = [
-    (0, "Rookie"),
-    (100, "Developing Athlete"),
-    (250, "Adaptive Athlete"),
-    (500, "Skilled Performer"),
-    (900, "Elite Adaptor"),
+# Improvement % thresholds -> level name.
+# Based on average % improvement across all measurement game fields
+# between an athlete's first and latest recorded session.
+# Must stay sorted ascending by percentage.
+IMPROVEMENT_LEVELS = [
+    (0,  "Baseline Set"),
+    (1,  "Early Gains"),
+    (10, "Building Adaptability"),
+    (20, "Adaptive Athlete"),
+    (30, "Skilled Performer"),
+    (40, "Elite Adaptor"),
 ]
 
+# Maximum % improvement that fills the bar to 100%
+IMPROVEMENT_MAX_PCT = 40
 
-def get_level_info(points):
-    """Return dict with current level, next level, and progress fraction."""
-    current_name = LEVELS[0][1]
-    current_threshold = LEVELS[0][0]
+
+def get_improvement_level(pct):
+    """Return level info dict from an average improvement percentage.
+
+    pct=None means only one session recorded (baseline set, no comparison yet).
+    """
+    if pct is None:
+        return {
+            "name": "Baseline Set",
+            "progress": 0.0,
+            "pct": None,
+            "next_name": "Early Gains",
+            "next_threshold": 1,
+            "current_threshold": 0,
+            "baseline_only": True,
+        }
+
+    current_name = IMPROVEMENT_LEVELS[0][1]
+    current_threshold = IMPROVEMENT_LEVELS[0][0]
     next_name = None
     next_threshold = None
 
-    for i, (threshold, name) in enumerate(LEVELS):
-        if points >= threshold:
+    for i, (threshold, name) in enumerate(IMPROVEMENT_LEVELS):
+        if pct >= threshold:
             current_name = name
             current_threshold = threshold
-            if i + 1 < len(LEVELS):
-                next_threshold, next_name = LEVELS[i + 1]
+            if i + 1 < len(IMPROVEMENT_LEVELS):
+                next_threshold, next_name = IMPROVEMENT_LEVELS[i + 1]
             else:
                 next_threshold, next_name = None, None
         else:
@@ -297,19 +318,17 @@ def get_level_info(points):
 
     if next_threshold is None:
         progress = 1.0
-        into_level = points - current_threshold
-        span = None
     else:
         span = next_threshold - current_threshold
-        into_level = points - current_threshold
+        into_level = pct - current_threshold
         progress = max(0.0, min(1.0, into_level / span)) if span else 1.0
 
     return {
-        "current_name": current_name,
-        "current_threshold": current_threshold,
+        "name": current_name,
+        "progress": progress,
+        "pct": pct,
         "next_name": next_name,
         "next_threshold": next_threshold,
-        "points": points,
-        "points_to_next": (next_threshold - points) if next_threshold is not None else 0,
-        "progress": progress,
+        "current_threshold": current_threshold,
+        "baseline_only": False,
     }

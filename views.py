@@ -455,8 +455,32 @@ def measurement_games_history(sessions, show_delete=False, participant_id=None):
     )
 
 
+def _calc_improvement_pct(measurement_sessions):
+    """Average % improvement across all fields, first vs latest session.
+    Returns None if fewer than 2 sessions."""
+    if len(measurement_sessions) < 2:
+        return None
+    latest = measurement_sessions[0]
+    first  = measurement_sessions[-1]
+    improvements = []
+    for game in all_measurement_games():
+        for field in game["fields"] + game.get("computed", []):
+            fv = first["results"].get((game["key"], field["key"]))
+            lv = latest["results"].get((game["key"], field["key"]))
+            if fv is None or lv is None or fv == 0:
+                continue
+            if field["type"] == "time":
+                imp = (fv - lv) / fv * 100   # lower time = improvement
+            else:
+                imp = (lv - fv) / fv * 100   # higher score = improvement
+            improvements.append(imp)
+    if not improvements:
+        return None
+    return sum(improvements) / len(improvements)
+
+
 def participant_dashboard(user, measurement_sessions):
-    from constants import get_level_info
+    from constants import get_improvement_level
     first_name = esc(user['name'].split(' ')[0])
     # Avatar
     name = user['name']
@@ -467,23 +491,39 @@ def participant_dashboard(user, measurement_sessions):
     sport = esc(user.get('sport') or '')
     programme = esc(user.get('programme') or '')
     session_count = len(measurement_sessions)
-    # Level info
-    points = user.get('points') or 0
-    lvl = get_level_info(points)
-    pct = int(lvl['progress'] * 100)
-    next_txt = f"<span style='color:var(--jag-muted);font-size:12px;'>{lvl['points_to_next']} pts to {esc(lvl['next_name'])}</span>" if lvl['next_name'] else "<span style='color:var(--jag-green);font-size:12px;font-weight:700;'>Max level reached!</span>"
+    # Improvement-based level
+    imp_pct = _calc_improvement_pct(measurement_sessions)
+    lvl = get_improvement_level(imp_pct)
+    bar_pct = int(lvl['progress'] * 100)
+    if lvl['baseline_only']:
+        next_txt = ('<span style="font-size:12px;color:var(--jag-muted);">'
+                    'Baseline recorded &mdash; your progress unlocks after your next session</span>')
+        bar_marker = ('<div style="width:10px;height:10px;border-radius:50%;background:var(--jag-green);'
+                      'margin-top:-1px;"></div>')
+        bar_inner = bar_marker
+    elif lvl['next_name']:
+        to_next = lvl['next_threshold'] - (imp_pct or 0)
+        next_txt = (f'<span style="font-size:12px;color:var(--jag-muted);">'
+                    f'{to_next:.1f}% avg improvement to {esc(lvl["next_name"])}</span>')
+        bar_inner = (f'<div style="background:var(--jag-green);width:{bar_pct}%;height:100%;'
+                     f'border-radius:999px;transition:width 0.6s ease;"></div>')
+    else:
+        next_txt = '<span style="font-size:12px;color:var(--jag-green);font-weight:700;">Top level reached!</span>'
+        bar_inner = '<div style="background:var(--jag-green);width:100%;height:100%;border-radius:999px;"></div>'
     level_bar = f"""
     <div style="margin-top:10px;">
       <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
-        <span style="font-weight:700;font-size:14px;color:var(--jag-navy);">&#127942; {esc(lvl['current_name'])}</span>
+        <span style="font-weight:700;font-size:14px;color:var(--jag-navy);">&#127942; {esc(lvl['name'])}</span>
         {next_txt}
       </div>
-      <div style="background:var(--jag-border);border-radius:999px;height:8px;overflow:hidden;">
-        <div style="background:var(--jag-green);width:{pct}%;height:100%;border-radius:999px;transition:width 0.6s ease;"></div>
+      <div style="background:var(--jag-border);border-radius:999px;height:8px;overflow:hidden;
+                  display:flex;align-items:center;">
+        {bar_inner}
       </div>
     </div>"""
     sport_pill = (f'<span style="font-size:12px;font-weight:600;background:{av_color}22;color:{av_color};'
                   f'border-radius:999px;padding:2px 10px;">{sport}</span>') if sport else ''
+    imp_stat = (f'{imp_pct:+.1f}%' if imp_pct is not None else '—')
     body = f"""
     <div style="background:var(--jag-card);border-radius:16px;padding:24px 28px;margin-bottom:28px;
                 display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;
@@ -505,8 +545,8 @@ def participant_dashboard(user, measurement_sessions):
         <div class="stat-label">Test Sessions</div>
       </div>
       <div class="card stat-card">
-        <div class="stat-number">{points}</div>
-        <div class="stat-label">Total Points</div>
+        <div class="stat-number">{imp_stat}</div>
+        <div class="stat-label">Avg Improvement</div>
       </div>
     </section>
 
