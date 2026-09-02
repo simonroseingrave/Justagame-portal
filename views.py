@@ -194,8 +194,10 @@ def measurement_games_form(participant_id):
     created lazily on the first save. A bulk-submit fallback is also
     available via the full form."""
     sections_html = "".join(f"""
-    <div class="mg-section">
-      <h4>{esc(section['section'])}</h4>
+    <div class="mg-section" style="margin-bottom:24px;">
+      <div style="border-left:4px solid var(--jag-green);padding-left:10px;margin-bottom:12px;">
+        <h4 style="margin:0;font-size:15px;font-weight:700;color:var(--jag-navy);">{esc(section['section'])}</h4>
+      </div>
       {''.join(_measurement_game_fieldset(g) for g in section['games'])}
     </div>
     """ for section in MEASUREMENT_GAMES)
@@ -204,8 +206,10 @@ def measurement_games_form(participant_id):
     sport_sections_html = ""
     for sport, sport_sections in SPORT_SPECIFIC_GAMES.items():
         sport_fieldsets = "".join(
-            f"""<div class="mg-section">
-              <h4>{esc(section['section'])}</h4>
+            f"""<div class="mg-section" style="margin-bottom:24px;">
+              <div style="border-left:4px solid var(--jag-green);padding-left:10px;margin-bottom:12px;">
+                <h4 style="margin:0;font-size:15px;font-weight:700;color:var(--jag-navy);">{esc(section['section'])}</h4>
+              </div>
               {''.join(_measurement_game_fieldset(g) for g in section['games'])}
             </div>"""
             for section in sport_sections
@@ -452,18 +456,57 @@ def measurement_games_history(sessions, show_delete=False, participant_id=None):
 
 
 def participant_dashboard(user, measurement_sessions):
+    from constants import get_level_info
+    first_name = esc(user['name'].split(' ')[0])
+    # Avatar
+    name = user['name']
+    parts = name.strip().split()
+    inits = (parts[0][0] + parts[-1][0]).upper() if len(parts) >= 2 else name[0].upper()
+    tile_colors = ['#1d6fa4', '#7c3aed', '#c2410c', '#15803d', '#be185d', '#0e7490', '#92400e']
+    av_color = tile_colors[user['id'] % len(tile_colors)]
+    sport = esc(user.get('sport') or '')
+    programme = esc(user.get('programme') or '')
+    session_count = len(measurement_sessions)
+    # Level info
+    points = user.get('points') or 0
+    lvl = get_level_info(points)
+    pct = int(lvl['progress'] * 100)
+    next_txt = f"<span style='color:var(--jag-muted);font-size:12px;'>{lvl['points_to_next']} pts to {esc(lvl['next_name'])}</span>" if lvl['next_name'] else "<span style='color:var(--jag-green);font-size:12px;font-weight:700;'>Max level reached!</span>"
+    level_bar = f"""
+    <div style="margin-top:10px;">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
+        <span style="font-weight:700;font-size:14px;color:var(--jag-navy);">&#127942; {esc(lvl['current_name'])}</span>
+        {next_txt}
+      </div>
+      <div style="background:var(--jag-border);border-radius:999px;height:8px;overflow:hidden;">
+        <div style="background:var(--jag-green);width:{pct}%;height:100%;border-radius:999px;transition:width 0.6s ease;"></div>
+      </div>
+    </div>"""
+    sport_pill = (f'<span style="font-size:12px;font-weight:600;background:{av_color}22;color:{av_color};'
+                  f'border-radius:999px;padding:2px 10px;">{sport}</span>') if sport else ''
     body = f"""
-    <div class="page-head">
-      <div>
-        <h1>Welcome back, {esc(user['name'].split(' ')[0])}</h1>
-        <p class="muted">{esc(user.get('sport') or '')} &middot; {esc(user.get('programme') or '')}</p>
+    <div style="background:var(--jag-card);border-radius:16px;padding:24px 28px;margin-bottom:28px;
+                display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;
+                border:2px solid {av_color}33;">
+      <div style="width:68px;height:68px;border-radius:50%;background:{av_color};display:flex;
+                  align-items:center;justify-content:center;font-weight:800;font-size:24px;color:#fff;
+                  flex-shrink:0;box-shadow:0 4px 16px {av_color}55;">{inits}</div>
+      <div style="flex:1;min-width:200px;">
+        <h1 style="margin:0 0 4px;font-size:24px;">Welcome back, {first_name}!</h1>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;">{sport_pill}</div>
+        {f'<p style="margin:0 0 4px;font-size:13px;color:var(--jag-muted);">{programme}</p>' if programme else ''}
+        {level_bar}
       </div>
     </div>
 
     <section class="stat-row">
       <div class="card stat-card">
-        <div class="stat-number">{len(measurement_sessions)}</div>
+        <div class="stat-number">{session_count}</div>
         <div class="stat-label">Test Sessions</div>
+      </div>
+      <div class="card stat-card">
+        <div class="stat-number">{points}</div>
+        <div class="stat-label">Total Points</div>
       </div>
     </section>
 
@@ -478,18 +521,25 @@ def _athlete_tile(p, is_admin=False):
     name = p['name']
     parts = name.strip().split()
     inits = (parts[0][0] + parts[-1][0]).upper() if len(parts) >= 2 else name[0].upper()
-    sport_prog = esc(p.get('sport') or '')
-    if p.get('programme'):
-        sport_prog += f' &middot; {esc(p["programme"])}'
+    sport = esc(p.get('sport') or '')
     tile_colors = ['#1d6fa4', '#7c3aed', '#c2410c', '#15803d', '#be185d', '#0e7490', '#92400e']
     color = tile_colors[p['id'] % len(tile_colors)]
-    drag = '<span class="drag-handle" title="Drag to move group" style="position:absolute;top:5px;right:6px;font-size:11px;color:#bbb;line-height:1;">&#9776;</span>' if is_admin else ""
-    sub = f'<span style="font-size:11px;color:var(--jag-muted);text-align:center;line-height:1.3;">{sport_prog}</span>' if sport_prog else ''
-    return f"""<a href="/coach/participants/{p['id']}" class="athlete-tile" data-id="{p['id']}" style="position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;padding:14px 10px 12px;background:var(--jag-card);border:1.5px solid var(--jag-border);border-radius:12px;text-decoration:none;color:inherit;min-width:100px;max-width:130px;cursor:pointer;" onmouseover="this.style.boxShadow='0 2px 8px rgba(0,0,0,0.12)';this.style.borderColor='var(--jag-green)';" onmouseout="this.style.boxShadow='';this.style.borderColor='var(--jag-border)';">
+    drag = '<span class="drag-handle" title="Drag to move group" style="position:absolute;top:6px;right:8px;font-size:11px;color:#bbb;line-height:1;">&#9776;</span>' if is_admin else ""
+    sport_badge = (f'<span style="font-size:10px;font-weight:600;background:{color}22;color:{color};'
+                   f'border-radius:999px;padding:2px 8px;white-space:nowrap;">{sport}</span>') if sport else ''
+    return f"""<a href="/coach/participants/{p['id']}" class="athlete-tile" data-id="{p['id']}"
+      style="position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;
+             padding:20px 12px 16px;background:var(--jag-card);border:2px solid var(--jag-border);
+             border-radius:14px;text-decoration:none;color:inherit;cursor:pointer;
+             transition:box-shadow 0.18s ease,border-color 0.18s ease,transform 0.18s ease;"
+      onmouseover="this.style.boxShadow='0 6px 20px rgba(0,0,0,0.13)';this.style.borderColor='{color}';this.style.transform='translateY(-2px)';"
+      onmouseout="this.style.boxShadow='';this.style.borderColor='var(--jag-border)';this.style.transform='';">
       {drag}
-      <div style="width:42px;height:42px;border-radius:50%;background:{color};display:flex;align-items:center;justify-content:center;font-weight:700;font-size:15px;color:#fff;flex-shrink:0;">{inits}</div>
-      <span style="font-weight:600;font-size:13px;text-align:center;line-height:1.3;word-break:break-word;">{esc(name)}</span>
-      {sub}
+      <div style="width:54px;height:54px;border-radius:50%;background:{color};display:flex;align-items:center;
+                  justify-content:center;font-weight:800;font-size:19px;color:#fff;flex-shrink:0;
+                  box-shadow:0 3px 10px {color}55;">{inits}</div>
+      <span style="font-weight:700;font-size:13px;text-align:center;line-height:1.3;word-break:break-word;">{esc(name)}</span>
+      {sport_badge}
     </a>"""
 
 
@@ -533,7 +583,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         count = len(participants)
         tiles_html = "".join(_athlete_tile(p, is_admin=is_admin) for p in participants)
         empty_msg = '<p class="muted" style="font-size:13px;padding:8px 0;">No athletes in this group yet.</p>'
-        tiles_wrap = f'<div class="athlete-tiles-wrap" data-group-list-id="{group["id"]}" style="display:flex;flex-wrap:wrap;gap:10px;padding:10px 0 4px;">{tiles_html or empty_msg}</div>'
+        tiles_wrap = f'<div class="athlete-tiles-wrap" data-group-list-id="{group["id"]}" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;padding:8px 0 4px;">{tiles_html or empty_msg}</div>'
         folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder groups" style="color:var(--jag-muted);cursor:grab;font-size:16px;">&#9776;</span>' if is_admin else ""
         summary_link = f'<a href="/coach/groups/{group["id"]}/achievement-summary" class="btn btn-sm" style="font-size:12px;background:var(--jag-green);color:var(--jag-navy);font-weight:600;border:none;">&#128200; Group Stats</a>'
         admin_btns = f"""<a href="/coach/groups/{group['id']}/edit" class="btn btn-ghost btn-sm" style="font-size:12px;">Edit</a>
@@ -542,17 +592,18 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
               <button type="submit" class="btn btn-ghost btn-sm" style="font-size:12px;">Delete</button>
             </form>""" if is_admin else ""
         group_sections += f"""
-        <div class="group-section" data-group-id="{group['id']}" style="margin-bottom:40px;">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap;">
+        <div class="group-section" data-group-id="{group['id']}" style="margin-bottom:44px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
             {folder_handle}
-            <h2 style="margin:0;font-size:24px;font-weight:800;color:var(--jag-navy);letter-spacing:-0.3px;">{esc(group['name'])}</h2>
-            <span class="muted group-count" style="font-size:14px;">({count} athlete{"s" if count != 1 else ""})</span>
-            <div style="margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+            <div style="border-left:4px solid var(--jag-green);padding-left:12px;flex:1;min-width:0;">
+              <h2 style="margin:0;font-size:20px;font-weight:700;color:var(--jag-navy);line-height:1.2;">{esc(group['name'])}</h2>
+              <span class="muted group-count" style="font-size:13px;">{count} athlete{"s" if count != 1 else ""}</span>
+            </div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
               {summary_link}
               {admin_btns}
             </div>
           </div>
-          <hr style="border:none;border-top:3px solid var(--jag-green);margin:0 0 8px;" />
           {tiles_wrap}
         </div>"""
 
@@ -560,14 +611,16 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     ug_count = len(ungrouped_summaries)
     ug_tiles = "".join(_athlete_tile(p, is_admin=is_admin) for p in ungrouped_summaries)
     ug_empty = '<p class="muted" style="font-size:13px;padding:8px 0;">No ungrouped athletes.</p>'
-    ug_wrap = f'<div class="athlete-tiles-wrap" data-group-list-id="ungrouped" style="display:flex;flex-wrap:wrap;gap:10px;padding:10px 0 4px;">{ug_tiles or ug_empty}</div>'
+    ug_wrap = f'<div class="athlete-tiles-wrap" data-group-list-id="ungrouped" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;padding:8px 0 4px;">{ug_tiles or ug_empty}</div>'
+    ug_label = "Athletes" if not group_summaries else "Ungrouped"
     ungrouped_section = f"""
-    <div class="group-section" style="margin-bottom:40px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-        <h2 style="margin:0;font-size:20px;color:var(--jag-muted);">{"Athletes" if not group_summaries else "Ungrouped"}</h2>
-        <span class="muted group-count" style="font-size:14px;">({ug_count} athlete{"s" if ug_count != 1 else ""})</span>
+    <div class="group-section" style="margin-bottom:44px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <div style="border-left:4px solid var(--jag-border);padding-left:12px;">
+          <h2 style="margin:0;font-size:20px;font-weight:700;color:var(--jag-muted);line-height:1.2;">{ug_label}</h2>
+          <span class="muted group-count" style="font-size:13px;">{ug_count} athlete{"s" if ug_count != 1 else ""}</span>
+        </div>
       </div>
-      <hr style="border:none;border-top:2px solid var(--jag-border);margin:0 0 4px;" />
       {ug_wrap}
     </div>"""
 
@@ -647,6 +700,8 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         subtitle = 'No group assigned yet &mdash; contact an admin.'
 
     body = f"""
+    <style>.athlete-tile {{transition:box-shadow 0.18s ease,border-color 0.18s ease,transform 0.18s ease;}}</style>
+    <div style="max-width:1320px;">
     <div class="page-head">
       <div>
         <h1>Coach Dashboard</h1>
@@ -657,6 +712,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     {message_html}
     <div style="margin-top:28px;">
       {content}
+    </div>
     </div>
     {sortable_js}
     """
@@ -718,7 +774,6 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
         for g in groups
     )
     current_group_name = next((g["name"] for g in groups if g["id"] == current_group_id), None)
-    group_badge = f' &middot; <span class="tag">{esc(current_group_name)}</span>' if current_group_name else ""
 
     is_admin = coach.get("is_admin")
     group_form = f"""
@@ -733,16 +788,39 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
 
     reset_btn = f"""<form method="post" action="/coach/participants/{participant['id']}/reset-password"
           onsubmit="return confirm('Reset {esc(participant['name'])}&#39;s password? They will need the new one to log in again.');">
-      <button type="submit" class="btn btn-ghost">Reset Password</button>
+      <button type="submit" class="btn btn-ghost btn-sm">Reset Password</button>
     </form>""" if is_admin else ""
 
+    # Build large avatar for the profile header
+    name = participant['name']
+    parts = name.strip().split()
+    inits = (parts[0][0] + parts[-1][0]).upper() if len(parts) >= 2 else name[0].upper()
+    tile_colors = ['#1d6fa4', '#7c3aed', '#c2410c', '#15803d', '#be185d', '#0e7490', '#92400e']
+    av_color = tile_colors[participant['id'] % len(tile_colors)]
+    avatar = (f'<div style="width:64px;height:64px;border-radius:50%;background:{av_color};'
+              f'display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;'
+              f'color:#fff;flex-shrink:0;box-shadow:0 4px 14px {av_color}55;">{inits}</div>')
+
+    sport_pill = (f'<span style="font-size:12px;font-weight:600;background:{av_color}22;color:{av_color};'
+                  f'border-radius:999px;padding:2px 10px;">{esc(participant["sport"] or "")}</span>'
+                  ) if participant.get("sport") else ""
+    group_pill = (f'<span style="font-size:12px;font-weight:600;background:var(--jag-green);color:var(--jag-navy);'
+                  f'border-radius:999px;padding:2px 10px;">{esc(current_group_name)}</span>'
+                  ) if current_group_name else ""
+    session_count = len(measurement_sessions)
+
     body = f"""
-    <div class="page-head">
-      <div>
-        <h1>{esc(participant['name'])}</h1>
-        <p class="muted">{esc(participant['sport'] or '')} &middot; {esc(participant['programme'] or '')} &middot; {esc(participant['email'])}{group_badge}</p>
+    <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
+      {avatar}
+      <div style="flex:1;min-width:0;">
+        <h1 style="margin:0 0 4px;font-size:26px;">{esc(participant['name'])}</h1>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px;">
+          {sport_pill}{group_pill}
+          <span style="font-size:12px;color:var(--jag-muted);">{esc(participant['email'])}</span>
+        </div>
+        {f'<p style="margin:0;font-size:13px;color:var(--jag-muted);">{esc(participant["programme"])}</p>' if participant.get("programme") else ""}
       </div>
-      <div style="display:flex; gap:8px;">
+      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
         {reset_btn}
         <a class="btn btn-primary" href="/coach/participants/{participant['id']}/progress">&#128200; Achievement Statistics</a>
         <a class="btn btn-ghost" href="/coach">&larr; Back</a>
@@ -752,7 +830,10 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
     {group_form}
 
     <section class="stat-row">
-      <div class="card stat-card"><div class="stat-number">{len(measurement_sessions)}</div><div class="stat-label">Test Sessions</div></div>
+      <div class="card stat-card">
+        <div class="stat-number">{session_count}</div>
+        <div class="stat-label">Test Sessions</div>
+      </div>
     </section>
 
     {measurement_games_form(participant['id'])}
@@ -899,6 +980,44 @@ def participant_progress_page(coach, participant, measurement_sessions):
     if not sections_html:
         sections_html = '<div class="card"><p class="muted">No measurements recorded yet.</p></div>'
 
+    # Build a "Best Improvements" highlight card (shown when 2+ sessions)
+    highlights_html = ""
+    if n >= 2:
+        improvements = []
+        for section in MEASUREMENT_GAMES:
+            for game in section["games"]:
+                for field in game["fields"] + game.get("computed", []):
+                    fv = first["results"].get((game["key"], field["key"]))
+                    lv = latest["results"].get((game["key"], field["key"]))
+                    if fv is None or lv is None:
+                        continue
+                    diff = lv - fv
+                    improved = (diff < 0) if field["type"] == "time" else (diff > 0)
+                    if not improved:
+                        continue
+                    if field["type"] == "time":
+                        pct_imp = abs(diff / fv) * 100 if fv else 0
+                        disp = f"−{abs(diff):.2f}s ({pct_imp:.1f}% faster)"
+                    else:
+                        pct_imp = abs(diff / fv) * 100 if fv else 0
+                        disp = f"+{abs(diff):.0f} ({pct_imp:.1f}% better)"
+                    improvements.append((pct_imp, game["name"], field["label"], disp))
+        improvements.sort(reverse=True)
+        top = improvements[:4]
+        if top:
+            cards = "".join(
+                f'<div style="background:#fffbeb;border:2px solid #f59e0b;border-radius:10px;padding:12px 16px;min-width:160px;flex:1;">'
+                f'<div style="font-size:11px;font-weight:700;color:#92400e;text-transform:uppercase;letter-spacing:.05em;margin-bottom:2px;">{esc(gn)} &middot; {esc(fl)}</div>'
+                f'<div style="font-size:18px;font-weight:800;color:#92400e;">{esc(disp)}</div>'
+                f'</div>'
+                for _, gn, fl, disp in top
+            )
+            highlights_html = f"""
+            <div style="margin-bottom:24px;">
+              <h2 style="font-size:16px;font-weight:700;color:var(--jag-navy);margin:0 0 10px;">&#127942; Top Improvements</h2>
+              <div style="display:flex;flex-wrap:wrap;gap:10px;">{cards}</div>
+            </div>"""
+
     body = f"""
     <div class="page-head">
       <div>
@@ -907,6 +1026,7 @@ def participant_progress_page(coach, participant, measurement_sessions):
       </div>
       <a class="btn btn-ghost" href="/coach/participants/{pid}">&larr; Back</a>
     </div>
+    {highlights_html}
     {sections_html}
     {trend_html}
     """
