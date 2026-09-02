@@ -1607,13 +1607,38 @@ def group_scores_table_page(coach, group, participants_sessions):
     if any(len(s) >= 2 for _, s in active):
         session_note += ' &mdash; <span style="color:#0f6e62;font-weight:600;">green %</span> = improvement from first session'
 
+    print_css = """
+    <style>
+    @media print {
+      .topbar, .nav-link, .no-print { display: none !important; }
+      body { background: #fff !important; }
+      .container { max-width: 100% !important; padding: 0 !important; }
+      .card { border: none !important; border-radius: 0 !important; overflow: visible !important; box-shadow: none !important; }
+      table { font-size: 10px !important; }
+      th, td { padding: 5px 7px !important; }
+      .print-header { display: block !important; }
+      a { color: inherit !important; text-decoration: none !important; }
+    }
+    .print-header { display: none; margin-bottom: 12px; }
+    .print-header h2 { font-size: 16px; font-weight: 700; }
+    .print-header p { font-size: 12px; color: #6E737B; margin-top: 2px; }
+    </style>"""
+
     body = f"""
-    <div class="page-head">
+    {print_css}
+    <div class="print-header">
+      <h2>{gname} &mdash; Scores Table</h2>
+      <p>{session_note}</p>
+    </div>
+    <div class="page-head no-print">
       <div>
         <h1>{gname} &mdash; Scores Table</h1>
         <p class="muted">{session_note}</p>
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <button onclick="window.print()" class="btn btn-ghost" style="display:flex;align-items:center;gap:6px;">
+          &#128438; Print / Save PDF
+        </button>
         <a class="btn btn-ghost" href="{summary_url}">&#128200; Group Stats</a>
         <a class="btn btn-ghost" href="/coach">&larr; Dashboard</a>
       </div>
