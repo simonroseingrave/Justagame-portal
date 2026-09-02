@@ -1736,65 +1736,298 @@ def _overall_achievement_html(groups_data):
     {sections_html}"""
 
 
-def all_progress_page(coach, groups_data):
-    """Admin-only page: progress across all participants, organised by group.
-    groups_data: list of (group_or_None, [(participant, sessions), ...])
+def _round_table(athletes_sessions, game):
+    """Build a session-round comparison table for a single game.
+
+    Columns  = measurement rounds (oldest = Round 1 / Baseline, newest = Round N).
+    Rows     = one per field, showing group-average value for that round.
+    Last row = average % change from Round 1 to each subsequent round.
+
+    athletes_sessions: list of (participant_dict, sessions_list)  — already sport-filtered.
+    Returns HTML string or "" if no data.
     """
-    body_sections = ""
-    any_data = False
+    if not athletes_sessions:
+        return ""
 
-    for group, participants_sessions in groups_data:
-        active = [(p, s) for p, s in participants_sessions if s]
-        if not active:
+    all_fields = game["fields"] + game.get("computed", [])
+    # max rounds any athlete has for this game
+    max_rounds = max(
+        (sum(1 for s in sessions if any(
+            s["results"].get((game["key"], f["key"])) is not None for f in all_fields
+        ) for _, sessions in athletes_sessions)),
+        default=0,
+    )
+    # Simpler: just use total session count as proxy for rounds
+    max_rounds = max((len(s) for _, s in athletes_sessions), default=0)
+    if max_rounds == 0:
+        return ""
+
+    # For round index r (0 = oldest = baseline), sessions are newest-first so oldest = sessions[-(r+1)]
+    rounds = []
+    for r in range(max_rounds):
+        dates = []
+        field_vals = {f["key"]: [] for f in all_fields}
+        n_athletes = 0
+        for _p, sessions in athletes_sessions:
+            if len(sessions) <= r:
+                continue
+            session = sessions[-(r + 1)]   # oldest first
+            dates.append(session["date"])
+            n_athletes += 1
+            for field in all_fields:
+                val = session["results"].get((game["key"], field["key"]))
+                if val is not None:
+                    field_vals[field["key"]].append(val)
+        if not dates:
+            break
+        date_label = min(dates) if min(dates) == max(dates) else f"{min(dates)[:7]}…"
+        avgs = {k: (sum(v) / len(v) if v else None) for k, v in field_vals.items()}
+        rounds.append({"date": date_label, "avgs": avgs, "n": n_athletes})
+
+    if not rounds:
+        return ""
+
+    active_fields = [f for f in all_fields if any(rd["avgs"].get(f["key"]) is not None for rd in rounds)]
+    if not active_fields:
+        return ""
+
+    # Header
+    header_cells = '<th style="min-width:150px;">Measurement</th>'
+    for i, rd in enumerate(rounds):
+        label = "Baseline" if i == 0 else f"Round {i + 1}"
+        header_cells += (
+            f'<th style="text-align:center;border-left:2px solid var(--jag-border);min-width:110px;">'
+            f'{label}<br>'
+            f'<small style="font-weight:400;color:var(--jag-muted);">{rd["date"]}</small><br>'
+            f'<small style="font-weight:400;color:var(--jag-muted);">{rd["n"]} athlete{"s" if rd["n"]!=1 else ""}</small>'
+            f'</th>'
+        )
+
+    # Field rows
+    field_rows = ""
+    for field in active_fields:
+        cells = f'<td style="font-size:13px;font-weight:600;">{esc(field["label"])}</td>'
+        for rd in rounds:
+            avg = rd["avgs"].get(field["key"])
+            bl = "border-left:2px solid var(--jag-border);"
+            if avg is None:
+                cells += f'<td style="{bl}text-align:center;color:var(--jag-muted);">—</td>'
+            else:
+                val_str = f"{avg:.2f}s" if field["type"] == "time" else f"{avg:.1f}"
+                cells += f'<td style="{bl}text-align:center;font-weight:700;">{val_str}</td>'
+        field_rows += f"<tr>{cells}</tr>"
+
+    # % change row (only shown when 2+ rounds)
+    pct_row = ""
+    if len(rounds) >= 2:
+        pct_cells = '<td style="font-size:12px;color:var(--jag-muted);font-weight:600;font-style:italic;">Avg % change vs baseline</td>'
+        for i, rd in enumerate(rounds):
+            bl = "border-left:2px solid var(--jag-border);"
+            if i == 0:
+                pct_cells += f'<td style="{bl}text-align:center;color:var(--jag-muted);font-size:12px;">—</td>'
+                continue
+            pcts = []
+            for field in active_fields:
+                fv = rounds[0]["avgs"].get(field["key"])
+                lv = rd["avgs"].get(field["key"])
+                if fv is not None and lv is not None and fv != 0:
+                    raw = (lv - fv) / fv * 100
+                    corrected = -raw if field["type"] == "time" else raw
+                    pcts.append(corrected)
+            if pcts:
+                avg_pct = sum(pcts) / len(pcts)
+                sign = "+" if avg_pct >= 0 else ""
+                colour = "#0f6e62" if avg_pct >= 0 else "#9b1c1c"
+                pct_cells += (f'<td style="{bl}text-align:center;font-weight:800;font-size:15px;color:{colour};">'
+                              f'{sign}{avg_pct:.1f}%</td>')
+            else:
+                pct_cells += f'<td style="{bl}text-align:center;color:var(--jag-muted);">—</td>'
+        pct_row = f'<tr style="border-top:2px solid var(--jag-border);background:var(--jag-bg);">{pct_cells}</tr>'
+
+    return f"""
+    <div class="card" style="margin-bottom:14px;overflow-x:auto;padding:0;">
+      <div style="padding:12px 16px 10px;border-bottom:0.5px solid var(--jag-border);
+                  background:var(--jag-bg);border-radius:var(--radius) var(--radius) 0 0;">
+        <h3 style="margin:0;font-size:14px;font-weight:700;color:var(--jag-navy);">{esc(game["name"])}</h3>
+      </div>
+      <table class="table" style="width:100%;">
+        <thead><tr style="background:var(--jag-bg);">{header_cells}</tr></thead>
+        <tbody>{field_rows}{pct_row}</tbody>
+      </table>
+    </div>"""
+
+
+def all_progress_page(coach, groups_data, sport_filter=None):
+    """Overview page: programme stats, group cards, round-based measurement tables.
+    Accessible to all coaches (admins see all groups; non-admins see their groups only).
+    sport_filter: optional sport string to filter athlete averages.
+    """
+    is_admin = coach.get("is_admin")
+
+    # Collect all sports
+    all_sports = sorted(set(
+        p.get("sport") or ""
+        for _, ps in groups_data
+        for p, _ in ps
+        if p.get("sport")
+    ))
+
+    def _filter(ps):
+        if not sport_filter:
+            return ps
+        return [(p, s) for p, s in ps if (p.get("sport") or "") == sport_filter]
+
+    # Unfiltered totals for hero
+    total_athletes = sum(len(ps) for _, ps in groups_data)
+    total_sessions = sum(len(s) for _, ps in groups_data for _, s in ps)
+    total_groups   = sum(1 for g, _ in groups_data if g)
+    all_with_2     = [(p, s) for _, ps in groups_data for p, s in ps if len(s) >= 2]
+    all_imps       = [i for i in (_calc_improvement_pct(s) for _, s in all_with_2) if i is not None]
+    overall_imp    = sum(all_imps) / len(all_imps) if all_imps else None
+
+    oi_str = f'{"+" if overall_imp >= 0 else ""}{overall_imp:.1f}%' if overall_imp is not None else "—"
+    oi_col = "#0f6e62" if (overall_imp or 0) >= 0 else "#9b1c1c"
+
+    hero_card = f"""
+    <div class="card" style="background:var(--jag-navy);color:#fff;border-color:var(--jag-navy);margin-bottom:24px;">
+      <div style="display:flex;gap:0;flex-wrap:wrap;align-items:center;">
+        <div style="flex:1;min-width:160px;text-align:center;padding:0 24px;">
+          <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.06em;opacity:0.6;margin-bottom:4px;">Total Athletes</div>
+          <div style="font-size:36px;font-weight:900;color:#F0A82E;">{total_athletes}</div>
+        </div>
+        <div style="flex:1;min-width:160px;text-align:center;padding:0 24px;border-left:0.5px solid rgba(255,255,255,0.15);">
+          <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.06em;opacity:0.6;margin-bottom:4px;">Groups</div>
+          <div style="font-size:36px;font-weight:900;color:#F0A82E;">{total_groups}</div>
+        </div>
+        <div style="flex:1;min-width:160px;text-align:center;padding:0 24px;border-left:0.5px solid rgba(255,255,255,0.15);">
+          <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.06em;opacity:0.6;margin-bottom:4px;">Total Sessions</div>
+          <div style="font-size:36px;font-weight:900;color:#F0A82E;">{total_sessions}</div>
+        </div>
+        <div style="flex:1;min-width:160px;text-align:center;padding:0 24px;border-left:0.5px solid rgba(255,255,255,0.15);">
+          <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.06em;opacity:0.6;margin-bottom:4px;">Programme Avg Improvement</div>
+          <div style="font-size:36px;font-weight:900;color:{oi_col};">{oi_str}</div>
+        </div>
+      </div>
+    </div>"""
+
+    # Group summary cards
+    group_cards_html = ""
+    for group, ps in groups_data:
+        if not group:
             continue
-        any_data = True
-        gname = esc(group["name"]) if group else "Ungrouped"
-        gid   = group["id"] if group else None
-        prog_link = f'<a class="btn btn-ghost btn-sm" href="/coach/groups/{gid}/progress">Full group achievement statistics</a>' if gid else ""
-
-        # Summary table: participant | sessions | games tested | first session | latest session
-        rows = ""
-        for p, sessions in active:
-            n = len(sessions)
-            first_date  = sessions[-1]["date"] if sessions else "—"
-            latest_date = sessions[0]["date"]  if sessions else "—"
-            # Count distinct games with data in latest session
-            games_in_latest = len({gk for (gk, _) in sessions[0]["results"].keys()}) if sessions else 0
-            rows += f"""<tr>
-              <td><a href="/coach/participants/{p['id']}/progress">{esc(p['name'])}</a></td>
-              <td>{n}</td>
-              <td>{first_date}</td>
-              <td>{latest_date}</td>
-              <td>{games_in_latest} game{"s" if games_in_latest!=1 else ""}</td>
-            </tr>"""
-
-        body_sections += f"""
-        <h2 class="section-title">{gname} {prog_link}</h2>
-        <div class="card">
-          <table class="table">
-            <thead><tr><th>Participant</th><th>Sessions</th><th>First Test</th><th>Latest Test</th><th>Latest Coverage</th></tr></thead>
-            <tbody>{rows}</tbody>
-          </table>
+        gname = esc(group["name"])
+        gid   = group["id"]
+        count = len(ps)
+        with_sessions = len([p for p, s in ps if s])
+        with_2 = [(p, s) for p, s in ps if len(s) >= 2]
+        gimps = [i for i in (_calc_improvement_pct(s) for _, s in with_2) if i is not None]
+        gavg  = sum(gimps) / len(gimps) if gimps else None
+        gsign = "+" if (gavg or 0) >= 0 else ""
+        gcol  = "#0f6e62" if (gavg or 0) >= 0 else "#9b1c1c"
+        gavg_str = f'<span style="font-size:20px;font-weight:900;color:{gcol};">{gsign}{gavg:.1f}%</span>' if gavg is not None else '<span style="color:var(--jag-muted);font-size:14px;">No data yet</span>'
+        group_cards_html += f"""
+        <div style="background:var(--jag-card);border:0.5px solid var(--jag-border);border-radius:12px;padding:16px 18px;">
+          <div style="border-left:3px solid var(--jag-green);padding-left:10px;margin-bottom:12px;">
+            <div style="font-weight:700;font-size:15px;">{gname}</div>
+            <div style="font-size:12px;color:var(--jag-muted);">{count} athlete{"s" if count!=1 else ""} &middot; {with_sessions} tested</div>
+          </div>
+          <div style="margin-bottom:12px;">{gavg_str}<div style="font-size:11px;color:var(--jag-muted);margin-top:2px;">avg improvement</div></div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <a href="/coach/groups/{gid}/achievement-summary" class="btn btn-sm" style="font-size:11px;background:var(--jag-green);color:var(--jag-navy);font-weight:700;border:none;">Group Stats</a>
+            <a href="/coach/groups/{gid}/scores" class="btn btn-ghost btn-sm" style="font-size:11px;">Scores Table</a>
+          </div>
         </div>"""
 
-    if not any_data:
-        body_sections = '<div class="card"><p class="muted">No test sessions recorded yet.</p></div>'
+    group_cards = f'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:32px;">{group_cards_html}</div>' if group_cards_html else ""
 
-    # Count totals
-    total_participants = sum(len(ps) for _, ps in groups_data)
-    total_with_data = sum(len([p for p, s in ps if s]) for _, ps in groups_data)
-    total_sessions = sum(len(s) for _, ps in groups_data for _, s in ps)
+    # Sport filter bar
+    current_sport_label = esc(sport_filter) if sport_filter else "All sports"
+    sport_btns = f'<a href="/coach/progress" class="btn btn-sm{"" if sport_filter else " btn-primary"}" style="border-radius:999px;{"background:var(--jag-green);color:var(--jag-navy);font-weight:700;border:none;" if not sport_filter else ""}">All</a>'
+    for s in all_sports:
+        active_style = "background:var(--jag-green);color:var(--jag-navy);font-weight:700;border:none;" if sport_filter == s else ""
+        sport_btns += f'<a href="/coach/progress?sport={esc(s)}" class="btn btn-sm btn-ghost" style="border-radius:999px;{active_style}">{esc(s)}</a>'
 
-    overall_report = _overall_achievement_html(groups_data)
+    filter_bar = ""
+    if all_sports:
+        filter_bar = f"""
+        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:24px;">
+          <span style="font-size:13px;color:var(--jag-muted);font-weight:600;">Filter averages by sport:</span>
+          {sport_btns}
+        </div>"""
+
+    # Per-group measurement tables
+    group_sections_html = ""
+    for group, ps in groups_data:
+        gname = esc(group["name"]) if group else "Ungrouped"
+        gid   = group["id"] if group else None
+        filtered = _filter(ps)
+        if not filtered:
+            continue
+
+        filter_note = f' &mdash; {esc(sport_filter)} athletes only' if sport_filter else ""
+        tables_html = ""
+        for section in MEASUREMENT_GAMES:
+            sec_tables = "".join(_round_table(filtered, game) for game in section["games"])
+            if sec_tables:
+                tables_html += f'<h3 style="font-size:14px;color:var(--jag-muted);text-transform:uppercase;letter-spacing:0.05em;margin:20px 0 10px;">{esc(section["section"])}</h3>{sec_tables}'
+
+        if not tables_html:
+            tables_html = '<div class="card"><p class="muted">No measurement data yet.</p></div>'
+
+        links = ""
+        if gid:
+            links = (f'<a href="/coach/groups/{gid}/achievement-summary" class="btn btn-sm" '
+                     f'style="font-size:12px;background:var(--jag-green);color:var(--jag-navy);font-weight:700;border:none;">Group Stats</a>'
+                     f'<a href="/coach/groups/{gid}/scores" class="btn btn-ghost btn-sm" style="font-size:12px;">Scores Table</a>')
+
+        group_sections_html += f"""
+        <div style="margin-bottom:44px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
+            <div style="border-left:4px solid var(--jag-green);padding-left:12px;flex:1;">
+              <h2 style="margin:0;font-size:19px;font-weight:700;color:var(--jag-navy);">{gname}</h2>
+              <span style="font-size:13px;color:var(--jag-muted);">Group averages{filter_note}</span>
+            </div>
+            <div style="display:flex;gap:6px;">{links}</div>
+          </div>
+          {tables_html}
+        </div>"""
+
+    if not group_sections_html:
+        group_sections_html = '<div class="card"><p class="muted">No test data recorded yet.</p></div>'
+
+    # Admin-only overall programme table
+    overall_html = ""
+    if is_admin:
+        all_filtered = _filter([(p, s) for _, ps in groups_data for p, s in ps])
+        if all_filtered:
+            filter_note = f' &mdash; {esc(sport_filter)} athletes only' if sport_filter else ""
+            overall_tables = ""
+            for section in MEASUREMENT_GAMES:
+                sec_tables = "".join(_round_table(all_filtered, game) for game in section["games"])
+                if sec_tables:
+                    overall_tables += f'<h3 style="font-size:14px;color:var(--jag-muted);text-transform:uppercase;letter-spacing:0.05em;margin:20px 0 10px;">{esc(section["section"])}</h3>{sec_tables}'
+            if overall_tables:
+                overall_html = f"""
+                <div style="margin-top:48px;padding-top:24px;border-top:2px solid var(--jag-border);">
+                  <div style="border-left:4px solid var(--jag-navy);padding-left:12px;margin-bottom:20px;">
+                    <h2 style="margin:0;font-size:19px;font-weight:700;color:var(--jag-navy);">Programme Overall</h2>
+                    <span style="font-size:13px;color:var(--jag-muted);">All groups combined{filter_note} &mdash; admin view</span>
+                  </div>
+                  {overall_tables}
+                </div>"""
 
     body = f"""
     <div class="page-head">
-      <div><h1>Achievement Statistics Overview</h1>
-        <p class="muted">{total_with_data} of {total_participants} participants tested &middot; {total_sessions} total sessions</p>
+      <div>
+        <h1>Achievement Statistics Overview</h1>
+        <p class="muted">Group averages across all measurement rounds{(" &mdash; " + esc(sport_filter) + " athletes") if sport_filter else ""}</p>
       </div>
     </div>
-    {body_sections}
-    {overall_report}"""
+    {hero_card}
+    {group_cards}
+    {filter_bar}
+    {group_sections_html}
+    {overall_html}"""
     return layout("Achievement Statistics", body, user=coach, active_nav="progress")
 
 

@@ -352,7 +352,8 @@ def all_progress(req):
                 ).fetchall()
                 ps_data = [(dict(p), db.measurement_sessions_for(conn, p["id"])) for p in participants]
                 groups_data.append((dict(group), ps_data))
-        return Response(views.all_progress_page(coach, groups_data))
+        sport_filter = req.GET.get("sport", "").strip() or None
+        return Response(views.all_progress_page(coach, groups_data, sport_filter=sport_filter))
     finally:
         conn.close()
 
