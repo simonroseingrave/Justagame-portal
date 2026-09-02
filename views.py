@@ -486,8 +486,6 @@ def participant_dashboard(user, measurement_sessions):
     name = user['name']
     parts = name.strip().split()
     inits = (parts[0][0] + parts[-1][0]).upper() if len(parts) >= 2 else name[0].upper()
-    tile_colors = ['#1d6fa4', '#7c3aed', '#c2410c', '#15803d', '#be185d', '#0e7490', '#92400e']
-    av_color = tile_colors[user['id'] % len(tile_colors)]
     sport = esc(user.get('sport') or '')
     programme = esc(user.get('programme') or '')
     session_count = len(measurement_sessions)
@@ -527,10 +525,10 @@ def participant_dashboard(user, measurement_sessions):
     body = f"""
     <div style="background:var(--jag-card);border-radius:16px;padding:24px 28px;margin-bottom:28px;
                 display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;
-                border:2px solid {av_color}33;">
-      <div style="width:68px;height:68px;border-radius:50%;background:{av_color};display:flex;
-                  align-items:center;justify-content:center;font-weight:800;font-size:24px;color:#fff;
-                  flex-shrink:0;box-shadow:0 4px 16px {av_color}55;">{inits}</div>
+                border:2px solid rgba(240,168,46,0.35);">
+      <div style="width:68px;height:68px;border-radius:50%;background:#2D323B;display:flex;
+                  align-items:center;justify-content:center;font-weight:800;font-size:24px;color:#F0A82E;
+                  flex-shrink:0;box-shadow:0 4px 16px rgba(45,50,59,0.35);">{inits}</div>
       <div style="flex:1;min-width:200px;">
         <h1 style="margin:0 0 4px;font-size:24px;">Welcome back, {first_name}!</h1>
         <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;">{sport_pill}</div>
@@ -562,22 +560,20 @@ def _athlete_tile(p, is_admin=False):
     parts = name.strip().split()
     inits = (parts[0][0] + parts[-1][0]).upper() if len(parts) >= 2 else name[0].upper()
     sport = esc(p.get('sport') or '')
-    tile_colors = ['#1d6fa4', '#7c3aed', '#c2410c', '#15803d', '#be185d', '#0e7490', '#92400e']
-    color = tile_colors[p['id'] % len(tile_colors)]
     drag = '<span class="drag-handle" title="Drag to move group" style="position:absolute;top:6px;right:8px;font-size:11px;color:#bbb;line-height:1;">&#9776;</span>' if is_admin else ""
-    sport_badge = (f'<span style="font-size:10px;font-weight:600;background:{color}22;color:{color};'
+    sport_badge = (f'<span style="font-size:10px;font-weight:600;background:rgba(240,168,46,0.15);color:#CF8F1F;'
                    f'border-radius:999px;padding:2px 8px;white-space:nowrap;">{sport}</span>') if sport else ''
-    return f"""<a href="/coach/participants/{p['id']}" class="athlete-tile" data-id="{p['id']}"
+    return f"""<a href="/coach/participants/{p['id']}" class="athlete-tile" data-id="{p['id']}" data-sport="{esc(p.get('sport') or '')}"
       style="position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;
              padding:20px 12px 16px;background:var(--jag-card);border:2px solid var(--jag-border);
              border-radius:14px;text-decoration:none;color:inherit;cursor:pointer;
              transition:box-shadow 0.18s ease,border-color 0.18s ease,transform 0.18s ease;"
-      onmouseover="this.style.boxShadow='0 6px 20px rgba(0,0,0,0.13)';this.style.borderColor='{color}';this.style.transform='translateY(-2px)';"
+      onmouseover="this.style.boxShadow='0 6px 20px rgba(0,0,0,0.13)';this.style.borderColor='#F0A82E';this.style.transform='translateY(-2px)';"
       onmouseout="this.style.boxShadow='';this.style.borderColor='var(--jag-border)';this.style.transform='';">
       {drag}
-      <div style="width:54px;height:54px;border-radius:50%;background:{color};display:flex;align-items:center;
-                  justify-content:center;font-weight:800;font-size:19px;color:#fff;flex-shrink:0;
-                  box-shadow:0 3px 10px {color}55;">{inits}</div>
+      <div style="width:54px;height:54px;border-radius:50%;background:#2D323B;display:flex;align-items:center;
+                  justify-content:center;font-weight:800;font-size:19px;color:#F0A82E;flex-shrink:0;
+                  box-shadow:0 3px 12px rgba(45,50,59,0.35);">{inits}</div>
       <span style="font-weight:700;font-size:13px;text-align:center;line-height:1.3;word-break:break-word;">{esc(name)}</span>
       {sport_badge}
     </a>"""
@@ -625,7 +621,8 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         empty_msg = '<p class="muted" style="font-size:13px;padding:8px 0;">No athletes in this group yet.</p>'
         tiles_wrap = f'<div class="athlete-tiles-wrap" data-group-list-id="{group["id"]}" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;padding:8px 0 4px;">{tiles_html or empty_msg}</div>'
         folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder groups" style="color:var(--jag-muted);cursor:grab;font-size:16px;">&#9776;</span>' if is_admin else ""
-        summary_link = f'<a href="/coach/groups/{group["id"]}/achievement-summary" class="btn btn-sm" style="font-size:12px;background:var(--jag-green);color:var(--jag-navy);font-weight:600;border:none;">&#128200; Group Stats</a>'
+        summary_link = (f'<a href="/coach/groups/{group["id"]}/achievement-summary" class="btn btn-sm" style="font-size:12px;background:var(--jag-green);color:var(--jag-navy);font-weight:600;border:none;">&#128200; Group Stats</a>'
+                        f'<a href="/coach/groups/{group["id"]}/scores" class="btn btn-sm btn-ghost" style="font-size:12px;">&#128203; Scores Table</a>')
         admin_btns = f"""<a href="/coach/groups/{group['id']}/edit" class="btn btn-ghost btn-sm" style="font-size:12px;">Edit</a>
             <form method="post" action="/coach/groups/{group['id']}/delete" style="display:inline"
               onsubmit="return confirm('Delete group \\'{esc(group['name'])}\\'? Participants move to ungrouped.');">
@@ -663,6 +660,62 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
       </div>
       {ug_wrap}
     </div>"""
+
+    # Collect unique sports across all participants for filter bar
+    all_sports = sorted(set(
+        p.get("sport") or ""
+        for _, participants in list(group_summaries) + [("__ug__", ungrouped_summaries)]
+        for p in (participants if isinstance(participants, list) else [])
+        if p.get("sport")
+    ))
+
+    if all_sports:
+        sport_btns = "".join(
+            f'<button onclick="filterSport(this, \'{esc(s)}\')" '
+            f'style="padding:5px 14px;border-radius:999px;border:1px solid var(--jag-border);'
+            f'background:var(--jag-card);font-size:13px;cursor:pointer;transition:background 0.15s,color 0.15s;">'
+            f'{esc(s)}</button>'
+            for s in all_sports
+        )
+        filter_bar = f"""
+        <div id="sport-filter" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
+          <span style="font-size:13px;color:var(--jag-muted);font-weight:600;">Filter by sport:</span>
+          <button onclick="filterSport(this, '')" class="filter-active"
+            style="padding:5px 14px;border-radius:999px;border:1px solid var(--jag-green);
+                   background:var(--jag-green);color:var(--jag-navy);font-size:13px;cursor:pointer;font-weight:600;">
+            All
+          </button>
+          {sport_btns}
+        </div>"""
+        filter_js = """
+        <script>
+        var activeSport = '';
+        function filterSport(btn, sport) {
+          activeSport = sport;
+          document.querySelectorAll('#sport-filter button').forEach(function(b) {
+            var isSel = (b === btn);
+            b.style.background = isSel ? 'var(--jag-green)' : 'var(--jag-card)';
+            b.style.color = isSel ? 'var(--jag-navy)' : 'inherit';
+            b.style.borderColor = isSel ? 'var(--jag-green)' : 'var(--jag-border)';
+            b.style.fontWeight = isSel ? '600' : '400';
+          });
+          document.querySelectorAll('.athlete-tile').forEach(function(tile) {
+            var ts = tile.dataset.sport || '';
+            tile.style.display = (!sport || ts === sport) ? '' : 'none';
+          });
+          document.querySelectorAll('.group-section').forEach(function(sec) {
+            var wrap = sec.querySelector('.athlete-tiles-wrap');
+            if (!wrap) return;
+            var visible = Array.from(wrap.querySelectorAll('.athlete-tile')).filter(function(t){ return t.style.display !== 'none'; }).length;
+            var badge = sec.querySelector('.group-count');
+            if (badge) badge.textContent = visible + (visible === 1 ? ' athlete' : ' athletes');
+            sec.style.display = visible === 0 ? 'none' : '';
+          });
+        }
+        </script>"""
+    else:
+        filter_bar = ""
+        filter_js = ""
 
     if not group_summaries and not ungrouped_summaries:
         content = '<p class="muted">No participants yet. Add one to get started.</p>' if is_admin else '<p class="muted">You haven\'t been assigned to a group yet. Contact an admin.</p>'
@@ -751,10 +804,12 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     {action_btns}
     {message_html}
     <div style="margin-top:28px;">
+      {filter_bar}
       {content}
     </div>
     </div>
     {sortable_js}
+    {filter_js}
     """
     return layout("Coach Dashboard", body, user=user, active_nav="dashboard")
 
@@ -835,13 +890,11 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
     name = participant['name']
     parts = name.strip().split()
     inits = (parts[0][0] + parts[-1][0]).upper() if len(parts) >= 2 else name[0].upper()
-    tile_colors = ['#1d6fa4', '#7c3aed', '#c2410c', '#15803d', '#be185d', '#0e7490', '#92400e']
-    av_color = tile_colors[participant['id'] % len(tile_colors)]
-    avatar = (f'<div style="width:64px;height:64px;border-radius:50%;background:{av_color};'
+    avatar = (f'<div style="width:64px;height:64px;border-radius:50%;background:#2D323B;'
               f'display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px;'
-              f'color:#fff;flex-shrink:0;box-shadow:0 4px 14px {av_color}55;">{inits}</div>')
+              f'color:#F0A82E;flex-shrink:0;box-shadow:0 4px 14px rgba(45,50,59,0.35);">{inits}</div>')
 
-    sport_pill = (f'<span style="font-size:12px;font-weight:600;background:{av_color}22;color:{av_color};'
+    sport_pill = (f'<span style="font-size:12px;font-weight:600;background:rgba(240,168,46,0.15);color:#CF8F1F;'
                   f'border-radius:999px;padding:2px 10px;">{esc(participant["sport"] or "")}</span>'
                   ) if participant.get("sport") else ""
     group_pill = (f'<span style="font-size:12px;font-weight:600;background:var(--jag-green);color:var(--jag-navy);'
@@ -1213,20 +1266,132 @@ def group_achievement_summary_page(coach, group, participants_sessions):
     """One-page collective summary: average % improvement per field across all group members."""
     # Only athletes with at least 2 sessions contribute to the averages
     active = [(p, s) for p, s in participants_sessions if len(s) >= 2]
+    all_with_sessions = [(p, s) for p, s in participants_sessions if s]
     gname = esc(group["name"]) if group else "Group"
+    group_id = group["id"] if group else None
 
     if not active:
+        # Show waiting state but still list athletes with single sessions
+        any_html = ""
+        if all_with_sessions:
+            any_html = '<p class="muted" style="margin-top:16px;">Athletes with 1 session (need one more to unlock improvements):</p><ul style="margin:6px 0 0;padding-left:20px;">'
+            for p, _ in all_with_sessions:
+                any_html += f'<li><a href="/coach/participants/{p["id"]}">{esc(p["name"])}</a></li>'
+            any_html += '</ul>'
         body = f"""
         <div class="page-head">
           <div><h1>{gname} &mdash; Achievement Summary</h1></div>
           <a class="btn btn-ghost" href="/coach">&larr; Dashboard</a>
         </div>
-        <div class="card"><p class="muted">No athletes in this group have two or more test sessions yet — come back after the second round of measurements.</p></div>"""
+        <div class="card">
+          <p class="muted">No athletes in this group have two or more test sessions yet — come back after the second round of measurements.</p>
+          {any_html}
+        </div>"""
         return layout(f"{group['name']} Achievement Summary", body, user=coach, active_nav="progress")
 
     athlete_count = len(active)
-    sections_html = ""
 
+    # ---- Overall group improvement (direction-corrected avg per athlete, then averaged) ----
+    athlete_imps = []
+    for _p, sessions in active:
+        imp = _calc_improvement_pct(sessions)
+        if imp is not None:
+            athlete_imps.append(imp)
+    overall_avg = sum(athlete_imps) / len(athlete_imps) if athlete_imps else None
+
+    # ---- Hero summary card ----
+    if overall_avg is not None:
+        oa_sign = "+" if overall_avg >= 0 else ""
+        oa_colour = "#0f6e62" if overall_avg >= 0 else "#9b1c1c"
+        hero_stat = f'<div style="font-size:48px;font-weight:900;color:{oa_colour};line-height:1;">{oa_sign}{overall_avg:.1f}%</div>'
+        hero_sub = '<div style="font-size:13px;opacity:0.65;margin-top:6px;">across all measurement fields</div>'
+    else:
+        hero_stat = '<div style="font-size:48px;font-weight:900;color:rgba(255,255,255,0.4);line-height:1;">—</div>'
+        hero_sub = '<div style="font-size:13px;opacity:0.55;margin-top:6px;">not enough data yet</div>'
+
+    best_athlete = max(active, key=lambda x: (_calc_improvement_pct(x[1]) or -999), default=None)
+    best_stat = ""
+    if best_athlete:
+        bp, _ = best_athlete
+        bimp = _calc_improvement_pct(best_athlete[1])
+        if bimp is not None:
+            bsign = "+" if bimp >= 0 else ""
+            binits = "".join(w[0].upper() for w in bp['name'].split()[:2])
+            best_stat = f"""
+            <div style="text-align:center;padding:0 20px;border-left:1px solid rgba(255,255,255,0.15);">
+              <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.06em;opacity:0.65;margin-bottom:8px;">Top Performer</div>
+              <div style="width:40px;height:40px;border-radius:50%;background:#F0A82E;display:flex;align-items:center;
+                          justify-content:center;font-weight:800;font-size:15px;color:#2D323B;margin:0 auto 6px;">{binits}</div>
+              <div style="font-size:13px;font-weight:700;">{esc(bp['name'])}</div>
+              <div style="font-size:18px;font-weight:800;color:#F0A82E;">{bsign}{bimp:.1f}%</div>
+            </div>"""
+
+    hero_card = f"""
+    <div class="card" style="background:var(--jag-navy);color:#fff;border-color:var(--jag-navy);margin-bottom:28px;">
+      <div style="display:flex;align-items:center;gap:24px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:180px;">
+          <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.06em;opacity:0.65;margin-bottom:6px;">Average Group Improvement</div>
+          {hero_stat}
+          {hero_sub}
+        </div>
+        <div style="display:flex;gap:0;align-items:center;flex-wrap:wrap;">
+          <div style="text-align:center;padding:0 20px;border-left:1px solid rgba(255,255,255,0.15);">
+            <div style="font-size:12px;text-transform:uppercase;letter-spacing:0.06em;opacity:0.65;margin-bottom:6px;">Athletes</div>
+            <div style="font-size:36px;font-weight:900;color:#F0A82E;line-height:1;">{athlete_count}</div>
+            <div style="font-size:12px;opacity:0.55;margin-top:4px;">with 2+ sessions</div>
+          </div>
+          {best_stat}
+        </div>
+      </div>
+    </div>"""
+
+    # ---- Athlete improvement grid (sorted best → worst) ----
+    def _athlete_imp_card(p, sessions):
+        imp = _calc_improvement_pct(sessions)
+        lvl = get_improvement_level(imp)
+        initials = "".join(w[0].upper() for w in p['name'].split()[:2])
+        if imp is not None:
+            isign = "+" if imp >= 0 else ""
+            ic = "#0f6e62" if imp >= 0 else "#9b1c1c"
+            imp_str = f'<span style="font-size:17px;font-weight:800;color:{ic};">{isign}{imp:.1f}%</span>'
+        else:
+            imp_str = '<span style="font-size:14px;color:var(--jag-muted);">Baseline</span>'
+        bar_w = int((lvl['progress'] or 0) * 100)
+        return f"""
+        <a href="/coach/participants/{p['id']}" style="display:flex;align-items:center;gap:12px;
+           padding:12px 14px;background:var(--jag-card);border:1px solid var(--jag-border);
+           border-radius:10px;text-decoration:none;color:inherit;
+           transition:box-shadow 0.15s ease,border-color 0.15s ease,transform 0.15s ease;"
+           onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,0.1)';this.style.borderColor='#F0A82E';this.style.transform='translateY(-1px)';"
+           onmouseout="this.style.boxShadow='';this.style.borderColor='var(--jag-border)';this.style.transform='';">
+          <div style="width:40px;height:40px;border-radius:50%;background:#2D323B;flex-shrink:0;
+               display:flex;align-items:center;justify-content:center;
+               font-weight:800;font-size:14px;color:#F0A82E;">{initials}</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{esc(p['name'])}</div>
+            <div style="font-size:11px;color:var(--jag-muted);margin-bottom:4px;">{esc(lvl['name'])}</div>
+            <div style="background:var(--jag-border);border-radius:999px;height:4px;overflow:hidden;">
+              <div style="width:{bar_w}%;height:100%;border-radius:999px;background:var(--jag-green);"></div>
+            </div>
+          </div>
+          <div style="flex-shrink:0;text-align:right;">{imp_str}</div>
+        </a>"""
+
+    sorted_active = sorted(active, key=lambda x: (_calc_improvement_pct(x[1]) or -999), reverse=True)
+    athlete_cards_html = "".join(_athlete_imp_card(p, s) for p, s in sorted_active)
+    athlete_grid = f"""
+    <div style="margin-bottom:36px;">
+      <div style="border-left:4px solid var(--jag-green);padding-left:12px;margin-bottom:16px;">
+        <h2 style="margin:0 0 2px;font-size:17px;font-weight:700;">Athletes</h2>
+        <p class="muted" style="margin:0;">Sorted by highest improvement &mdash; click to view full profile</p>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px;">
+        {athlete_cards_html}
+      </div>
+    </div>"""
+
+    # ---- Per-game measurement breakdown ----
+    sections_html = ""
     for section in MEASUREMENT_GAMES:
         game_cards = ""
         for game in section["games"]:
@@ -1235,44 +1400,69 @@ def group_achievement_summary_page(coach, group, participants_sessions):
             for field in all_fields:
                 fkey  = field["key"]
                 ftype = field["type"]
-                pcts  = []
-                for _p, sessions in active:
-                    first_s  = sessions[-1]   # oldest (list is newest-first)
+                # Direction-corrected improvement % per athlete for this field
+                athlete_field_pcts = []  # list of (direction_corrected_pct, participant)
+                for p, sessions in active:
+                    first_s  = sessions[-1]
                     latest_s = sessions[0]
                     fv = first_s["results"].get((game["key"], fkey))
                     lv = latest_s["results"].get((game["key"], fkey))
                     if fv is not None and lv is not None and fv != 0:
-                        pcts.append((lv - fv) / fv * 100)
+                        raw = (lv - fv) / fv * 100
+                        # direction-correct: for time, lower=better so negate
+                        corrected = -raw if ftype == "time" else raw
+                        athlete_field_pcts.append((corrected, p))
 
-                if not pcts:
+                if not athlete_field_pcts:
                     continue
 
-                n      = len(pcts)
-                avg    = sum(pcts) / n
-                # For time fields lower is better; for everything else higher is better
-                improved = (avg < 0) if ftype == "time" else (avg > 0)
-                colour   = "#0f6e62" if improved else "#9b1c1c"
-                arrow    = "&#9650;" if avg > 0 else "&#9660;"
-                sign     = "+" if avg > 0 else ""
-                coverage = f'{n} of {athlete_count} athlete{"s" if athlete_count != 1 else ""}'
+                vals = [v for v, _ in athlete_field_pcts]
+                avg = sum(vals) / len(vals)
+                n = len(vals)
+                improved = avg >= 0
+                colour = "#0f6e62" if improved else "#9b1c1c"
+                sign = "+" if avg >= 0 else ""
+                bar_pct = min(100, abs(avg) / 40 * 100)
+
+                # Individual athlete chips
+                chips = ""
+                for pct_val, p in sorted(athlete_field_pcts, key=lambda x: x[0], reverse=True):
+                    ac = "#0f6e62" if pct_val > 0 else ("#9b1c1c" if pct_val < 0 else "#6E737B")
+                    asign = "+" if pct_val > 0 else ""
+                    initials = "".join(w[0].upper() for w in p['name'].split()[:2])
+                    chips += (
+                        f'<a href="/coach/participants/{p["id"]}" title="{esc(p["name"])}: {asign}{pct_val:.1f}%"'
+                        f' style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;'
+                        f'background:var(--jag-bg);border-radius:999px;font-size:11px;'
+                        f'white-space:nowrap;color:{ac};font-weight:600;text-decoration:none;'
+                        f'border:1px solid var(--jag-border);">'
+                        f'<span style="width:18px;height:18px;border-radius:50%;background:#2D323B;'
+                        f'display:inline-flex;align-items:center;justify-content:center;'
+                        f'font-size:9px;font-weight:700;color:#F0A82E;flex-shrink:0;">{initials}</span>'
+                        f'{asign}{pct_val:.1f}%</a>'
+                    )
 
                 rows += f"""<tr>
-                  <td style="font-size:13px;">{esc(field['label'])}</td>
-                  <td style="color:{colour}; font-weight:700; white-space:nowrap; font-size:16px;">
-                    {arrow} {sign}{avg:.1f}%
+                  <td style="font-size:13px;font-weight:600;vertical-align:middle;">{esc(field['label'])}</td>
+                  <td style="vertical-align:middle;white-space:nowrap;width:140px;">
+                    <div style="font-size:18px;font-weight:800;color:{colour};">{sign}{avg:.1f}%</div>
+                    <div style="background:var(--jag-border);border-radius:999px;height:5px;margin-top:4px;overflow:hidden;width:100px;">
+                      <div style="width:{bar_pct:.0f}%;height:100%;border-radius:999px;background:{'#0f6e62' if improved else '#9b1c1c'};"></div>
+                    </div>
+                    <div style="font-size:11px;color:var(--jag-muted);margin-top:3px;">{n} of {athlete_count}</div>
                   </td>
-                  <td class="muted" style="font-size:12px;">{coverage}</td>
+                  <td><div style="display:flex;flex-wrap:wrap;gap:4px;">{chips}</div></td>
                 </tr>"""
 
             if rows:
                 game_cards += f"""
-                <div class="card" style="margin-bottom:16px;">
-                  <h3 style="margin:0 0 12px; font-size:15px;">{esc(game['name'])}</h3>
+                <div class="card" style="margin-bottom:16px;overflow-x:auto;">
+                  <h3 style="margin:0 0 14px;font-size:15px;">{esc(game['name'])}</h3>
                   <table class="table" style="width:100%;">
                     <thead><tr>
                       <th>Measurement</th>
-                      <th>Avg improvement</th>
-                      <th>Athletes</th>
+                      <th>Group avg</th>
+                      <th>By athlete &mdash; click to view profile</th>
                     </tr></thead>
                     <tbody>{rows}</tbody>
                   </table>
@@ -1284,16 +1474,160 @@ def group_achievement_summary_page(coach, group, participants_sessions):
     if not sections_html:
         sections_html = '<div class="card"><p class="muted">No measurements recorded yet.</p></div>'
 
+    prog_link = f'/coach/groups/{group_id}/progress' if group_id else '/coach'
     body = f"""
     <div class="page-head">
       <div>
         <h1>{gname} &mdash; Achievement Summary</h1>
-        <p class="muted">Average improvement from first to most recent session &mdash; {athlete_count} athlete{"s" if athlete_count != 1 else ""} with 2+ sessions</p>
+        <p class="muted">First session to most recent &mdash; {athlete_count} athlete{"s" if athlete_count != 1 else ""} with 2+ sessions</p>
       </div>
-      <a class="btn btn-ghost" href="/coach">&larr; Dashboard</a>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+        <a class="btn btn-ghost" href="{prog_link}">Individual stats &rarr;</a>
+        <a class="btn btn-ghost" href="/coach">&larr; Dashboard</a>
+      </div>
+    </div>
+    {hero_card}
+    {athlete_grid}
+    <div style="border-left:4px solid var(--jag-green);padding-left:12px;margin-bottom:20px;">
+      <h2 style="margin:0 0 2px;font-size:17px;font-weight:700;">Measurement Breakdown</h2>
+      <p class="muted" style="margin:0;">Group average per field with individual athlete results</p>
     </div>
     {sections_html}"""
     return layout(f"{group['name']} Achievement Summary", body, user=coach, active_nav="progress")
+
+
+def group_scores_table_page(coach, group, participants_sessions):
+    """Flat table: rows = athletes, columns = every measurement field (latest session values)."""
+    active = [(p, s) for p, s in participants_sessions if s]
+    gname = esc(group["name"]) if group else "Group"
+    group_id = group["id"] if group else None
+    summary_url = f'/coach/groups/{group_id}/achievement-summary' if group_id else '/coach'
+
+    if not active:
+        body = f"""
+        <div class="page-head">
+          <div><h1>{gname} &mdash; Scores Table</h1></div>
+          <a class="btn btn-ghost" href="/coach">&larr; Dashboard</a>
+        </div>
+        <div class="card"><p class="muted">No test sessions recorded for this group yet.</p></div>"""
+        return layout(f"{group['name']} Scores Table", body, user=coach, active_nav="progress")
+
+    # Build the full column list from all games (base + sport-specific for athletes' sports)
+    # Use base MEASUREMENT_GAMES only (sport-specific vary per athlete — keep it simple)
+    # Column spec: list of (section_name, game_name, game_key, field_label, field_key, field_type)
+    cols = []
+    for section in MEASUREMENT_GAMES:
+        for game in section["games"]:
+            for field in game["fields"] + game.get("computed", []):
+                cols.append({
+                    "section": section["section"],
+                    "game": game["name"],
+                    "game_key": game["key"],
+                    "label": field["label"],
+                    "key": field["key"],
+                    "type": field["type"],
+                })
+
+    # Only keep columns that have at least one value in this group
+    def has_data(col):
+        return any(
+            s["results"].get((col["game_key"], col["key"])) is not None
+            for _, sessions in active
+            for s in sessions[:1]  # latest only
+        )
+    cols = [c for c in cols if has_data(c)]
+
+    if not cols:
+        body = f"""
+        <div class="page-head">
+          <div><h1>{gname} &mdash; Scores Table</h1></div>
+          <a class="btn btn-ghost" href="/coach">&larr; Dashboard</a>
+        </div>
+        <div class="card"><p class="muted">No measurement data recorded yet.</p></div>"""
+        return layout(f"{group['name']} Scores Table", body, user=coach, active_nav="progress")
+
+    # Build grouped header rows (game name spanning its fields)
+    # Group cols by game_key preserving order
+    from itertools import groupby as _groupby
+    game_spans = []
+    for game_key, grp in _groupby(cols, key=lambda c: c["game_key"]):
+        grp = list(grp)
+        game_spans.append((grp[0]["game"], len(grp)))
+
+    header_row1 = '<th style="min-width:140px;">Athlete</th>'
+    for game_name, span in game_spans:
+        header_row1 += (f'<th colspan="{span}" style="text-align:center;border-left:2px solid var(--jag-border);'
+                        f'font-size:12px;padding:8px 10px;color:var(--jag-navy);font-weight:700;">'
+                        f'{esc(game_name)}</th>')
+
+    header_row2 = '<th></th>'
+    for i, col in enumerate(cols):
+        bl = 'border-left:2px solid var(--jag-border);' if i == 0 or col["game_key"] != cols[i-1]["game_key"] else ''
+        header_row2 += f'<th style="{bl}font-size:11px;padding:6px 10px;white-space:nowrap;">{esc(col["label"])}</th>'
+
+    # Build rows
+    data_rows = ""
+    for p, sessions in sorted(active, key=lambda x: x[0]["name"]):
+        latest = sessions[0] if sessions else None
+        first = sessions[-1] if sessions else None
+        inits = "".join(w[0].upper() for w in p["name"].split()[:2])
+        athlete_cell = (
+            f'<td style="white-space:nowrap;padding:10px 12px;">'
+            f'<a href="/coach/participants/{p["id"]}" style="display:flex;align-items:center;gap:8px;text-decoration:none;color:inherit;">'
+            f'<div style="width:30px;height:30px;border-radius:50%;background:#2D323B;display:flex;align-items:center;'
+            f'justify-content:center;font-weight:800;font-size:11px;color:#F0A82E;flex-shrink:0;">{inits}</div>'
+            f'<span style="font-weight:600;font-size:13px;">{esc(p["name"])}</span>'
+            f'</a></td>'
+        )
+        cells = ""
+        for i, col in enumerate(cols):
+            bl = 'border-left:2px solid var(--jag-border);' if i == 0 or col["game_key"] != cols[i-1]["game_key"] else ''
+            lv = latest["results"].get((col["game_key"], col["key"])) if latest else None
+            fv = first["results"].get((col["game_key"], col["key"])) if first and first != latest else None
+            if lv is None:
+                cells += f'<td style="{bl}color:var(--jag-muted);text-align:center;">—</td>'
+            else:
+                val_str = f"{lv:.2f}s" if col["type"] == "time" else (str(int(lv)) if lv == int(lv) else str(lv))
+                # improvement indicator (only if 2+ sessions and not same session)
+                change_html = ""
+                if fv is not None and fv != 0 and first != latest:
+                    raw = (lv - fv) / fv * 100
+                    corrected = -raw if col["type"] == "time" else raw
+                    imp = corrected > 0
+                    c = "#0f6e62" if imp else "#9b1c1c"
+                    sign = "+" if corrected >= 0 else ""
+                    change_html = (f'<div style="font-size:10px;color:{c};font-weight:700;line-height:1;">'
+                                   f'{sign}{corrected:.0f}%</div>')
+                cells += (f'<td style="{bl}text-align:center;padding:8px 10px;">'
+                          f'<div style="font-weight:700;font-size:13px;">{val_str}</div>'
+                          f'{change_html}</td>')
+        data_rows += f"<tr>{athlete_cell}{cells}</tr>"
+
+    session_note = f'{len(active)} athlete{"s" if len(active)!=1 else ""} &mdash; showing latest session values'
+    if any(len(s) >= 2 for _, s in active):
+        session_note += ' &mdash; <span style="color:#0f6e62;font-weight:600;">green %</span> = improvement from first session'
+
+    body = f"""
+    <div class="page-head">
+      <div>
+        <h1>{gname} &mdash; Scores Table</h1>
+        <p class="muted">{session_note}</p>
+      </div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;">
+        <a class="btn btn-ghost" href="{summary_url}">&#128200; Group Stats</a>
+        <a class="btn btn-ghost" href="/coach">&larr; Dashboard</a>
+      </div>
+    </div>
+    <div class="card" style="overflow-x:auto;padding:0;">
+      <table class="table" style="width:100%;min-width:600px;border-collapse:collapse;">
+        <thead style="background:var(--jag-bg);">
+          <tr style="border-bottom:1px solid var(--jag-border);">{header_row1}</tr>
+          <tr style="border-bottom:2px solid var(--jag-border);">{header_row2}</tr>
+        </thead>
+        <tbody>{data_rows}</tbody>
+      </table>
+    </div>"""
+    return layout(f"{group['name']} Scores Table", body, user=coach, active_nav="progress")
 
 
 def _overall_achievement_html(groups_data):
