@@ -2528,7 +2528,7 @@ def coach_list_page(user, coaches, groups=None, coach_group_map=None, message=No
     # Collect unique organisations for filter bar
     all_orgs = sorted(set(
         c["organisation"] for c in coaches
-        if c.get("organisation")
+        if c["organisation"]
     ))
 
     rows = []
@@ -2540,13 +2540,13 @@ def coach_list_page(user, coaches, groups=None, coach_group_map=None, message=No
         assigned_ids = coach_group_map.get(c["id"], [])
         assigned_names = [esc(group_map[gid]) for gid in assigned_ids if gid in group_map]
         group_badge = (" &middot; " + ", ".join(f'<span class="tag">{n}</span>' for n in assigned_names)) if assigned_names else ""
-        org_text = esc(c["organisation"]) if c.get("organisation") else ""
+        org_text = esc(c["organisation"]) if c["organisation"] else ""
         org_pill = (f'<span style="font-size:11px;background:rgba(45,50,59,0.08);color:var(--jag-muted);'
                     f'border-radius:999px;padding:1px 8px;white-space:nowrap;">{org_text}</span> ') if org_text else ""
 
-        c_org_attr = esc(c.get("organisation") or "")
-        c_admin_attr = "1" if c.get("is_admin") else "0"
-        c_active_attr = "1" if c.get("active") else "0"
+        c_org_attr = esc(c["organisation"] or "")
+        c_admin_attr = "1" if c["is_admin"] else "0"
+        c_active_attr = "1" if c["active"] else "0"
 
         if is_self:
             action_html = '<span class="muted">(you)</span>'
@@ -2703,13 +2703,12 @@ def _gdrive_thumbnail(url):
 
 def _resource_tile(r, is_admin=False, tags=None):
     """Render a single resource as a link tile card."""
-    # JAG brand palette: navy and gold alternating
+    # JAG brand palette: navy and gold alternating by id
     jag_palette = [
-        ('#2D323B', 'rgba(240,168,46,0.75)'),   # navy bg, gold icon
-        ('#F0A82E', 'rgba(45,50,59,0.65)'),      # gold bg, navy icon
+        ('#2D323B', '#F0A82E'),   # navy bg, gold icon
+        ('#F0A82E', '#2D323B'),   # gold bg, navy icon
     ]
-    bg_color, icon_fill = jag_palette[r['id'] % len(jag_palette)]
-    # Border: navy tiles get a gold accent border; gold tiles get a navy border
+    bg_color, icon_color = jag_palette[r['id'] % len(jag_palette)]
     border_color = '#F0A82E' if bg_color == '#2D323B' else '#2D323B'
 
     name_q = esc(r['name']).replace("'", "\\'")
@@ -2730,38 +2729,59 @@ def _resource_tile(r, is_admin=False, tags=None):
     tags_html = f'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:auto;padding-top:8px;">{tag_pills}</div>' if tag_pills else ''
     tag_data = ",".join(t.lower() for t in tag_names)
     search_data = (r['name'] + " " + (r['description'] or "")).lower()
-    # Google Drive thumbnail — or a branded placeholder
-    thumb_url = _gdrive_thumbnail(r['url'] or '')
+
+    # SVG uses single quotes throughout so it embeds safely in JS strings
     placeholder_svg = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" fill="{icon_fill}" viewBox="0 0 24 24">'
-        f'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>'
-        f'<path d="M14 2v6h6"/></svg>'
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36'"
+        f" fill='{icon_color}' viewBox='0 0 24 24'>"
+        f"<path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z'/>"
+        f"<path d='M14 2v6h6'/></svg>"
     )
+    # Escape any single quotes in SVG for JS string embedding
+    svg_js = placeholder_svg.replace("'", "\\'")
+    fallback_style = (
+        f"margin:-14px -14px 12px;height:100px;border-radius:8px 8px 0 0;"
+        f"background:{bg_color};display:flex;align-items:center;justify-content:center;"
+    ).replace("'", "\\'")
+
+    # Google Drive thumbnail — or branded placeholder header
+    thumb_url = _gdrive_thumbnail(r['url'] or '')
     if thumb_url:
         thumb_html = (
             f'<a href="{esc(r["url"])}" target="_blank" rel="noopener" tabindex="-1"'
             f' style="display:block;margin:-14px -14px 12px;border-radius:8px 8px 0 0;overflow:hidden;flex-shrink:0;">'
             f'<img src="{thumb_url}" alt="" loading="lazy"'
-            f' style="width:100%;height:160px;object-fit:cover;display:block;"'
-            f" onerror=\"this.parentElement.outerHTML='<div style=\\'margin:-14px -14px 12px;height:100px;border-radius:8px 8px 0 0;background:{bg_color};display:flex;align-items:center;justify-content:center;\\'>{placeholder_svg}</div>'\">"
+            f' style="width:100%;height:120px;object-fit:cover;display:block;"'
+            f" onerror=\"this.parentElement.outerHTML='<div style=\\'{fallback_style}\\'>{svg_js}</div>';\">"
             f'</a>'
         )
     else:
         thumb_html = (
-            f'<div style="margin:-14px -14px 12px;height:100px;border-radius:8px 8px 0 0;'
+            f'<div style="margin:-14px -14px 12px;height:80px;border-radius:8px 8px 0 0;'
             f'background:{bg_color};display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
             f'{placeholder_svg}'
             f'</div>'
         )
     pad = '20px 14px 14px 28px' if is_admin else '14px'
-    return f"""<div class="res-tile" data-id="{r['id']}" data-tags="{esc(tag_data)}" data-search="{esc(search_data)}" style="position:relative;background:var(--jag-card);border:2.5px solid {border_color};border-radius:10px;padding:{pad};display:flex;flex-direction:column;word-break:break-word;overflow:hidden;transition:box-shadow 0.15s,transform 0.15s;" onmouseover="this.style.boxShadow='0 4px 16px rgba(45,50,59,0.18)';this.style.transform='translateY(-2px)';" onmouseout="this.style.boxShadow='';this.style.transform='';">
-      {drag}
-      {thumb_html}
-      <a href="{esc(r['url'])}" target="_blank" rel="noopener" style="font-weight:700;font-size:14px;color:var(--jag-navy);text-decoration:none;line-height:1.3;" onmouseover="this.style.textDecoration='underline';" onmouseout="this.style.textDecoration='none';">{esc(r['name'])} <span style="font-size:11px;opacity:0.5;">&#8599;</span></a>
-      {desc}
-      {tags_html}
-      {admin_actions}
-    </div>"""
+    return (
+        f'<div class="res-tile" data-id="{r["id"]}" data-tags="{esc(tag_data)}"'
+        f' data-search="{esc(search_data)}"'
+        f' style="position:relative;background:var(--jag-card);border:2px solid {border_color};'
+        f'border-radius:10px;padding:{pad};display:flex;flex-direction:column;'
+        f'word-break:break-word;overflow:hidden;transition:box-shadow 0.15s,transform 0.15s;"'
+        f' onmouseover="this.style.boxShadow=\'0 4px 16px rgba(45,50,59,0.15)\';this.style.transform=\'translateY(-2px)\';"'
+        f' onmouseout="this.style.boxShadow=\'\';this.style.transform=\'\';">'
+        f'{drag}'
+        f'{thumb_html}'
+        f'<a href="{esc(r["url"])}" target="_blank" rel="noopener"'
+        f' style="font-weight:700;font-size:14px;color:var(--jag-navy);text-decoration:none;line-height:1.3;"'
+        f' onmouseover="this.style.textDecoration=\'underline\';" onmouseout="this.style.textDecoration=\'none\';">'
+        f'{esc(r["name"])} <span style="font-size:11px;opacity:0.5;">&#8599;</span></a>'
+        f'{desc}'
+        f'{tags_html}'
+        f'{admin_actions}'
+        f'</div>'
+    )
 
 
 def _resource_tile_wrap(tiles_html, list_id=None):
