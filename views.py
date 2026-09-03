@@ -673,6 +673,9 @@ def _athlete_tile(p, is_admin=False):
     drag = '<span class="drag-handle" title="Drag to move group" style="position:absolute;top:6px;right:8px;font-size:11px;color:#bbb;line-height:1;">&#9776;</span>' if is_admin else ""
     sport_badge = (f'<span style="font-size:10px;font-weight:600;background:rgba(240,168,46,0.15);color:#CF8F1F;'
                    f'border-radius:999px;padding:2px 8px;white-space:nowrap;">{sport}</span>') if sport else ''
+    an = p.get('athlete_number') or ''
+    number_badge = (f'<span style="position:absolute;top:6px;left:8px;font-size:10px;font-weight:700;'
+                    f'color:var(--jag-navy);opacity:0.45;">#{esc(an)}</span>') if an else ''
     return f"""<a href="/coach/participants/{p['id']}" class="athlete-tile" data-id="{p['id']}" data-sport="{esc(p.get('sport') or '')}"
       style="position:relative;display:flex;flex-direction:column;align-items:center;gap:8px;
              padding:20px 12px 16px;background:var(--jag-card);border:2px solid var(--jag-border);
@@ -680,6 +683,7 @@ def _athlete_tile(p, is_admin=False):
              transition:box-shadow 0.18s ease,border-color 0.18s ease,transform 0.18s ease;"
       onmouseover="this.style.boxShadow='0 6px 20px rgba(0,0,0,0.13)';this.style.borderColor='#F0A82E';this.style.transform='translateY(-2px)';"
       onmouseout="this.style.boxShadow='';this.style.borderColor='var(--jag-border)';this.style.transform='';">
+      {number_badge}
       {drag}
       <div style="width:54px;height:54px;border-radius:50%;background:#2D323B;display:flex;align-items:center;
                   justify-content:center;font-weight:800;font-size:19px;color:#F0A82E;flex-shrink:0;
@@ -859,6 +863,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
       <a class="btn btn-primary" href="/coach/participants/new">+ Add Participant</a>
       <button type="button" class="btn btn-primary" onclick="var p=document.getElementById('create-group-panel');p.style.display=p.style.display==='none'?'block':'none';">+ Create Group</button>
       <a class="btn btn-primary" href="/coach/session">Record Session</a>
+      {'<a class="btn btn-ghost" href="/coach/participants/import" title="Bulk-import athletes from CSV">&#8679; Import CSV</a><a class="btn btn-ghost" href="/coach/participants/export.csv" title="Export all athletes with new temp passwords">&#8681; Export CSV</a>' if is_admin else ''}
     </div>
     {create_group_form}""" if is_admin else ""
 
@@ -1049,6 +1054,10 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
     group_pill = (f'<span style="font-size:12px;font-weight:600;background:var(--jag-green);color:var(--jag-navy);'
                   f'border-radius:999px;padding:2px 10px;">{esc(current_group_name)}</span>'
                   ) if current_group_name else ""
+    an = participant.get("athlete_number") or ""
+    number_pill = (f'<span style="font-size:12px;font-weight:700;background:var(--jag-navy);color:var(--jag-gold);'
+                   f'border-radius:999px;padding:2px 10px;letter-spacing:.04em;">#{esc(an)}</span>'
+                   ) if an else ""
     session_count = len(measurement_sessions)
 
     # Build group transfer history notice
@@ -1076,8 +1085,8 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
       <div style="flex:1;min-width:0;">
         <h1 style="margin:0 0 4px;font-size:26px;">{esc(participant['name'])}</h1>
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px;">
-          {sport_pill}{group_pill}
-          <span style="font-size:12px;color:var(--jag-muted);">{esc(participant['email'])}</span>
+          {number_pill}{sport_pill}{group_pill}
+          <span style="font-size:12px;color:var(--jag-muted);">{esc(participant['email'] or '')}</span>
         </div>
         {f'<p style="margin:0;font-size:13px;color:var(--jag-muted);">{esc(participant["programme"])}</p>' if participant.get("programme") else ""}
       </div>
@@ -3131,4 +3140,44 @@ def edit_resource_page(user, resource, folders, all_tags=None, selected_tag_ids=
     """
     return layout("Edit Resource", body, user=user, active_nav="resources")
 
+
+def participant_import_form(user, error=None):
+    error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
+    body = f"""
+    <div class="page-head">
+      <div>
+        <h1>Import Athletes from CSV</h1>
+        <p class="muted">Paste CSV content below to bulk-create athletes. Existing athlete numbers are skipped (safe to re-run).</p>
+      </div>
+      <div><a class="btn btn-ghost" href="/coach">&larr; Back</a></div>
+    </div>
+    {error_html}
+
+    <div class="card form-card" style="max-width:680px;">
+      <h3 style="margin-top:0;font-size:14px;color:var(--jag-muted);text-transform:uppercase;letter-spacing:.04em;">CSV Format</h3>
+      <p style="font-size:13px;margin:0 0 12px;">Required column: <code>name</code>. Optional: <code>sport</code>, <code>group_name</code>, <code>username</code>, <code>athlete_number</code>.</p>
+      <pre style="background:var(--jag-bg);border:1px solid var(--jag-border);border-radius:8px;padding:12px;font-size:12px;overflow-x:auto;margin:0 0 16px;">name,sport,group_name,username
+Jane Smith,Football,Under 12s,janesmith
+Tom Brown,Basketball,Under 14s,tombrown
+Alex Lee,Football,Under 12s,</pre>
+      <ul style="font-size:13px;color:var(--jag-muted);margin:0 0 20px;padding-left:18px;">
+        <li>Athletes without a login (no username/email) are created as data-only records.</li>
+        <li>Groups are created automatically if they don't exist.</li>
+        <li>If <code>athlete_number</code> is provided and already exists, that row is skipped.</li>
+        <li>Export CSV afterwards to get temp passwords for athletes who need login access.</li>
+      </ul>
+
+      <form method="post" action="/coach/participants/import">
+        <label style="display:block;font-weight:600;margin-bottom:6px;">Paste CSV here</label>
+        <textarea name="csv_data" rows="14" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:13px;
+          border:1px solid var(--jag-border);border-radius:8px;padding:10px;resize:vertical;"
+          placeholder="name,sport,group_name&#10;Jane Smith,Football,Under 12s&#10;..."></textarea>
+        <div style="margin-top:14px;display:flex;gap:8px;">
+          <button type="submit" class="btn btn-primary">Import Athletes</button>
+          <a class="btn btn-ghost" href="/coach">Cancel</a>
+        </div>
+      </form>
+    </div>
+    """
+    return layout("Import Athletes", body, user=user, active_nav="dashboard")
 

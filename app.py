@@ -281,16 +281,18 @@ def new_participant_post(req):
             existing = conn.execute("SELECT id FROM users WHERE lower(email) = ?", (email,)).fetchone()
             if existing:
                 return Response(views.new_participant_form(coach, groups=groups, error="A user with that email already exists."), status=400)
-        conn.execute(
+        pid = conn.execute(
             "INSERT INTO users (name, email, password_hash, role, sport, programme, group_id, created_at) "
             "VALUES (?, ?, ?, 'participant', ?, ?, ?, ?)",
             (name, email, hash_password(password) if password else None, sport, programme, group_id or None, db.now()),
-        )
+        ).lastrowid
+        athlete_number = db.next_athlete_number(conn)
+        conn.execute("UPDATE users SET athlete_number = ? WHERE id = ?", (athlete_number, pid))
         conn.commit()
         if setup_login:
-            return flash_redirect("/coach", f"Added {name}. Share their login: {email} / {password}")
+            return flash_redirect("/coach", f"Added {name} (#{athlete_number}). Share their login: {email} / {password}")
         else:
-            return flash_redirect("/coach", f"Added {name} to the system.")
+            return flash_redirect("/coach", f"Added {name} (#{athlete_number}) to the system.")
     finally:
         conn.close()
 
@@ -1271,6 +1273,160 @@ def tag_delete(req, tag_id):
         return flash_redirect("/coach/resources", "Tag deleted.")
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------- CSV import / export
+
+
+@router.get("/coach/participants/import")
+def participant_import_get(req):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    return Response(views.participant_import_form(coach))
+
+
+@router.post("/coach/participants/import")
+def participant_import_post(req):
+    import csv
+    import io
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+
+    raw_csv = req.form_get("csv_data").strip()
+    if not raw_csv:
+        return Response(views.participant_import_form(coach, error="Please paste CSV data before importing."), status=400)
+
+    reader = csv.DictReader(io.StringIO(raw_csv))
+    required_cols = {"name"}
+    if not reader.fieldnames or not required_cols.issubset({f.strip().lower() for f in reader.fieldnames}):
+        return Response(
+            views.participant_import_form(coach, error="CSV must have at least a 'name' column. Optional: sport, group_name, username, athlete_number."),
+            status=400,
+        )
+
+    # Normalise column names to lowercase stripped versions
+    def col(row, *keys):
+        for k in keys:
+            for fk in (row or {}):
+                if fk.strip().lower() == k:
+                    v = row[fk]
+                    return v.strip() if v else ""
+        return ""
+
+    created, skipped, errors = 0, 0, []
+    conn = db.get_conn()
+    try:
+        for i, row in enumerate(reader, start=2):  # row 1 = header
+            name = col(row, "name")
+            if not name:
+                errors.append(f"Row {i}: name is empty — skipped.")
+                skipped += 1
+                continue
+
+            athlete_number_raw = col(row, "athlete_number")
+            sport = col(row, "sport") or None
+            group_name = col(row, "group_name") or None
+            username = col(row, "username") or None
+
+            # Deduplication: if athlete_number supplied and already exists, skip
+            if athlete_number_raw:
+                existing = conn.execute(
+                    "SELECT id FROM users WHERE athlete_number = ?", (athlete_number_raw,)
+                ).fetchone()
+                if existing:
+                    errors.append(f"Row {i}: athlete #{athlete_number_raw} already exists — skipped.")
+                    skipped += 1
+                    continue
+
+            # Resolve group
+            group_id = None
+            if group_name:
+                group_id = db.find_or_create_group(conn, group_name, coach["id"])
+
+            # Check username uniqueness
+            if username:
+                existing_u = conn.execute(
+                    "SELECT id FROM users WHERE lower(username) = ?", (username.lower(),)
+                ).fetchone()
+                if existing_u:
+                    errors.append(f"Row {i}: username '{username}' already taken — skipped.")
+                    skipped += 1
+                    continue
+
+            pid = conn.execute(
+                "INSERT INTO users (name, username, role, sport, group_id, created_at) "
+                "VALUES (?, ?, 'participant', ?, ?, ?)",
+                (name, username or None, sport, group_id, db.now()),
+            ).lastrowid
+
+            # Use supplied athlete_number or auto-assign
+            if athlete_number_raw:
+                an = athlete_number_raw
+            else:
+                an = db.next_athlete_number(conn)
+            conn.execute("UPDATE users SET athlete_number = ? WHERE id = ?", (an, pid))
+            conn.commit()
+            created += 1
+    finally:
+        conn.close()
+
+    summary = f"Import complete: {created} added, {skipped} skipped."
+    if errors:
+        summary += " Issues: " + " | ".join(errors)
+    return flash_redirect("/coach", summary)
+
+
+@router.get("/coach/participants/export.csv")
+def participant_export_csv(req):
+    import csv
+    import io
+    import secrets
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+
+    conn = db.get_conn()
+    try:
+        rows = conn.execute(
+            """
+            SELECT u.id, u.athlete_number, u.name, u.username, u.email, u.sport,
+                   pg.name AS group_name
+            FROM users u
+            LEFT JOIN participant_groups pg ON pg.id = u.group_id
+            WHERE u.role = 'participant' AND u.active = 1
+            ORDER BY u.athlete_number, u.name
+            """
+        ).fetchall()
+
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+        writer.writerow(["athlete_number", "name", "username", "email", "group", "sport", "temp_password"])
+
+        for r in rows:
+            temp_pw = secrets.token_urlsafe(6)
+            # Store the new temp password so coach can share it and athlete can log in
+            db.update_password(conn, r["id"], temp_pw)
+            writer.writerow([
+                r["athlete_number"] or "",
+                r["name"],
+                r["username"] or "",
+                r["email"] or "",
+                r["group_name"] or "",
+                r["sport"] or "",
+                temp_pw,
+            ])
+
+        conn.commit()
+    finally:
+        conn.close()
+
+    csv_bytes = buf.getvalue().encode("utf-8")
+    resp = Response(body=csv_bytes, content_type="text/csv; charset=utf-8")
+    resp.headers.append(("Content-Disposition", "attachment; filename=\"athletes_export.csv\""))
+    resp.headers.append(("Content-Length", str(len(csv_bytes))))
+    return resp
 
 
 # ------------------------------------------------------------------- bootstrap

@@ -160,13 +160,58 @@ def init_db():
         "ALTER TABLE users ADD COLUMN username TEXT",
         "ALTER TABLE measurement_sessions ADD COLUMN group_id INTEGER REFERENCES participant_groups(id)",
         "ALTER TABLE users ADD COLUMN organisation TEXT",
+        "ALTER TABLE users ADD COLUMN athlete_number TEXT",
     ]:
         try:
             conn.execute(sql)
             conn.commit()
         except Exception:
             pass  # column already exists
+    # Retroactively assign athlete numbers to any participants added before
+    # this feature was introduced.
+    assign_missing_athlete_numbers(conn)
     conn.close()
+
+
+def next_athlete_number(conn):
+    """Return the next unused zero-padded 4-digit athlete number as a string."""
+    row = conn.execute(
+        "SELECT MAX(CAST(athlete_number AS INTEGER)) AS max_n "
+        "FROM users WHERE athlete_number IS NOT NULL AND athlete_number GLOB '[0-9]*'"
+    ).fetchone()
+    max_n = row["max_n"] or 0
+    return f"{max_n + 1:04d}"
+
+
+def assign_missing_athlete_numbers(conn):
+    """Retroactively assign athlete_number to participants who don't have one.
+    Called once at startup so any pre-feature participants get a number."""
+    participants = conn.execute(
+        "SELECT id FROM users WHERE role='participant' AND athlete_number IS NULL ORDER BY id"
+    ).fetchall()
+    for p in participants:
+        num = next_athlete_number(conn)
+        conn.execute("UPDATE users SET athlete_number = ? WHERE id = ?", (num, p["id"]))
+        conn.commit()
+
+
+def find_or_create_group(conn, name, created_by):
+    """Find a group by name (case-insensitive) or create it. Returns group_id."""
+    name = name.strip()
+    row = conn.execute(
+        "SELECT id FROM participant_groups WHERE lower(name) = lower(?)", (name,)
+    ).fetchone()
+    if row:
+        return row["id"]
+    max_order = conn.execute(
+        "SELECT COALESCE(MAX(sort_order), -1) FROM participant_groups"
+    ).fetchone()[0]
+    gid = conn.execute(
+        "INSERT INTO participant_groups (name, sort_order, created_by, created_at) VALUES (?, ?, ?, ?)",
+        (name, max_order + 1, created_by, now()),
+    ).lastrowid
+    conn.commit()
+    return gid
 
 
 def now():
