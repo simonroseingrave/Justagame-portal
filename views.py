@@ -1770,14 +1770,6 @@ def _round_table(athletes_sessions, game):
         return ""
 
     all_fields = game["fields"] + game.get("computed", [])
-    # max rounds any athlete has for this game
-    max_rounds = max(
-        (sum(1 for s in sessions if any(
-            s["results"].get((game["key"], f["key"])) is not None for f in all_fields
-        ) for _, sessions in athletes_sessions)),
-        default=0,
-    )
-    # Simpler: just use total session count as proxy for rounds
     max_rounds = max((len(s) for _, s in athletes_sessions), default=0)
     if max_rounds == 0:
         return ""
