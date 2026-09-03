@@ -726,10 +726,13 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
 
     group_sections = ""
     for group, participants in group_summaries:
+        gkey = f"g{group['id']}"
         count = len(participants)
         tiles_html = "".join(_athlete_tile(p, is_admin=is_admin) for p in participants)
         empty_msg = '<p class="muted" style="font-size:13px;padding:8px 0;">No athletes in this group yet.</p>'
-        tiles_wrap = f'<div class="athlete-tiles-wrap" data-group-list-id="{group["id"]}" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;padding:8px 0 4px;">{tiles_html or empty_msg}</div>'
+        tiles_wrap = (f'<div id="body-{gkey}" class="athlete-tiles-wrap" data-group-list-id="{group["id"]}"'
+                      f' style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;padding:8px 0 4px;">'
+                      f'{tiles_html or empty_msg}</div>')
         folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder groups" style="color:var(--jag-muted);cursor:grab;font-size:16px;">&#9776;</span>' if is_admin else ""
         summary_link = (f'<a href="/coach/groups/{group["id"]}/achievement-summary" class="btn btn-sm" style="font-size:12px;background:var(--jag-green);color:var(--jag-navy);font-weight:600;border:none;">&#128200; Group Stats</a>'
                         f'<a href="/coach/groups/{group["id"]}/scores" class="btn btn-sm btn-ghost" style="font-size:12px;">&#128203; Scores Table</a>')
@@ -739,11 +742,15 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
               <button type="submit" class="btn btn-ghost btn-sm" style="font-size:12px;">Delete</button>
             </form>""" if is_admin else ""
         group_sections += f"""
-        <div class="group-section" data-group-id="{group['id']}" style="margin-bottom:44px;">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+        <div class="group-section" data-group-id="{group['id']}" data-group-key="{gkey}" style="margin-bottom:28px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
             {folder_handle}
-            <div style="border-left:4px solid var(--jag-green);padding-left:12px;flex:1;min-width:0;">
-              <h2 style="margin:0;font-size:20px;font-weight:700;color:var(--jag-navy);line-height:1.2;">{esc(group['name'])}</h2>
+            <div style="border-left:4px solid var(--jag-green);padding-left:12px;flex:1;min-width:0;cursor:pointer;"
+                 onclick="toggleGroup('{gkey}')">
+              <div style="display:flex;align-items:center;gap:8px;">
+                <h2 style="margin:0;font-size:20px;font-weight:700;color:var(--jag-navy);line-height:1.2;">{esc(group['name'])}</h2>
+                <span id="toggle-{gkey}" style="font-size:13px;color:var(--jag-muted);user-select:none;">&#9660;</span>
+              </div>
               <span class="muted group-count" style="font-size:13px;">{count} athlete{"s" if count != 1 else ""}</span>
             </div>
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
@@ -758,13 +765,19 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     ug_count = len(ungrouped_summaries)
     ug_tiles = "".join(_athlete_tile(p, is_admin=is_admin) for p in ungrouped_summaries)
     ug_empty = '<p class="muted" style="font-size:13px;padding:8px 0;">No ungrouped athletes.</p>'
-    ug_wrap = f'<div class="athlete-tiles-wrap" data-group-list-id="ungrouped" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;padding:8px 0 4px;">{ug_tiles or ug_empty}</div>'
+    ug_wrap = (f'<div id="body-ungrouped" class="athlete-tiles-wrap" data-group-list-id="ungrouped"'
+               f' style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;padding:8px 0 4px;">'
+               f'{ug_tiles or ug_empty}</div>')
     ug_label = "Athletes" if not group_summaries else "Ungrouped"
     ungrouped_section = f"""
-    <div class="group-section" style="margin-bottom:44px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+    <div class="group-section" data-group-key="ungrouped" style="margin-bottom:28px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;cursor:pointer;"
+           onclick="toggleGroup('ungrouped')">
         <div style="border-left:4px solid var(--jag-border);padding-left:12px;">
-          <h2 style="margin:0;font-size:20px;font-weight:700;color:var(--jag-muted);line-height:1.2;">{ug_label}</h2>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <h2 style="margin:0;font-size:20px;font-weight:700;color:var(--jag-muted);line-height:1.2;">{ug_label}</h2>
+            <span id="toggle-ungrouped" style="font-size:13px;color:var(--jag-muted);user-select:none;">&#9660;</span>
+          </div>
           <span class="muted group-count" style="font-size:13px;">{ug_count} athlete{"s" if ug_count != 1 else ""}</span>
         </div>
       </div>
@@ -902,6 +915,31 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     else:
         subtitle = 'No group assigned yet &mdash; contact an admin.'
 
+    collapse_js = """
+    <script>
+    function toggleGroup(key) {
+      var body   = document.getElementById('body-' + key);
+      var toggle = document.getElementById('toggle-' + key);
+      if (!body) return;
+      var isCollapsed = body.style.display === 'none';
+      body.style.display = isCollapsed ? '' : 'none';
+      if (toggle) toggle.innerHTML = isCollapsed ? '&#9660;' : '&#9654;';
+      try { localStorage.setItem('jag-grp-' + key, isCollapsed ? '0' : '1'); } catch(e) {}
+    }
+    // Restore collapsed state on load
+    document.querySelectorAll('[data-group-key]').forEach(function(sec) {
+      var key = sec.dataset.groupKey;
+      var collapsed;
+      try { collapsed = localStorage.getItem('jag-grp-' + key) === '1'; } catch(e) { collapsed = false; }
+      if (collapsed) {
+        var body = document.getElementById('body-' + key);
+        if (body) body.style.display = 'none';
+        var toggle = document.getElementById('toggle-' + key);
+        if (toggle) toggle.innerHTML = '&#9654;';
+      }
+    });
+    </script>"""
+
     body = f"""
     <style>.athlete-tile {{transition:box-shadow 0.18s ease,border-color 0.18s ease,transform 0.18s ease;}}</style>
     <div style="max-width:1320px;">
@@ -920,6 +958,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     </div>
     {sortable_js}
     {filter_js}
+    {collapse_js}
     """
     return layout("Coach Dashboard", body, user=user, active_nav="dashboard")
 
