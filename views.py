@@ -824,7 +824,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
           });
           document.querySelectorAll('.athlete-tile').forEach(function(tile) {
             var ts = tile.dataset.sport || '';
-            tile.style.display = (!sport || ts === sport) ? '' : 'none';
+            tile.style.display = (!sport || ts === sport) ? 'flex' : 'none';
           });
           document.querySelectorAll('.group-section').forEach(function(sec) {
             var wrap = sec.querySelector('.athlete-tiles-wrap');
@@ -832,7 +832,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
             var visible = Array.from(wrap.querySelectorAll('.athlete-tile')).filter(function(t){ return t.style.display !== 'none'; }).length;
             var badge = sec.querySelector('.group-count');
             if (badge) badge.textContent = visible + (visible === 1 ? ' athlete' : ' athletes');
-            sec.style.display = visible === 0 ? 'none' : '';
+            sec.style.display = visible === 0 ? 'none' : 'block';
           });
         }
         </script>"""
@@ -918,11 +918,11 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     collapse_js = """
     <script>
     function toggleGroup(key) {
-      var body   = document.getElementById('body-' + key);
+      var wrap   = document.getElementById('body-' + key);
       var toggle = document.getElementById('toggle-' + key);
-      if (!body) return;
-      var isCollapsed = body.style.display === 'none';
-      body.style.display = isCollapsed ? '' : 'none';
+      if (!wrap) return;
+      var isCollapsed = wrap.style.display === 'none';
+      wrap.style.display = isCollapsed ? 'grid' : 'none';
       if (toggle) toggle.innerHTML = isCollapsed ? '&#9660;' : '&#9654;';
       try { localStorage.setItem('jag-grp-' + key, isCollapsed ? '0' : '1'); } catch(e) {}
     }
@@ -932,8 +932,8 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
       var collapsed;
       try { collapsed = localStorage.getItem('jag-grp-' + key) === '1'; } catch(e) { collapsed = false; }
       if (collapsed) {
-        var body = document.getElementById('body-' + key);
-        if (body) body.style.display = 'none';
+        var wrap = document.getElementById('body-' + key);
+        if (wrap) wrap.style.display = 'none';
         var toggle = document.getElementById('toggle-' + key);
         if (toggle) toggle.innerHTML = '&#9654;';
       }
