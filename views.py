@@ -157,12 +157,28 @@ def forgot_password_page():
     return layout("Forgot Password", body)
 
 
-def _measurement_field_input(game_key, field):
+def _measurement_field_input(game_key, field, is_computed=False):
     """One labelled number input with an inline quick-save button."""
     ftype = field["type"]
     step = "0.01" if ftype == "time" else "1"
     suffix = " (seconds)" if ftype == "time" else (f" ({field['unit']})" if field.get("unit") else "")
     input_id = f"mg__{game_key}__{field['key']}"
+    if is_computed:
+        return f"""
+    <div class="mg-field" style="opacity:0.7;">
+      <label for="{input_id}" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+        {esc(field['label'])}{esc(suffix)}
+        <span style="font-size:10px;background:rgba(45,50,59,0.1);color:#6E737B;border-radius:999px;
+                     padding:1px 8px;font-weight:600;letter-spacing:0.02em;">auto-calculated</span>
+      </label>
+      <div class="mg-field-row">
+        <input type="number" step="{step}" min="0" id="{input_id}" name="{input_id}"
+               data-game="{esc(game_key)}" data-field="{esc(field['key'])}" readonly
+               style="background:#F3F4F5;color:#6E737B;cursor:not-allowed;border-color:#DDE0E3;" />
+        <span style="font-size:12px;color:#6E737B;padding:4px 10px;white-space:nowrap;">auto</span>
+      </div>
+    </div>
+    """
     return f"""
     <div class="mg-field">
       <label for="{input_id}">{esc(field['label'])}{esc(suffix)}</label>
@@ -178,12 +194,30 @@ def _measurement_field_input(game_key, field):
 
 
 def _measurement_game_fieldset(game):
-    fields_html = "".join(_measurement_field_input(game["key"], f) for f in game["fields"])
+    """Styled collapsible card for a single measurement game."""
+    game_key = game["key"]
+    card_id = f"mg-card-{game_key}"
+    body_id = f"mg-body-{game_key}"
+    fields_html = "".join(_measurement_field_input(game_key, f) for f in game["fields"])
+    computed_html = "".join(
+        _measurement_field_input(game_key, cf, is_computed=True)
+        for cf in game.get("computed", [])
+    )
     return f"""
-    <fieldset class="mg-game">
-      <legend>{esc(game['name'])}</legend>
-      <div class="mg-field-grid">{fields_html}</div>
-    </fieldset>
+    <div class="mg-game-card" id="{card_id}" data-game-key="{esc(game_key)}"
+         style="border:1px solid #DDE0E3;border-left:4px solid #2D323B;border-radius:8px;
+                margin-bottom:12px;overflow:hidden;transition:box-shadow 0.15s;">
+      <div class="mg-game-header" onclick="toggleGameCard('{game_key}')"
+           style="display:flex;align-items:center;justify-content:space-between;
+                  padding:10px 14px;cursor:pointer;background:#fff;user-select:none;">
+        <span style="font-size:14px;font-weight:700;color:#2D323B;">{esc(game['name'])}</span>
+        <span id="mg-toggle-{game_key}"
+              style="font-size:11px;color:#F0A82E;font-weight:700;letter-spacing:0.05em;">&#9650; COLLAPSE</span>
+      </div>
+      <div id="{body_id}" style="padding:12px 14px 14px;background:#fafafa;border-top:1px solid #DDE0E3;">
+        <div class="mg-field-grid">{fields_html}{computed_html}</div>
+      </div>
+    </div>
     """
 
 
@@ -193,9 +227,42 @@ def measurement_games_form(participant_id):
     section. Each field has its own quick-save button; the session is
     created lazily on the first save. A bulk-submit fallback is also
     available via the full form."""
-    sections_html = "".join(f"""
+    # Build game chip list and sections HTML together
+    all_games_for_chips = []
+    for section in MEASUREMENT_GAMES:
+        for g in section["games"]:
+            all_games_for_chips.append(g)
+
+    chips_html = "".join(
+        f'<button type="button" class="mg-chip mg-chip-active" data-chip-game="{esc(g["key"])}"'
+        f' onclick="toggleChip(this)"'
+        f' style="padding:5px 14px;border-radius:999px;border:2px solid #2D323B;background:#2D323B;'
+        f'color:#F0A82E;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s;">'
+        f'{esc(g["name"])}</button>'
+        for g in all_games_for_chips
+    )
+
+    chip_panel_html = f"""
+    <div style="margin-bottom:20px;padding:14px 16px;background:#fff;border:1px solid #DDE0E3;
+                border-radius:8px;border-left:4px solid #F0A82E;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+        <span style="font-size:13px;font-weight:700;color:#2D323B;">Games in this session</span>
+        <div style="display:flex;gap:6px;">
+          <button type="button" onclick="selectAllChips()"
+                  style="font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid #DDE0E3;
+                         background:#fff;color:#2D323B;cursor:pointer;font-weight:600;">All</button>
+          <button type="button" onclick="selectNoChips()"
+                  style="font-size:12px;padding:3px 10px;border-radius:999px;border:1px solid #DDE0E3;
+                         background:#fff;color:#2D323B;cursor:pointer;font-weight:600;">None</button>
+        </div>
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:7px;">{chips_html}</div>
+    </div>
+    """
+
+    sections_html = chip_panel_html + "".join(f"""
     <div class="mg-section" style="margin-bottom:24px;">
-      <div style="border-left:4px solid var(--jag-green);padding-left:10px;margin-bottom:12px;">
+      <div style="border-left:4px solid #F0A82E;padding-left:10px;margin-bottom:12px;">
         <h4 style="margin:0;font-size:15px;font-weight:700;color:var(--jag-navy);">{esc(section['section'])}</h4>
       </div>
       {''.join(_measurement_game_fieldset(g) for g in section['games'])}
@@ -207,7 +274,7 @@ def measurement_games_form(participant_id):
     for sport, sport_sections in SPORT_SPECIFIC_GAMES.items():
         sport_fieldsets = "".join(
             f"""<div class="mg-section" style="margin-bottom:24px;">
-              <div style="border-left:4px solid var(--jag-green);padding-left:10px;margin-bottom:12px;">
+              <div style="border-left:4px solid #F0A82E;padding-left:10px;margin-bottom:12px;">
                 <h4 style="margin:0;font-size:15px;font-weight:700;color:var(--jag-navy);">{esc(section['section'])}</h4>
               </div>
               {''.join(_measurement_game_fieldset(g) for g in section['games'])}
@@ -261,9 +328,9 @@ def measurement_games_form(participant_id):
         }} else if (state === 'ok') {{
           btn.textContent = '\\u2713 Saved';
           btn.disabled = false;
-          btn.style.background = '#0f6e62';
-          btn.style.color = '#fff';
-          btn.style.borderColor = '#0f6e62';
+          btn.style.background = '#F0A82E';
+          btn.style.color = '#2D323B';
+          btn.style.borderColor = '#F0A82E';
           setTimeout(function() {{
             btn.textContent = '\\u2713 Save';
             btn.style.background = '';
@@ -369,6 +436,49 @@ def measurement_games_form(participant_id):
         }});
       }}
     }})();
+    </script>
+    <script>
+    // Game card collapse/expand
+    function toggleGameCard(gameKey) {{
+      var body   = document.getElementById('mg-body-' + gameKey);
+      var toggle = document.getElementById('mg-toggle-' + gameKey);
+      if (!body) return;
+      var collapsed = body.style.display === 'none';
+      body.style.display = collapsed ? '' : 'none';
+      if (toggle) toggle.innerHTML = collapsed ? '&#9650; COLLAPSE' : '&#9660; EXPAND';
+    }}
+
+    // Chip toggle — show/hide corresponding game card
+    function toggleChip(btn) {{
+      var gameKey = btn.dataset.chipGame;
+      var card    = document.getElementById('mg-card-' + gameKey);
+      var active  = btn.classList.contains('mg-chip-active');
+      if (active) {{
+        btn.classList.remove('mg-chip-active');
+        btn.style.background = '#F3F4F5';
+        btn.style.color      = '#6E737B';
+        btn.style.borderColor= '#DDE0E3';
+        if (card) card.style.display = 'none';
+      }} else {{
+        btn.classList.add('mg-chip-active');
+        btn.style.background = '#2D323B';
+        btn.style.color      = '#F0A82E';
+        btn.style.borderColor= '#2D323B';
+        if (card) card.style.display = '';
+      }}
+    }}
+
+    function selectAllChips() {{
+      document.querySelectorAll('.mg-chip').forEach(function(btn) {{
+        if (!btn.classList.contains('mg-chip-active')) toggleChip(btn);
+      }});
+    }}
+
+    function selectNoChips() {{
+      document.querySelectorAll('.mg-chip').forEach(function(btn) {{
+        if (btn.classList.contains('mg-chip-active')) toggleChip(btn);
+      }});
+    }}
     </script>"""
 
     return f"""
@@ -2114,6 +2224,17 @@ def group_session_page(coach, participants, groups=None):
     body = f"""
     <div class="page-head"><h1>Record Session</h1></div>
 
+    <!-- Recording-for banner: hidden until athlete selected -->
+    <div id="qs-banner" style="display:none;position:sticky;top:0;z-index:100;
+         background:#2D323B;color:#F0A82E;padding:10px 20px;margin-bottom:16px;
+         border-radius:8px;display:flex;align-items:center;justify-content:space-between;
+         flex-wrap:wrap;gap:8px;font-size:14px;font-weight:700;">
+      <span>&#128203; Recording for: <span id="qs-banner-name" style="color:#fff;"></span></span>
+      <span id="qs-progress-badge"
+            style="background:#F0A82E;color:#2D323B;border-radius:999px;
+                   padding:3px 12px;font-size:12px;font-weight:800;">0 saved</span>
+    </div>
+
     <div class="card form-card" style="max-width:560px;">
       <label for="qs-date">Date</label>
       <input type="date" id="qs-date" value="{today}" style="max-width:200px; margin-bottom:16px;" />
@@ -2147,7 +2268,7 @@ def group_session_page(coach, participants, groups=None):
     </div>
 
     <div class="card" style="max-width:560px; margin-top:16px;">
-      <h3 style="margin:0 0 10px; font-size:15px;">Session log</h3>
+      <h3 style="margin:0 0 10px; font-size:15px; color:#2D323B;">Session Log</h3>
       <div id="qs-log" style="font-size:13px; color:var(--jag-muted);">Nothing saved yet.</div>
     </div>
 
@@ -2164,15 +2285,32 @@ def group_session_page(coach, participants, groups=None):
       var fieldsEl     = document.getElementById('qs-fields');
       var logEl        = document.getElementById('qs-log');
       var logEmpty     = true;
+      var savedCount   = 0;
       var sportCheckEl = document.getElementById('qs-sport-check');
       var sportWrapEl  = document.getElementById('qs-sport-wrap');
       var sportSelEl   = document.getElementById('qs-sport-select');
+      var bannerEl     = document.getElementById('qs-banner');
+      var bannerNameEl = document.getElementById('qs-banner-name');
+      var progressEl   = document.getElementById('qs-progress-badge');
 
       // Cache original base field options (optgroups + options)
       var baseFieldOpts = Array.from(fieldEl.childNodes).map(function(n) {{ return n.cloneNode(true); }});
 
       // Cache all athlete options
       var allAthleteOpts = Array.from(athleteEl.querySelectorAll('option'));
+
+      // Update "Recording for" banner when athlete changes
+      function updateBanner() {{
+        var idx  = athleteEl.selectedIndex;
+        var name = idx >= 0 ? athleteEl.options[idx].text : '';
+        if (athleteEl.value && bannerEl && bannerNameEl) {{
+          bannerEl.style.display = 'flex';
+          bannerNameEl.textContent = name;
+        }} else if (bannerEl) {{
+          bannerEl.style.display = 'none';
+        }}
+      }}
+      athleteEl.addEventListener('change', updateBanner);
 
       function filterAthletes() {{
         if (!groupEl) return;
@@ -2271,7 +2409,7 @@ def group_session_page(coach, participants, groups=None):
           btn.textContent = '...'; btn.disabled = true; btn.style.background = '';
         }} else if (state === 'ok') {{
           btn.textContent = '\\u2713 Saved'; btn.disabled = false;
-          btn.style.background = '#0f6e62'; btn.style.color = '#fff'; btn.style.borderColor = '#0f6e62';
+          btn.style.background = '#F0A82E'; btn.style.color = '#2D323B'; btn.style.borderColor = '#F0A82E';
           setTimeout(function() {{
             btn.textContent = '\\u2713 Save';
             btn.style.background = ''; btn.style.color = ''; btn.style.borderColor = '';
@@ -2303,16 +2441,25 @@ def group_session_page(coach, participants, groups=None):
           var data = await resp.json();
           if (!resp.ok || !data.ok) throw new Error(data.error || 'Save failed');
           markBtn(btn, 'ok');
+          // Update progress
+          savedCount++;
+          if (progressEl) progressEl.textContent = savedCount + ' saved';
           inp.value = '';
           inp.focus();
-          // Log entry
+          // Styled log entry
           if (logEmpty) {{ logEl.innerHTML = ''; logEmpty = false; }}
+          var now = new Date();
+          var timeStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+          var displayVal = value + (fieldType === 'time' ? 's' : '');
           var entry = document.createElement('div');
-          entry.style.cssText = 'padding:6px 0; border-bottom:1px solid var(--jag-border); display:flex; gap:8px; align-items:baseline; flex-wrap:wrap;';
+          entry.style.cssText = 'padding:8px 12px;margin-bottom:8px;border-radius:6px;border-left:3px solid #F0A82E;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.06);';
           entry.innerHTML =
-            '<span style="font-weight:700; color:var(--jag-text);">' + athleteName + '</span>' +
-            '<span style="color:var(--jag-muted);">' + gameName + ' &rarr; ' + fieldLabel + '</span>' +
-            '<span style="margin-left:auto; font-weight:700; color:var(--jag-navy);">' + value + (fieldType === 'time' ? 's' : '') + '</span>';
+            '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px;">' +
+              '<span style="font-weight:700;color:#2D323B;font-size:13px;">' + athleteName + '</span>' +
+              '<span style="font-size:11px;color:#6E737B;">' + timeStr + '</span>' +
+            '</div>' +
+            '<div style="font-size:12px;color:#6E737B;margin-top:2px;">' + gameName + ' &mdash; ' + fieldLabel + '</div>' +
+            '<div style="font-size:15px;font-weight:800;color:#2D323B;margin-top:4px;">' + displayVal + '</div>';
           logEl.insertBefore(entry, logEl.firstChild);
         }} catch(e) {{
           markBtn(btn, 'error');
@@ -2378,6 +2525,12 @@ def coach_list_page(user, coaches, groups=None, coach_group_map=None, message=No
     coach_group_map = coach_group_map or {}
     group_map = {g["id"]: g["name"] for g in groups}
 
+    # Collect unique organisations for filter bar
+    all_orgs = sorted(set(
+        c["organisation"] for c in coaches
+        if c.get("organisation")
+    ))
+
     rows = []
     for c in coaches:
         is_self = c["id"] == user["id"]
@@ -2387,13 +2540,19 @@ def coach_list_page(user, coaches, groups=None, coach_group_map=None, message=No
         assigned_ids = coach_group_map.get(c["id"], [])
         assigned_names = [esc(group_map[gid]) for gid in assigned_ids if gid in group_map]
         group_badge = (" &middot; " + ", ".join(f'<span class="tag">{n}</span>' for n in assigned_names)) if assigned_names else ""
+        org_text = esc(c["organisation"]) if c.get("organisation") else ""
+        org_pill = (f'<span style="font-size:11px;background:rgba(45,50,59,0.08);color:var(--jag-muted);'
+                    f'border-radius:999px;padding:1px 8px;white-space:nowrap;">{org_text}</span> ') if org_text else ""
+
+        c_org_attr = esc(c.get("organisation") or "")
+        c_admin_attr = "1" if c.get("is_admin") else "0"
+        c_active_attr = "1" if c.get("active") else "0"
 
         if is_self:
             action_html = '<span class="muted">(you)</span>'
         else:
             toggle_label = "Deactivate" if c["active"] else "Reactivate"
             admin_toggle_label = "Remove Admin" if c["is_admin"] else "Make Admin"
-            # Multi-select checkboxes for group assignment
             checkboxes = "".join(
                 f'<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;margin:2px 0;">'
                 f'<input type="checkbox" name="group_id" value="{g["id"]}"'
@@ -2416,25 +2575,92 @@ def coach_list_page(user, coaches, groups=None, coach_group_map=None, message=No
               <div style="border:1px solid var(--jag-border); border-radius:6px; padding:6px 10px; background:#fff; margin-bottom:4px;">{checkboxes}</div>
               <button type="submit" class="btn btn-ghost btn-sm">Set Groups</button>
             </form>"""
-        rows.append(f"""<tr>
-          <td>{esc(c['name'])}{admin_badge}</td>
+        rows.append(f"""<tr class="coach-row" data-org="{c_org_attr}" data-admin="{c_admin_attr}" data-active="{c_active_attr}">
+          <td>{org_pill}{esc(c['name'])}{admin_badge}</td>
           <td>{esc(c['email'])}{group_badge}</td>
           <td><span class="tag {status_class}">{status}</span></td>
           <td>{action_html}</td>
         </tr>""")
     rows_html = "".join(rows)
+
+    # Build filter bar
+    org_btns = "".join(
+        f'<button class="coach-filter-btn btn btn-ghost btn-sm" data-filter="org" data-value="{esc(o)}" '
+        f'style="border-radius:999px;">{esc(o)}</button>'
+        for o in all_orgs
+    )
+    filter_bar = f"""
+    <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:16px;">
+      <span style="font-size:12px;font-weight:600;color:var(--jag-muted);text-transform:uppercase;letter-spacing:.05em;">Filter:</span>
+      <button class="coach-filter-btn btn btn-sm active-filter" data-filter="all" style="border-radius:999px;background:var(--jag-navy);color:#fff;border-color:var(--jag-navy);">All</button>
+      <button class="coach-filter-btn btn btn-ghost btn-sm" data-filter="admin" style="border-radius:999px;">Admins only</button>
+      <button class="coach-filter-btn btn btn-ghost btn-sm" data-filter="active" style="border-radius:999px;">Active</button>
+      <button class="coach-filter-btn btn btn-ghost btn-sm" data-filter="inactive" style="border-radius:999px;">Inactive</button>
+      {(f'<span style="width:1px;height:18px;background:var(--jag-border);display:inline-block;margin:0 2px;"></span>' + org_btns) if org_btns else ""}
+    </div>
+    <div style="font-size:12px;color:var(--jag-muted);margin-bottom:10px;">
+      Showing <strong id="coach-count">{len(coaches)}</strong> of {len(coaches)} coaches
+    </div>"""
+
+    filter_js = """
+    <script>
+    (function(){
+      var active = 'all', activeOrg = null;
+      var btns = document.querySelectorAll('.coach-filter-btn');
+      var rows = document.querySelectorAll('.coach-row');
+      var countEl = document.getElementById('coach-count');
+      function applyFilter(){
+        var shown = 0;
+        rows.forEach(function(r){
+          var show = true;
+          if(active === 'admin') show = r.dataset.admin === '1';
+          else if(active === 'active') show = r.dataset.active === '1';
+          else if(active === 'inactive') show = r.dataset.active === '0';
+          else if(active === 'org') show = r.dataset.org === activeOrg;
+          r.style.display = show ? '' : 'none';
+          if(show) shown++;
+        });
+        countEl.textContent = shown;
+      }
+      btns.forEach(function(btn){
+        btn.addEventListener('click', function(){
+          btns.forEach(function(b){
+            b.classList.remove('active-filter');
+            b.style.background = '';
+            b.style.color = '';
+            b.style.borderColor = '';
+          });
+          btn.classList.add('active-filter');
+          btn.style.background = '#2D323B';
+          btn.style.color = '#fff';
+          btn.style.borderColor = '#2D323B';
+          if(btn.dataset.filter === 'org'){
+            active = 'org';
+            activeOrg = btn.dataset.value;
+          } else {
+            active = btn.dataset.filter;
+            activeOrg = null;
+          }
+          applyFilter();
+        });
+      });
+    })();
+    </script>"""
+
     body = f"""
     <div class="page-head">
       <h1>Coaches</h1>
       <a class="btn btn-primary" href="/coach/coaches/new">Add Coach</a>
     </div>
     {message_html}
+    {filter_bar}
     <div class="card">
       <table class="table">
         <thead><tr><th>Name</th><th>Email / Groups</th><th>Status</th><th></th></tr></thead>
         <tbody>{rows_html}</tbody>
       </table>
     </div>
+    {filter_js}
     """
     return layout("Coaches", body, user=user, active_nav="coaches")
 
@@ -2450,6 +2676,8 @@ def new_coach_form(user, error=None):
         <input type="text" id="name" name="name" required />
         <label for="email">Email (used to log in)</label>
         <input type="email" id="email" name="email" required />
+        <label for="organisation">Organisation <span style="font-weight:400;color:var(--jag-muted);">(school, club, etc. — optional)</span></label>
+        <input type="text" id="organisation" name="organisation" placeholder="e.g. Masterton High School" />
         <label for="password">Temporary password</label>
         <input type="text" id="password" name="password" required value="CoachTemp123!" />
         <button type="submit" class="btn btn-primary">Create Coach</button>
@@ -2475,8 +2703,15 @@ def _gdrive_thumbnail(url):
 
 def _resource_tile(r, is_admin=False, tags=None):
     """Render a single resource as a link tile card."""
-    tile_colors = ['#1d6fa4', '#7c3aed', '#c2410c', '#15803d', '#be185d', '#0e7490', '#92400e', '#b45309']
-    border_color = tile_colors[r['id'] % len(tile_colors)]
+    # JAG brand palette: navy and gold alternating
+    jag_palette = [
+        ('#2D323B', 'rgba(240,168,46,0.75)'),   # navy bg, gold icon
+        ('#F0A82E', 'rgba(45,50,59,0.65)'),      # gold bg, navy icon
+    ]
+    bg_color, icon_fill = jag_palette[r['id'] % len(jag_palette)]
+    # Border: navy tiles get a gold accent border; gold tiles get a navy border
+    border_color = '#F0A82E' if bg_color == '#2D323B' else '#2D323B'
+
     name_q = esc(r['name']).replace("'", "\\'")
     desc = f'<span style="font-size:12px;color:var(--jag-muted);display:block;margin-top:4px;line-height:1.4;">{esc(r["description"])}</span>' if r['description'] else ''
     drag = '<span class="drag-handle" title="Drag to reorder" style="position:absolute;top:6px;left:8px;font-size:11px;color:#ccc;cursor:grab;z-index:1;">&#9776;</span>' if is_admin else ""
@@ -2495,28 +2730,31 @@ def _resource_tile(r, is_admin=False, tags=None):
     tags_html = f'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:auto;padding-top:8px;">{tag_pills}</div>' if tag_pills else ''
     tag_data = ",".join(t.lower() for t in tag_names)
     search_data = (r['name'] + " " + (r['description'] or "")).lower()
-    # Google Drive thumbnail — or a styled placeholder
+    # Google Drive thumbnail — or a branded placeholder
     thumb_url = _gdrive_thumbnail(r['url'] or '')
+    placeholder_svg = (
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" fill="{icon_fill}" viewBox="0 0 24 24">'
+        f'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>'
+        f'<path d="M14 2v6h6"/></svg>'
+    )
     if thumb_url:
         thumb_html = (
             f'<a href="{esc(r["url"])}" target="_blank" rel="noopener" tabindex="-1"'
             f' style="display:block;margin:-14px -14px 12px;border-radius:8px 8px 0 0;overflow:hidden;flex-shrink:0;">'
             f'<img src="{thumb_url}" alt="" loading="lazy"'
             f' style="width:100%;height:160px;object-fit:cover;display:block;"'
-            f" onerror=\"this.parentElement.outerHTML='<div style=\\'margin:-14px -14px 12px;height:100px;border-radius:8px 8px 0 0;background:{border_color};display:flex;align-items:center;justify-content:center;\\'><svg xmlns=\\'http://www.w3.org/2000/svg\\' width=\\'36\\' height=\\'36\\' fill=\\'rgba(255,255,255,0.55)\\' viewBox=\\'0 0 24 24\\'><path d=\\'M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z\\'/><path d=\\'M14 2v6h6\\'/></svg></div>'\">"
+            f" onerror=\"this.parentElement.outerHTML='<div style=\\'margin:-14px -14px 12px;height:100px;border-radius:8px 8px 0 0;background:{bg_color};display:flex;align-items:center;justify-content:center;\\'>{placeholder_svg}</div>'\">"
             f'</a>'
         )
     else:
         thumb_html = (
             f'<div style="margin:-14px -14px 12px;height:100px;border-radius:8px 8px 0 0;'
-            f'background:{border_color};display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
-            f'<svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" fill="rgba(255,255,255,0.55)" viewBox="0 0 24 24">'
-            f'<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z"/>'
-            f'<path d="M14 2v6h6"/></svg>'
+            f'background:{bg_color};display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+            f'{placeholder_svg}'
             f'</div>'
         )
     pad = '20px 14px 14px 28px' if is_admin else '14px'
-    return f"""<div class="res-tile" data-id="{r['id']}" data-tags="{esc(tag_data)}" data-search="{esc(search_data)}" style="position:relative;background:var(--jag-card);border:2.5px solid {border_color};border-radius:10px;padding:{pad};display:flex;flex-direction:column;word-break:break-word;overflow:hidden;">
+    return f"""<div class="res-tile" data-id="{r['id']}" data-tags="{esc(tag_data)}" data-search="{esc(search_data)}" style="position:relative;background:var(--jag-card);border:2.5px solid {border_color};border-radius:10px;padding:{pad};display:flex;flex-direction:column;word-break:break-word;overflow:hidden;transition:box-shadow 0.15s,transform 0.15s;" onmouseover="this.style.boxShadow='0 4px 16px rgba(45,50,59,0.18)';this.style.transform='translateY(-2px)';" onmouseout="this.style.boxShadow='';this.style.transform='';">
       {drag}
       {thumb_html}
       <a href="{esc(r['url'])}" target="_blank" rel="noopener" style="font-weight:700;font-size:14px;color:var(--jag-navy);text-decoration:none;line-height:1.3;" onmouseover="this.style.textDecoration='underline';" onmouseout="this.style.textDecoration='none';">{esc(r['name'])} <span style="font-size:11px;opacity:0.5;">&#8599;</span></a>

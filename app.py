@@ -804,6 +804,7 @@ def new_coach_post(req):
     name = req.form_get("name").strip()
     email = req.form_get("email").strip().lower()
     password = req.form_get("password") or "CoachTemp123!"
+    organisation = (req.form_get("organisation") or "").strip()
 
     if not name or not email:
         return Response(views.new_coach_form(coach, error="Name and email are required."), status=400)
@@ -814,9 +815,9 @@ def new_coach_post(req):
         if existing:
             return Response(views.new_coach_form(coach, error="A user with that email already exists."), status=400)
         conn.execute(
-            "INSERT INTO users (name, email, password_hash, role, sport, programme, created_at) "
-            "VALUES (?, ?, ?, 'coach', NULL, NULL, ?)",
-            (name, email, hash_password(password), db.now()),
+            "INSERT INTO users (name, email, password_hash, role, organisation, sport, programme, created_at) "
+            "VALUES (?, ?, ?, 'coach', ?, NULL, NULL, ?)",
+            (name, email, hash_password(password), organisation or None, db.now()),
         )
         conn.commit()
         return flash_redirect("/coach/coaches", f"Added coach {name}. Share their login: {email} / {password}")
