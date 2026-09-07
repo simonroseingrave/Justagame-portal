@@ -4,6 +4,7 @@ user-supplied text is passed through `esc()` (html.escape) before being
 placed in markup to avoid HTML/script injection.
 """
 import re as _re
+import datetime as _dt
 from html import escape as esc
 
 from constants import (
@@ -26,7 +27,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             if user.get("is_admin"):
                 links.append(("/coach/coaches", "Coaches", "coaches"))
                 links.append(("/coach/organisations", "Organisations", "organisations"))
-            links.append(("/coach/progress", "Achievement Statistics", "progress"))
+            links.append(("/coach/reports", "Statistics & Reports", "progress"))
         else:
             links = [("/dashboard", "My Dashboard", "dashboard")]
         nav_items = "".join(
@@ -2302,6 +2303,337 @@ def all_progress_page(coach, groups_data, sport_filter=None):
     return layout("Achievement Statistics", body, user=coach, active_nav="progress")
 
 
+# ---------------------------------------------------------------------------
+# Statistics & Reports landing page + printable reports
+# ---------------------------------------------------------------------------
+
+def reports_landing_page(coach, groups):
+    """Hub page: links to existing stats pages + new printable reports."""
+    group_opts = '<option value="">Select a group…</option>' + "".join(
+        f'<option value="{g["id"]}">{esc(g["name"])}</option>' for g in groups
+    )
+
+    def _report_card(icon, title, desc, action_js, btn_label="Generate Report"):
+        return f"""
+        <div style="background:var(--jag-card);border:1px solid var(--jag-border);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:12px;">
+          <div style="font-size:32px;">{icon}</div>
+          <h2 style="margin:0;font-size:17px;font-weight:700;color:var(--jag-navy);">{title}</h2>
+          <p style="margin:0;font-size:13px;color:var(--jag-muted);line-height:1.5;">{desc}</p>
+          <div style="margin-top:auto;">
+            <button class="btn btn-primary" onclick="{action_js}" style="width:100%;">{btn_label}</button>
+          </div>
+        </div>"""
+
+    body = f"""
+    <div class="page-head">
+      <div>
+        <h1>Statistics &amp; Reports</h1>
+        <p class="muted">View live statistics or generate printable reports for coaches and organisations.</p>
+      </div>
+    </div>
+
+    <div style="background:var(--jag-card);border:1px solid var(--jag-border);border-radius:10px;padding:16px 20px;margin-bottom:32px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+      <label style="font-size:13px;font-weight:700;white-space:nowrap;">Select group for printable reports:</label>
+      <select id="report-group" style="min-width:240px;max-width:340px;">{group_opts}</select>
+      <span style="font-size:12px;color:var(--jag-muted);">Used by the two printable reports below.</span>
+    </div>
+
+    <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--jag-muted);margin-bottom:16px;">Printable Reports</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;margin-bottom:40px;">
+      {_report_card("📋", "Athlete Baseline Report",
+          "All athletes in a group with their Round 1 (baseline) scores across every game. Print and share at the start of a programme.",
+          "var g=document.getElementById('report-group').value;if(!g){{alert('Please select a group first.');return;}}window.open('/coach/reports/baseline?group_id='+g,'_blank');")}
+      {_report_card("📈", "Round 2 Progress Report",
+          "Side-by-side Round 1 vs Round 2 scores with percentage improvement per field, colour-coded green/red. Only athletes with 2+ sessions appear.",
+          "var g=document.getElementById('report-group').value;if(!g){{alert('Please select a group first.');return;}}window.open('/coach/reports/progress?group_id='+g,'_blank');")}
+    </div>
+
+    <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--jag-muted);margin-bottom:16px;">Live Statistics</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;">
+      {_report_card("📊", "Achievement Statistics Overview",
+          "Live view of group averages across all measurement rounds, with sport filter and admin overall table.",
+          "window.location='/coach/progress';", "View Statistics")}
+    </div>
+    """
+    return layout("Statistics & Reports", body, user=coach, active_nav="progress")
+
+
+_STOPWORDS = {"the", "and", "for", "with", "from", "into", "onto", "over",
+              "under", "that", "this", "then", "than", "each", "your", "their"}
+
+def _sig_words(text):
+    """Return set of significant lowercase words (>2 chars, not stopwords)."""
+    words = _re.sub(r"[^a-z0-9 ]", " ", text.lower()).split()
+    return {w for w in words if len(w) > 2 and w not in _STOPWORDS}
+
+def _build_game_so_map(resources):
+    """
+    Build a dict: game_key → self_organisation phrase, by loose-matching each
+    resource name against every MEASUREMENT_GAMES game name.
+    A match is declared when ≥1 significant word overlaps between the resource
+    name and the game name (after normalisation).
+    Resources without a self_organisation value are skipped.
+    When multiple resources match the same game, the one with the most word
+    overlap wins.
+    """
+    from constants import all_measurement_games, all_sport_games, SPORT_SPECIFIC_GAMES
+    result = {}  # game_key → (overlap_count, self_org phrase)
+
+    all_games = all_measurement_games()
+    for sport_sections in SPORT_SPECIFIC_GAMES.values():
+        for section in sport_sections:
+            all_games.extend(section["games"])
+
+    for r in resources:
+        so = (r.get("self_organisation") or "").strip()
+        if not so:
+            continue
+        res_words = _sig_words(r.get("name") or "")
+        for game in all_games:
+            game_words = _sig_words(game["name"])
+            overlap = len(res_words & game_words)
+            if overlap >= 1:
+                prev_overlap, _ = result.get(game["key"], (0, ""))
+                if overlap > prev_overlap:
+                    result[game["key"]] = (overlap, so)
+
+    return {gk: so for gk, (_, so) in result.items()}
+
+
+def _report_html_shell(title, subtitle, group_name, body_content, today):
+    """Shared outer HTML for printable reports."""
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{title} — {group_name}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+  *{{box-sizing:border-box;margin:0;padding:0;}}
+  body{{font-family:Inter,system-ui,sans-serif;background:#fff;color:#2D323B;padding:24px;font-size:12px;}}
+  h1{{font-size:20px;font-weight:800;}}
+  table{{width:100%;border-collapse:collapse;margin-top:16px;}}
+  th{{background:#2D323B;color:#fff;padding:7px 10px;text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;white-space:nowrap;}}
+  td{{padding:6px 10px;border-bottom:1px solid #e8e9ea;vertical-align:top;}}
+  tr:nth-child(even) td{{background:#F3F4F5;}}
+  .imp-pos{{color:#1a7a3a;font-weight:700;}}
+  .imp-neg{{color:#c0392b;font-weight:700;}}
+  .imp-zero{{color:#888;}}
+  .no-print{{}}
+  @media print{{
+    .no-print{{display:none!important;}}
+    body{{padding:10px;}}
+    table{{page-break-inside:auto;}}
+    tr{{page-break-inside:avoid;}}
+  }}
+</style>
+</head>
+<body>
+  <div class="no-print" style="margin-bottom:16px;display:flex;gap:8px;align-items:center;">
+    <button onclick="window.print()" style="background:#2D323B;color:#fff;border:none;border-radius:6px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#128196; Print / Save as PDF</button>
+    <button onclick="window.close()" style="background:#F3F4F5;border:1px solid #ddd;border-radius:6px;padding:8px 18px;font-size:13px;cursor:pointer;">Close</button>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;padding-bottom:14px;border-bottom:3px solid #F0A82E;">
+    <div style="background:#2D323B;border-radius:8px;padding:10px;flex-shrink:0;">
+      <svg width="24" height="24" fill="#F0A82E" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    </div>
+    <div>
+      <h1>{title}</h1>
+      <p style="font-size:12px;color:#888;margin-top:3px;">{subtitle} &nbsp;·&nbsp; Generated {today} &nbsp;·&nbsp; Just A Game</p>
+    </div>
+  </div>
+  {body_content}
+</body>
+</html>"""
+
+
+def baseline_report_page(coach, group, athletes_data, resources=None):
+    """
+    athletes_data: list of (athlete_row, sessions_list) where sessions_list is
+    ordered most-recent-first; we use sessions[-1] as the baseline.
+    resources: list of resource rows (for self-organisation tag matching).
+    """
+    from constants import find_any_game, MEASUREMENT_GAMES, all_measurement_games
+
+    today = _dt.date.today().strftime("%d %B %Y")
+    group_name = group["name"] if group else "All Athletes"
+    so_map = _build_game_so_map(resources or [])
+
+    # Collect all (game_key, field_key) pairs that appear in any baseline session
+    used_cols = []  # ordered list of (game_key, field_key, label)
+    seen = set()
+    for athlete, sessions in athletes_data:
+        if not sessions:
+            continue
+        baseline = sessions[-1]  # oldest
+        for (gk, fk), val in baseline["results"].items():
+            if (gk, fk) not in seen:
+                seen.add((gk, fk))
+                game = find_any_game(gk)
+                if game:
+                    all_fields = {f["key"]: f["label"] for f in game.get("fields", []) + game.get("computed", [])}
+                    label = all_fields.get(fk, fk)
+                    used_cols.append((gk, fk, f"{game['name']} — {label}"))
+
+    # Sort used_cols by game order in MEASUREMENT_GAMES
+    col_order = {}
+    idx = 0
+    for section in MEASUREMENT_GAMES:
+        for game in section["games"]:
+            for f in game.get("fields", []) + game.get("computed", []):
+                col_order[(game["key"], f["key"])] = idx
+                idx += 1
+    used_cols.sort(key=lambda c: col_order.get((c[0], c[1]), 9999))
+
+    if not used_cols:
+        body_content = '<p style="color:#888;margin-top:20px;">No baseline scores recorded for any athletes in this group yet.</p>'
+        return _report_html_shell("Athlete Baseline Report", group_name, group_name, body_content, today)
+
+    def _th(gk, label):
+        so = so_map.get(gk, "")
+        so_line = f'<div style="font-size:9px;color:#F0A82E;font-weight:600;margin-top:3px;white-space:normal;line-height:1.3;">{esc(so)}</div>' if so else ""
+        return f'<th style="white-space:nowrap;">{esc(label)}{so_line}</th>'
+
+    th_cols = "".join(_th(gk, label) for gk, fk, label in used_cols)
+    header = f'<tr><th>#</th><th>Athlete</th>{th_cols}<th>Date</th></tr>'
+
+    rows = ""
+    for athlete, sessions in athletes_data:
+        if not sessions:
+            continue
+        baseline = sessions[-1]
+        tds = "".join(
+            f'<td>{baseline["results"].get((gk, fk), "")}</td>'
+            for gk, fk, _ in used_cols
+        )
+        rows += f'<tr><td style="color:#888;">{esc(athlete.get("athlete_number") or "")}</td><td style="font-weight:600;">{esc(athlete["name"])}</td>{tds}<td style="color:#888;">{esc(baseline["date"])}</td></tr>'
+
+    if not rows:
+        body_content = '<p style="color:#888;margin-top:20px;">No athletes with baseline data found.</p>'
+    else:
+        so_note = ' <span style="color:#F0A82E;">Gold text under each column header = self-organisation focus for that activity.</span>' if so_map else ""
+        body_content = f'<p style="font-size:12px;color:#555;margin-bottom:8px;">Round 1 (baseline) scores for <strong>{esc(group_name)}</strong>.{so_note}</p><div style="overflow-x:auto;"><table><thead>{header}</thead><tbody>{rows}</tbody></table></div>'
+
+    return _report_html_shell("Athlete Baseline Report", group_name, group_name, body_content, today)
+
+
+def progress_report_page(coach, group, athletes_data, resources=None):
+    """
+    athletes_data: list of (athlete_row, sessions_list) ordered most-recent-first.
+    Uses sessions[-1] = R1 (baseline), sessions[-2] = R2 (second measurement).
+    Only athletes with >= 2 sessions appear.
+    resources: list of resource rows (for self-organisation tag matching).
+    """
+    from constants import find_any_game, MEASUREMENT_GAMES, all_measurement_games
+
+    today = _dt.date.today().strftime("%d %B %Y")
+    group_name = group["name"] if group else "All Athletes"
+    so_map = _build_game_so_map(resources or [])
+
+    eligible = [(a, s) for a, s in athletes_data if len(s) >= 2]
+
+    if not eligible:
+        body_content = '<p style="color:#888;margin-top:20px;">No athletes with 2 or more test sessions found in this group.</p>'
+        return _report_html_shell("Round 2 Progress Report", group_name, group_name, body_content, today)
+
+    # Collect used columns from R1 or R2 of any eligible athlete
+    used_cols = []
+    seen = set()
+    for athlete, sessions in eligible:
+        r1 = sessions[-1]["results"]
+        r2 = sessions[-2]["results"]
+        for (gk, fk) in list(r1.keys()) + list(r2.keys()):
+            if (gk, fk) not in seen:
+                seen.add((gk, fk))
+                game = find_any_game(gk)
+                if game:
+                    all_fields = {f["key"]: f for f in game.get("fields", []) + game.get("computed", [])}
+                    field_def = all_fields.get(fk)
+                    label = field_def["label"] if field_def else fk
+                    ftype = field_def["type"] if field_def else "number"
+                    used_cols.append((gk, fk, f"{game['name']} — {label}", ftype))
+
+    col_order = {}
+    idx = 0
+    for section in MEASUREMENT_GAMES:
+        for game in section["games"]:
+            for f in game.get("fields", []) + game.get("computed", []):
+                col_order[(game["key"], f["key"])] = idx
+                idx += 1
+    used_cols.sort(key=lambda c: col_order.get((c[0], c[1]), 9999))
+
+    def pct_class(pct):
+        if pct is None: return "imp-zero", "—"
+        if pct > 0: return "imp-pos", f"+{pct:.1f}%"
+        if pct < 0: return "imp-neg", f"{pct:.1f}%"
+        return "imp-zero", "0.0%"
+
+    # For each col: build 3 sub-columns R1 / R2 / Δ%
+    def _progress_th(gk, label):
+        so = so_map.get(gk, "")
+        so_line = f'<div style="font-size:9px;color:#F0A82E;font-weight:600;margin-top:3px;white-space:normal;line-height:1.3;">{esc(so)}</div>' if so else ""
+        return f'<th colspan="3" style="border-left:2px solid rgba(255,255,255,0.2);white-space:nowrap;">{esc(label)}{so_line}</th>'
+
+    th_cols = "".join(
+        _progress_th(gk, label)
+        for gk, _, label, _ in used_cols
+    )
+    th_sub = "".join(
+        '<th style="font-size:9px;background:#3d4451;border-left:2px solid rgba(255,255,255,0.15);">R1</th>'
+        '<th style="font-size:9px;background:#3d4451;">R2</th>'
+        '<th style="font-size:9px;background:#3d4451;">Δ%</th>'
+        for _ in used_cols
+    )
+    header = f'<tr><th rowspan="2">#</th><th rowspan="2">Athlete</th>{th_cols}<th rowspan="2" style="border-left:2px solid rgba(255,255,255,0.2);">Overall Δ%</th></tr><tr>{th_sub}</tr>'
+
+    rows = ""
+    for athlete, sessions in eligible:
+        r1 = sessions[-1]["results"]
+        r2 = sessions[-2]["results"]
+        field_pcts = []
+        tds = ""
+        for gk, fk, _, ftype in used_cols:
+            v1 = r1.get((gk, fk))
+            v2 = r2.get((gk, fk))
+            v1_s = str(v1) if v1 is not None else "—"
+            v2_s = str(v2) if v2 is not None else "—"
+            pct = None
+            if v1 is not None and v2 is not None and v1 != 0:
+                raw = ((v2 - v1) / abs(v1)) * 100
+                # For time fields, lower is better → flip sign
+                pct = -raw if ftype == "time" else raw
+                field_pcts.append(pct)
+            css, pct_s = pct_class(pct)
+            border = "border-left:2px solid #e0e0e0;"
+            tds += (
+                f'<td style="{border}">{v1_s}</td>'
+                f'<td>{v2_s}</td>'
+                f'<td class="{css}">{pct_s}</td>'
+            )
+
+        overall_pct = sum(field_pcts) / len(field_pcts) if field_pcts else None
+        o_css, o_s = pct_class(overall_pct)
+        rows += (
+            f'<tr><td style="color:#888;">{esc(athlete.get("athlete_number") or "")}</td>'
+            f'<td style="font-weight:600;">{esc(athlete["name"])}</td>'
+            f'{tds}'
+            f'<td class="{o_css}" style="font-size:13px;border-left:2px solid #ccc;">{o_s}</td></tr>'
+        )
+
+    r1_date = eligible[0][1][-1]["date"] if eligible else ""
+    r2_date = eligible[0][1][-2]["date"] if eligible else ""
+    so_note = ' <span style="color:#F0A82E;">Gold text under each column header = self-organisation focus.</span>' if so_map else ""
+    body_content = f"""
+    <p style="font-size:12px;color:#555;margin-bottom:8px;">
+      Progress from Round 1 ({esc(r1_date)}) to Round 2 ({esc(r2_date)}) for <strong>{esc(group_name)}</strong>.
+      <span style="color:#1a7a3a;font-weight:700;">Green</span> = improvement &nbsp;
+      <span style="color:#c0392b;font-weight:700;">Red</span> = decline. Time fields: lower score = improvement.{so_note}
+    </p>
+    <div style="overflow-x:auto;"><table><thead>{header}</thead><tbody>{rows}</tbody></table></div>"""
+
+    return _report_html_shell("Round 2 Progress Report", group_name, group_name, body_content, today)
+
+
 def group_session_page(coach, participants, groups=None):
     """Rapid-fire session entry: select group → select athlete → select game → fields appear → quick-save.
     All saves for the same athlete+date land in one session (find-or-create).
@@ -2997,6 +3329,14 @@ def _resource_tile(r, is_admin=False, tags=None):
 
     name_q = esc(r['name']).replace("'", "\\'")
     desc = f'<span style="font-size:12px;color:var(--jag-muted);display:block;margin-top:4px;line-height:1.4;">{esc(r["description"])}</span>' if r['description'] else ''
+    so_val = r['self_organisation'] if 'self_organisation' in r.keys() and r['self_organisation'] else None
+    self_org_badge = (
+        f'<div style="margin-top:6px;">'
+        f'<span style="font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;'
+        f'color:var(--jag-navy);opacity:0.5;">Self-organisation</span><br>'
+        f'<span style="font-size:12px;font-weight:600;color:#F0A82E;">{esc(so_val)}</span>'
+        f'</div>'
+    ) if so_val else ''
     drag = '<span class="drag-handle" title="Drag to reorder" style="position:absolute;top:6px;left:8px;font-size:11px;color:#ccc;cursor:grab;z-index:1;">&#9776;</span>' if is_admin else ""
     admin_actions = f"""<div style="display:flex;gap:4px;margin-top:8px;padding-top:8px;border-top:1px solid var(--jag-border);">
         <a href="/coach/resources/{r['id']}/edit" class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;">Edit</a>
@@ -3062,6 +3402,7 @@ def _resource_tile(r, is_admin=False, tags=None):
         f' onmouseover="this.style.textDecoration=\'underline\';" onmouseout="this.style.textDecoration=\'none\';">'
         f'{esc(r["name"])} <span style="font-size:11px;opacity:0.5;">&#8599;</span></a>'
         f'{desc}'
+        f'{self_org_badge}'
         f'{tags_html}'
         f'{admin_actions}'
         f'</div>'
@@ -3176,6 +3517,8 @@ def resources_page(user, folder_groups, ungrouped, folders, tags=None, tags_by_r
           <input type="url" id="res_url" name="url" required placeholder="https://..." />
           <label for="res_desc">Description (optional)</label>
           <input type="text" id="res_desc" name="description" placeholder="A short note" />
+          <label for="res_so">Self-organisation focus (optional)</label>
+          <input type="text" id="res_so" name="self_organisation" placeholder="e.g. Spatial awareness &amp; decision making" />
           <label for="res_folder">Folder (optional)</label>
           <select id="res_folder" name="folder_id">{folder_opts}</select>
           {tag_checkboxes_section}
@@ -3327,7 +3670,10 @@ def resources_page(user, folder_groups, ungrouped, folders, tags=None, tags_by_r
     .res-tile:hover {{ box-shadow: 0 8px 28px rgba(0,0,0,0.14); transform: translateY(-3px); }}
     </style>
     <div style="max-width:1320px;">
-    <div class="page-head"><h1>Resources</h1></div>
+    <div class="page-head">
+      <h1>Resources</h1>
+      <a href="/coach/resources/report" class="btn btn-ghost" target="_blank">&#128196; Print Report</a>
+    </div>
     {message_html}{error_html}
     {manage_forms}
     {search_bar}
@@ -3367,6 +3713,8 @@ def edit_resource_page(user, resource, folders, all_tags=None, selected_tag_ids=
         <input type="url" id="url" name="url" required value="{esc(resource['url'])}" />
         <label for="description">Description (optional)</label>
         <input type="text" id="description" name="description" value="{esc(resource['description'] or '')}" />
+        <label for="self_organisation">Self-organisation focus (optional)</label>
+        <input type="text" id="self_organisation" name="self_organisation" value="{esc(resource.get('self_organisation') or '')}" placeholder="e.g. Spatial awareness &amp; decision making" />
         <label for="folder_id">Folder</label>
         <select id="folder_id" name="folder_id">{folder_opts}</select>
         {tags_section}
@@ -3375,6 +3723,111 @@ def edit_resource_page(user, resource, folders, all_tags=None, selected_tag_ids=
     </div>
     """
     return layout("Edit Resource", body, user=user, active_nav="resources")
+
+
+def resources_report_page(user, all_folders, org=None, orgs=None):
+    """Printable report of all resources with their self-organisation focus."""
+    orgs = orgs or []
+    org_opts = "".join(
+        f'<option value="/coach/resources/report?org_id={o["id"]}"'
+        f'{"selected" if org and o["id"] == org["id"] else ""}>{esc(o["name"])}</option>'
+        for o in orgs
+    )
+    filter_bar = f"""
+    <div class="no-print" style="margin-bottom:24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <span style="font-size:13px;font-weight:600;color:var(--jag-muted);">Filter by organisation:</span>
+      <select onchange="window.location=this.value" style="max-width:260px;">
+        <option value="/coach/resources/report">All resources</option>
+        {org_opts}
+      </select>
+      <button onclick="window.print()" class="btn btn-primary" style="margin-left:auto;">&#128196; Print / Save as PDF</button>
+      <a href="/coach/resources" class="btn btn-ghost">← Back</a>
+    </div>""" if orgs else f"""
+    <div class="no-print" style="margin-bottom:24px;display:flex;gap:8px;justify-content:flex-end;">
+      <button onclick="window.print()" class="btn btn-primary">&#128196; Print / Save as PDF</button>
+      <a href="/coach/resources" class="btn btn-ghost">← Back</a>
+    </div>"""
+
+    org_title = f" — {esc(org['name'])}" if org else ""
+
+    # Build report sections
+    sections_html = ""
+    has_so = any(
+        (r.get("self_organisation") or "")
+        for _, rs in all_folders
+        for r in (rs if isinstance(rs, list) else [])
+    )
+    for folder, resources in all_folders:
+        if not resources:
+            continue
+        folder_name = folder["name"] if isinstance(folder, dict) and folder != "__ungrouped__" else "Other Resources"
+        rows = ""
+        for r in resources:
+            so = r.get("self_organisation") or ""
+            desc = r.get("description") or ""
+            rows += f"""
+            <tr>
+              <td style="padding:10px 12px;font-weight:600;font-size:13px;color:#2D323B;border-bottom:1px solid #e8e9ea;vertical-align:top;">
+                <a href="{esc(r['url'])}" style="color:#2D323B;text-decoration:none;">{esc(r['name'])} <span style="font-size:10px;opacity:0.4;">&#8599;</span></a>
+                {f'<div style="font-size:11px;color:#777;margin-top:2px;">{esc(desc)}</div>' if desc else ''}
+              </td>
+              <td style="padding:10px 12px;font-size:13px;color:#F0A82E;font-weight:600;border-bottom:1px solid #e8e9ea;vertical-align:top;">{esc(so) if so else '<span style="color:#ccc;font-weight:400;">—</span>'}</td>
+            </tr>"""
+        sections_html += f"""
+        <div style="margin-bottom:32px;break-inside:avoid;">
+          <h2 style="font-size:14px;font-weight:800;text-transform:uppercase;letter-spacing:0.08em;
+                     color:#fff;background:#2D323B;padding:8px 14px;border-radius:6px 6px 0 0;margin:0;">
+            {esc(folder_name)}
+          </h2>
+          <table style="width:100%;border-collapse:collapse;border:1px solid #e8e9ea;border-top:none;border-radius:0 0 6px 6px;overflow:hidden;">
+            <thead>
+              <tr style="background:#F3F4F5;">
+                <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#666;width:60%;">Resource</th>
+                <th style="text-align:left;padding:8px 12px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#666;width:40%;">Self-Organisation Focus</th>
+              </tr>
+            </thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </div>"""
+
+    if not sections_html:
+        sections_html = '<p style="color:#777;font-size:14px;">No resources found.</p>'
+
+    today = _dt.date.today().strftime("%d %B %Y")
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>JAG Resources Report{org_title}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap');
+  * {{ box-sizing: border-box; margin: 0; padding: 0; }}
+  body {{ font-family: Inter, system-ui, sans-serif; background: #fff; color: #2D323B; padding: 32px; max-width: 900px; margin: 0 auto; }}
+  .no-print {{ }}
+  @media print {{
+    .no-print {{ display: none !important; }}
+    body {{ padding: 16px; }}
+    a {{ color: inherit !important; }}
+  }}
+</style>
+</head>
+<body>
+  <div class="no-print">{filter_bar}</div>
+  <div style="display:flex;align-items:center;gap:16px;margin-bottom:28px;padding-bottom:16px;border-bottom:3px solid #F0A82E;">
+    <div style="width:48px;height:48px;background:#2D323B;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+      <svg width="28" height="28" fill="#F0A82E" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+    </div>
+    <div>
+      <h1 style="font-size:22px;font-weight:800;color:#2D323B;line-height:1.1;">Measurement Games — Resource Guide{org_title}</h1>
+      <p style="font-size:12px;color:#888;margin-top:4px;">Generated {today} &nbsp;·&nbsp; Just A Game</p>
+    </div>
+  </div>
+  {'<p style="font-size:13px;color:#555;margin-bottom:24px;padding:10px 14px;background:#fffbe6;border-left:4px solid #F0A82E;border-radius:4px;"><strong>Self-organisation focus</strong> describes the adaptive and perceptual challenge each activity is designed to explore.</p>' if has_so else ''}
+  {sections_html}
+</body>
+</html>"""
+    # Return raw HTML — bypass the layout() wrapper so print CSS works cleanly
+    return html
 
 
 def scores_import_form(user, groups=None, orgs=None, error=None):

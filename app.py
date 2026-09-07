@@ -333,6 +333,80 @@ def coach_participant_detail(req, participant_id):
         conn.close()
 
 
+@router.get("/coach/reports")
+def reports_landing(req):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        groups = conn.execute(
+            "SELECT id, name FROM participant_groups ORDER BY sort_order, name"
+        ).fetchall()
+    finally:
+        conn.close()
+    return Response(views.reports_landing_page(coach, groups))
+
+
+@router.get("/coach/reports/baseline")
+def reports_baseline(req):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    group_id_raw = req.query.get("group_id", [""])[0].strip()
+    group_id = int(group_id_raw) if group_id_raw.isdigit() else None
+    if not group_id:
+        return flash_redirect("/coach/reports", "Please select a group first.")
+    conn = db.get_conn()
+    try:
+        group = conn.execute("SELECT * FROM participant_groups WHERE id = ?", (group_id,)).fetchone()
+        if not group:
+            return flash_redirect("/coach/reports", "Group not found.")
+        athletes = conn.execute(
+            "SELECT * FROM users WHERE role='participant' AND group_id=? "
+            "ORDER BY CAST(athlete_number AS INTEGER), name",
+            (group_id,)
+        ).fetchall()
+        resources = conn.execute("SELECT name, self_organisation FROM resources WHERE self_organisation IS NOT NULL").fetchall()
+        athletes_data = []
+        for a in athletes:
+            sessions = db.measurement_sessions_for(conn, a["id"])
+            if sessions:
+                athletes_data.append((dict(a), sessions))
+    finally:
+        conn.close()
+    return Response(views.baseline_report_page(coach, dict(group), athletes_data, resources=resources))
+
+
+@router.get("/coach/reports/progress")
+def reports_progress(req):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    group_id_raw = req.query.get("group_id", [""])[0].strip()
+    group_id = int(group_id_raw) if group_id_raw.isdigit() else None
+    if not group_id:
+        return flash_redirect("/coach/reports", "Please select a group first.")
+    conn = db.get_conn()
+    try:
+        group = conn.execute("SELECT * FROM participant_groups WHERE id = ?", (group_id,)).fetchone()
+        if not group:
+            return flash_redirect("/coach/reports", "Group not found.")
+        athletes = conn.execute(
+            "SELECT * FROM users WHERE role='participant' AND group_id=? "
+            "ORDER BY CAST(athlete_number AS INTEGER), name",
+            (group_id,)
+        ).fetchall()
+        resources = conn.execute("SELECT name, self_organisation FROM resources WHERE self_organisation IS NOT NULL").fetchall()
+        athletes_data = []
+        for a in athletes:
+            sessions = db.measurement_sessions_for(conn, a["id"])
+            athletes_data.append((dict(a), sessions))
+    finally:
+        conn.close()
+    return Response(views.progress_report_page(coach, dict(group), athletes_data, resources=resources))
+
+
 @router.get("/coach/progress")
 def all_progress(req):
     coach = require_role(req, "coach")
@@ -1219,6 +1293,7 @@ def resources_new(req):
     name = req.form_get("name").strip()
     url = req.form_get("url").strip()
     description = req.form_get("description").strip()
+    self_organisation = req.form_get("self_organisation").strip() or None
     folder_id = req.form_get("folder_id").strip() or None
     tag_ids = [int(t) for t in req.form_get_list("tag_ids") if t.strip().isdigit()]
     if not name or not url:
@@ -1230,9 +1305,9 @@ def resources_new(req):
     conn = db.get_conn()
     try:
         resource_id = conn.execute(
-            "INSERT INTO resources (name, description, url, added_by, folder_id, sort_order, created_at) "
-            "VALUES (?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order),-1)+1 FROM resources), ?)",
-            (name, description or None, url, coach["id"], folder_id or None, db.now()),
+            "INSERT INTO resources (name, description, url, self_organisation, added_by, folder_id, sort_order, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order),-1)+1 FROM resources), ?)",
+            (name, description or None, url, self_organisation, coach["id"], folder_id or None, db.now()),
         ).lastrowid
         conn.commit()
         db.set_resource_tags(conn, resource_id, tag_ids)
@@ -1267,6 +1342,7 @@ def resource_edit_post(req, resource_id):
     name = req.form_get("name").strip()
     url = req.form_get("url").strip()
     description = req.form_get("description").strip()
+    self_organisation = req.form_get("self_organisation").strip() or None
     folder_id = req.form_get("folder_id").strip() or None
     tag_ids = [int(t) for t in req.form_get_list("tag_ids") if t.strip().isdigit()]
     if not name or not url:
@@ -1284,7 +1360,7 @@ def resource_edit_post(req, resource_id):
             conn.close()
     conn = db.get_conn()
     try:
-        db.update_resource(conn, resource_id, name, description, url, folder_id)
+        db.update_resource(conn, resource_id, name, description, url, folder_id, self_organisation=self_organisation)
         db.set_resource_tags(conn, resource_id, tag_ids)
         return flash_redirect("/coach/resources", f'"{name}" updated.')
     finally:
@@ -1335,6 +1411,25 @@ def resources_reorder(req):
         except ValueError:
             pass
     return Response("ok")
+
+
+@router.get("/coach/resources/report")
+def resources_report(req):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    org_id_raw = req.query.get("org_id", [""])[0].strip()
+    org_id = int(org_id_raw) if org_id_raw.isdigit() else None
+    conn = db.get_conn()
+    try:
+        folder_groups, ungrouped = db.list_resources_by_folder(conn)
+        # Flatten all resources preserving folder grouping
+        all_folders = [(f, rs) for f, rs in folder_groups if rs] + ([("__ungrouped__", ungrouped)] if ungrouped else [])
+        org = db.get_organisation(conn, org_id) if org_id else None
+        orgs = db.list_organisations(conn)
+    finally:
+        conn.close()
+    return Response(views.resources_report_page(coach, all_folders, org=org, orgs=orgs))
 
 
 @router.post("/coach/resources/folders/new")

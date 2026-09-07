@@ -175,6 +175,7 @@ def init_db():
         "ALTER TABLE users ADD COLUMN organisation_id INTEGER REFERENCES organisations(id)",
         "ALTER TABLE participant_groups ADD COLUMN organisation_id INTEGER REFERENCES organisations(id)",
         "ALTER TABLE organisations ADD COLUMN icon_url TEXT",
+        "ALTER TABLE resources ADD COLUMN self_organisation TEXT",
     ]:
         try:
             conn.execute(sql)
@@ -689,10 +690,10 @@ def move_resource(conn, resource_id, folder_id):
     conn.commit()
 
 
-def update_resource(conn, resource_id, name, description, url, folder_id):
+def update_resource(conn, resource_id, name, description, url, folder_id, self_organisation=None):
     conn.execute(
-        "UPDATE resources SET name = ?, description = ?, url = ?, folder_id = ? WHERE id = ?",
-        (name, description or None, url, folder_id or None, resource_id),
+        "UPDATE resources SET name = ?, description = ?, url = ?, folder_id = ?, self_organisation = ? WHERE id = ?",
+        (name, description or None, url, folder_id or None, self_organisation or None, resource_id),
     )
     conn.commit()
 
