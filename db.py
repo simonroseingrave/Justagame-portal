@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS resource_tag_assignments (
 def get_conn():
     os.makedirs(DATA_DIR, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    conn.row_factory = lambda cur, row: dict(zip([d[0] for d in cur.description], row))
     conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
