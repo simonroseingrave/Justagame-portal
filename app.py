@@ -1606,14 +1606,10 @@ def scores_import_template(req):
     # One blank example row
     writer.writerow([""] * len(headers))
     body = output.getvalue().encode("utf-8")
-    return Response(
-        body,
-        status=200,
-        headers={
-            "Content-Type": "text/csv",
-            "Content-Disposition": 'attachment; filename="scores_template.csv"',
-        },
-    )
+    resp = Response(body=body, content_type="text/csv; charset=utf-8")
+    resp.headers.append(("Content-Disposition", 'attachment; filename="scores_template.csv"'))
+    resp.headers.append(("Content-Length", str(len(body))))
+    return resp
 
 
 @router.post("/coach/scores/import")
