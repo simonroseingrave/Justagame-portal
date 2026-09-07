@@ -344,7 +344,7 @@ def reports_landing(req):
             "SELECT id, name FROM participant_groups ORDER BY sort_order, name"
         ).fetchall()
         orgs = db.list_organisations(conn)
-        sports = [r[0] for r in conn.execute(
+        sports = [r["sport"] for r in conn.execute(
             "SELECT DISTINCT sport FROM users WHERE role='participant' AND sport IS NOT NULL AND sport != '' ORDER BY sport"
         ).fetchall()]
     finally:
