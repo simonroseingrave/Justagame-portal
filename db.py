@@ -10,6 +10,13 @@ DATA_DIR = os.path.join(BASE_DIR, "data")
 DB_PATH = os.path.join(DATA_DIR, "justagame.db")
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS organisations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    type TEXT,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
@@ -20,6 +27,7 @@ CREATE TABLE IF NOT EXISTS users (
     sport TEXT,
     programme TEXT,
     active INTEGER NOT NULL DEFAULT 1,
+    organisation_id INTEGER REFERENCES organisations(id),
     created_at TEXT NOT NULL
 );
 
@@ -79,6 +87,7 @@ CREATE TABLE IF NOT EXISTS participant_groups (
     name TEXT NOT NULL,
     icon_url TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0,
+    organisation_id INTEGER REFERENCES organisations(id),
     created_by INTEGER REFERENCES users(id),
     created_at TEXT NOT NULL
 );
@@ -162,6 +171,8 @@ def init_db():
         "ALTER TABLE users ADD COLUMN organisation TEXT",
         "ALTER TABLE users ADD COLUMN athlete_number TEXT",
         "ALTER TABLE users ADD COLUMN gender TEXT",
+        "ALTER TABLE users ADD COLUMN organisation_id INTEGER REFERENCES organisations(id)",
+        "ALTER TABLE participant_groups ADD COLUMN organisation_id INTEGER REFERENCES organisations(id)",
     ]:
         try:
             conn.execute(sql)
@@ -196,23 +207,103 @@ def assign_missing_athlete_numbers(conn):
         conn.commit()
 
 
-def find_or_create_group(conn, name, created_by):
-    """Find a group by name (case-insensitive) or create it. Returns group_id."""
+def find_or_create_group(conn, name, created_by, organisation_id=None):
+    """Find a group by name (case-insensitive) or create it. Returns group_id.
+    If organisation_id is given, also links the group to that organisation
+    (both on creation and on an existing group that has no org yet)."""
     name = name.strip()
     row = conn.execute(
-        "SELECT id FROM participant_groups WHERE lower(name) = lower(?)", (name,)
+        "SELECT id, organisation_id FROM participant_groups WHERE lower(name) = lower(?)", (name,)
     ).fetchone()
     if row:
-        return row["id"]
+        gid = row["id"]
+        # Link to org if not already linked
+        if organisation_id and not row["organisation_id"]:
+            conn.execute(
+                "UPDATE participant_groups SET organisation_id = ? WHERE id = ?",
+                (organisation_id, gid),
+            )
+            conn.commit()
+        return gid
     max_order = conn.execute(
         "SELECT COALESCE(MAX(sort_order), -1) FROM participant_groups"
     ).fetchone()[0]
     gid = conn.execute(
-        "INSERT INTO participant_groups (name, sort_order, created_by, created_at) VALUES (?, ?, ?, ?)",
-        (name, max_order + 1, created_by, now()),
+        "INSERT INTO participant_groups (name, organisation_id, sort_order, created_by, created_at) VALUES (?, ?, ?, ?, ?)",
+        (name, organisation_id or None, max_order + 1, created_by, now()),
     ).lastrowid
     conn.commit()
     return gid
+
+
+# ------------------------------------------------------ Organisations
+
+
+def list_organisations(conn):
+    """All organisations ordered by name."""
+    return conn.execute("SELECT * FROM organisations ORDER BY name").fetchall()
+
+
+def get_organisation(conn, org_id):
+    return conn.execute("SELECT * FROM organisations WHERE id = ?", (org_id,)).fetchone()
+
+
+def find_or_create_organisation(conn, name):
+    """Find an organisation by name (case-insensitive) or create it. Returns org_id."""
+    name = name.strip()
+    row = conn.execute(
+        "SELECT id FROM organisations WHERE lower(name) = lower(?)", (name,)
+    ).fetchone()
+    if row:
+        return row["id"]
+    oid = conn.execute(
+        "INSERT INTO organisations (name, created_at) VALUES (?, ?)",
+        (name, now()),
+    ).lastrowid
+    conn.commit()
+    return oid
+
+
+def add_organisation(conn, name, org_type=None):
+    name = name.strip()
+    oid = conn.execute(
+        "INSERT INTO organisations (name, type, created_at) VALUES (?, ?, ?)",
+        (name, org_type or None, now()),
+    ).lastrowid
+    conn.commit()
+    return oid
+
+
+def update_organisation(conn, org_id, name, org_type=None):
+    conn.execute(
+        "UPDATE organisations SET name = ?, type = ? WHERE id = ?",
+        (name.strip(), org_type or None, org_id),
+    )
+    conn.commit()
+
+
+def delete_organisation(conn, org_id):
+    """Unlink groups and coaches from this org before deleting it."""
+    conn.execute("UPDATE participant_groups SET organisation_id = NULL WHERE organisation_id = ?", (org_id,))
+    conn.execute("UPDATE users SET organisation_id = NULL WHERE organisation_id = ?", (org_id,))
+    conn.execute("DELETE FROM organisations WHERE id = ?", (org_id,))
+    conn.commit()
+
+
+def set_coach_organisation(conn, coach_id, org_id):
+    conn.execute(
+        "UPDATE users SET organisation_id = ? WHERE id = ? AND role = 'coach'",
+        (org_id or None, coach_id),
+    )
+    conn.commit()
+
+
+def get_groups_for_org(conn, org_id):
+    """All groups belonging to an organisation, ordered by sort_order."""
+    return conn.execute(
+        "SELECT * FROM participant_groups WHERE organisation_id = ? ORDER BY sort_order, id",
+        (org_id,),
+    ).fetchall()
 
 
 def now():
@@ -493,21 +584,32 @@ def assign_participant_group(conn, participant_id, group_id):
     conn.commit()
 
 
-def list_participants_by_group(conn):
+def list_participants_by_group(conn, organisation_id=None):
     """Returns (group_groups, ungrouped) where group_groups is a list of
-    (group_row, [participant_rows]) tuples ordered by group sort_order."""
-    groups = list_participant_groups(conn)
+    (group_row, [participant_rows]) tuples ordered by group sort_order.
+    Pass organisation_id to restrict to groups belonging to that organisation."""
+    if organisation_id is not None:
+        groups = conn.execute(
+            "SELECT * FROM participant_groups WHERE organisation_id = ? ORDER BY sort_order, id",
+            (organisation_id,),
+        ).fetchall()
+    else:
+        groups = list_participant_groups(conn)
     all_participants = conn.execute(
         "SELECT * FROM users WHERE role = 'participant' AND active = 1 ORDER BY name"
     ).fetchall()
+    group_ids = {g["id"] for g in groups}
     by_group = {}
     ungrouped = []
     for p in all_participants:
         gid = p["group_id"]
-        if gid is None:
-            ungrouped.append(p)
+        if gid is None or (organisation_id is not None and gid not in group_ids):
+            if organisation_id is None:
+                ungrouped.append(p)
         else:
             by_group.setdefault(gid, []).append(p)
+    if organisation_id is None:
+        pass  # ungrouped already populated above
     group_groups = [(g, by_group.get(g["id"], [])) for g in groups]
     return group_groups, ungrouped
 

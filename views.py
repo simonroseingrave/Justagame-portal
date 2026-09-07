@@ -25,6 +25,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             links.append(("/coach/resources", "Resources", "resources"))
             if user.get("is_admin"):
                 links.append(("/coach/coaches", "Coaches", "coaches"))
+                links.append(("/coach/organisations", "Organisations", "organisations"))
             links.append(("/coach/progress", "Achievement Statistics", "progress"))
         else:
             links = [("/dashboard", "My Dashboard", "dashboard")]
@@ -914,6 +915,9 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
 
     if is_admin:
         subtitle = 'Viewing all participant groups &mdash; administrator access.'
+    elif user.get("organisation"):
+        org_name = esc(user["organisation"])
+        subtitle = f'Showing all groups for <strong>{org_name}</strong>.'
     elif group_summaries:
         names = ", ".join(f'<strong>{esc(g["name"])}</strong>' for g, _ in group_summaries)
         subtitle = f'Your assigned group{"s" if len(group_summaries) > 1 else ""}: {names}'
@@ -2582,16 +2586,17 @@ def account_page(user, profile_error=None, profile_success=None, password_error=
     return layout("My Account", body, user=user, active_nav=None)
 
 
-def coach_list_page(user, coaches, groups=None, coach_group_map=None, message=None):
+def coach_list_page(user, coaches, groups=None, coach_group_map=None, organisations=None, message=None):
     message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
     groups = groups or []
     coach_group_map = coach_group_map or {}
+    organisations = organisations or []
     group_map = {g["id"]: g["name"] for g in groups}
+    org_map = {o["id"]: o["name"] for o in organisations}
 
-    # Collect unique organisations for filter bar
-    all_orgs = sorted(set(
-        c["organisation"] for c in coaches
-        if c["organisation"]
+    # Collect unique organisations for filter bar (from the table, not free text)
+    all_orgs = [o["name"] for o in organisations] if organisations else sorted(set(
+        c["organisation"] for c in coaches if c["organisation"]
     ))
 
     rows = []
@@ -2622,6 +2627,10 @@ def coach_list_page(user, coaches, groups=None, coach_group_map=None, message=No
                 f'{" checked" if g["id"] in assigned_ids else ""}> {esc(g["name"])}</label>'
                 for g in groups
             ) if groups else '<span class="muted" style="font-size:12px;">No groups yet</span>'
+            org_opts = '<option value="">— No organisation —</option>' + "".join(
+                f'<option value="{o["id"]}"{" selected" if o["id"] == c.get("organisation_id") else ""}>{esc(o["name"])}</option>'
+                for o in organisations
+            )
             action_html = f"""
             <form method="post" action="/coach/coaches/{c['id']}/reset-password" style="display:inline"
                   onsubmit="return confirm('Reset {esc(c['name'])}&#39;s password?');">
@@ -2637,7 +2646,11 @@ def coach_list_page(user, coaches, groups=None, coach_group_map=None, message=No
             <form method="post" action="/coach/coaches/{c['id']}/assign-group" style="display:inline-block; vertical-align:middle; margin-left:4px;">
               <div style="border:1px solid var(--jag-border); border-radius:6px; padding:6px 10px; background:#fff; margin-bottom:4px;">{checkboxes}</div>
               <button type="submit" class="btn btn-ghost btn-sm">Set Groups</button>
-            </form>"""
+            </form>
+            {f'''<form method="post" action="/coach/coaches/{c['id']}/assign-org" style="display:inline-block; vertical-align:middle; margin-left:4px;">
+              <select name="organisation_id" style="font-size:12px; padding:3px 6px; border:1px solid var(--jag-border); border-radius:4px;">{org_opts}</select>
+              <button type="submit" class="btn btn-ghost btn-sm">Set Org</button>
+            </form>''' if organisations else ''}"""
         rows.append(f"""<tr class="coach-row" data-org="{c_org_attr}" data-admin="{c_admin_attr}" data-active="{c_active_attr}">
           <td>{org_pill}{esc(c['name'])}{admin_badge}</td>
           <td>{esc(c['email'])}{group_badge}</td>
@@ -2728,8 +2741,20 @@ def coach_list_page(user, coaches, groups=None, coach_group_map=None, message=No
     return layout("Coaches", body, user=user, active_nav="coaches")
 
 
-def new_coach_form(user, error=None):
+def new_coach_form(user, error=None, organisations=None):
     error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
+    organisations = organisations or []
+    org_opts = '<option value="">— No organisation —</option>' + "".join(
+        f'<option value="{o["id"]}">{esc(o["name"])}</option>' for o in organisations
+    )
+    org_field = f"""
+        <label for="organisation_id">Organisation <span style="font-weight:400;color:var(--jag-muted);">(optional — scopes coach to this org's groups)</span></label>
+        <select id="organisation_id" name="organisation_id">{org_opts}</select>
+        <p style="font-size:12px;color:var(--jag-muted);margin-top:-10px;">
+          Don't see their organisation? <a href="/coach/organisations">Add it first</a>.
+        </p>""" if organisations else """
+        <label for="organisation_id">Organisation</label>
+        <p style="font-size:12px;color:var(--jag-muted);">No organisations yet — <a href="/coach/organisations">create one first</a> to scope this coach.</p>"""
     body = f"""
     <div class="page-head"><h1>Add Coach</h1></div>
     {error_html}
@@ -2739,8 +2764,7 @@ def new_coach_form(user, error=None):
         <input type="text" id="name" name="name" required />
         <label for="email">Email (used to log in)</label>
         <input type="email" id="email" name="email" required />
-        <label for="organisation">Organisation <span style="font-weight:400;color:var(--jag-muted);">(school, club, etc. — optional)</span></label>
-        <input type="text" id="organisation" name="organisation" placeholder="e.g. Masterton High School" />
+        {org_field}
         <label for="password">Temporary password</label>
         <input type="text" id="password" name="password" required value="CoachTemp123!" />
         <button type="submit" class="btn btn-primary">Create Coach</button>
@@ -2748,6 +2772,101 @@ def new_coach_form(user, error=None):
     </div>
     """
     return layout("Add Coach", body, user=user, active_nav="coaches")
+
+
+def organisations_page(user, orgs_data, message=None):
+    message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
+    type_options = "".join(
+        f'<option value="{t}">{t}</option>'
+        for t in ["School", "Club", "Programme", "Other"]
+    )
+
+    rows = []
+    for od in orgs_data:
+        o = od["org"]
+        type_badge = (f'<span style="font-size:11px;background:rgba(45,50,59,0.08);color:var(--jag-muted);'
+                      f'border-radius:999px;padding:1px 8px;">{esc(o["type"])}</span> ') if o["type"] else ""
+        rows.append(f"""
+        <tr>
+          <td>{type_badge}<strong>{esc(o["name"])}</strong></td>
+          <td style="text-align:center;">{od["group_count"]}</td>
+          <td style="text-align:center;">{od["coach_count"]}</td>
+          <td>
+            <a href="/coach/organisations/{o['id']}/edit" class="btn btn-ghost btn-sm">Edit</a>
+            <form method="post" action="/coach/organisations/{o['id']}/delete" style="display:inline"
+                  onsubmit="return confirm('Delete organisation \\'{esc(o['name'])}\\'? Groups and coaches will be unlinked.');">
+              <button type="submit" class="btn btn-ghost btn-sm">Delete</button>
+            </form>
+          </td>
+        </tr>""")
+
+    rows_html = "".join(rows) if rows else '<tr><td colspan="4" class="muted" style="text-align:center;padding:24px;">No organisations yet.</td></tr>'
+
+    body = f"""
+    <div class="page-head">
+      <div>
+        <h1>Organisations</h1>
+        <p class="muted">Schools, clubs, and programmes — used to scope coaches to their own athletes.</p>
+      </div>
+    </div>
+    {message_html}
+    <div class="card" style="margin-bottom:24px;">
+      <table class="table">
+        <thead><tr><th>Name</th><th style="text-align:center;">Groups</th><th style="text-align:center;">Coaches</th><th></th></tr></thead>
+        <tbody>{rows_html}</tbody>
+      </table>
+    </div>
+    <div class="card form-card" style="max-width:500px;">
+      <h2 style="margin-bottom:16px;">Add Organisation</h2>
+      <form method="post" action="/coach/organisations/new" style="display:flex;flex-direction:column;gap:12px;">
+        <div>
+          <label for="new-org-name" style="margin-bottom:4px;">Name</label>
+          <input type="text" id="new-org-name" name="name" placeholder="e.g. Makoura College" required />
+        </div>
+        <div>
+          <label for="new-org-type" style="margin-bottom:4px;">Type <span style="font-weight:400;color:var(--jag-muted);">(optional)</span></label>
+          <select id="new-org-type" name="type">
+            <option value="">— Select type —</option>
+            {type_options}
+          </select>
+        </div>
+        <div><button type="submit" class="btn btn-primary">Create Organisation</button></div>
+      </form>
+    </div>
+    """
+    return layout("Organisations", body, user=user, active_nav="organisations")
+
+
+def organisation_form(user, org=None, error=None):
+    error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
+    name_val = esc(org["name"]) if org else ""
+    type_val = org["type"] if org else ""
+    type_options = "".join(
+        f'<option value="{t}"{" selected" if type_val == t else ""}>{t}</option>'
+        for t in ["School", "Club", "Programme", "Other"]
+    )
+    action = f"/coach/organisations/{org['id']}/edit" if org else "/coach/organisations/new"
+    title = f"Edit Organisation — {org['name']}" if org else "Add Organisation"
+    body = f"""
+    <div class="page-head">
+      <h1>{esc(title)}</h1>
+      <a class="btn btn-ghost" href="/coach/organisations">Back</a>
+    </div>
+    {error_html}
+    <div class="card form-card">
+      <form method="post" action="{action}">
+        <label for="name">Name</label>
+        <input type="text" id="name" name="name" value="{name_val}" required />
+        <label for="type">Type <span style="font-weight:400;color:var(--jag-muted);">(optional)</span></label>
+        <select id="type" name="type">
+          <option value="">— Select type —</option>
+          {type_options}
+        </select>
+        <button type="submit" class="btn btn-primary">{"Save Changes" if org else "Create"}</button>
+      </form>
+    </div>
+    """
+    return layout(title, body, user=user, active_nav="organisations")
 
 
 def _gdrive_thumbnail(url):

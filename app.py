@@ -221,23 +221,28 @@ def coach_dashboard(req):
             group_summaries = [(g, [make_summary(p) for p in ps]) for g, ps in group_groups]
             ungrouped_summaries = [make_summary(p) for p in ungrouped]
         else:
-            # Regular coaches only see their assigned groups
-            coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
-            if coach_group_ids:
-                placeholders = ",".join("?" * len(coach_group_ids))
-                groups = conn.execute(
-                    f"SELECT * FROM participant_groups WHERE id IN ({placeholders}) ORDER BY sort_order, id",
-                    coach_group_ids,
-                ).fetchall()
-                group_summaries = []
-                for group in groups:
-                    participants = conn.execute(
-                        "SELECT * FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name",
-                        (group["id"],),
-                    ).fetchall()
-                    group_summaries.append((group, [make_summary(p) for p in participants]))
+            # Regular coaches: org-scoped if they have an organisation_id, else by assigned groups
+            coach_org_id = coach.get("organisation_id")
+            if coach_org_id:
+                group_groups, _ = db.list_participants_by_group(conn, organisation_id=coach_org_id)
+                group_summaries = [(g, [make_summary(p) for p in ps]) for g, ps in group_groups]
             else:
-                group_summaries = []
+                coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
+                if coach_group_ids:
+                    placeholders = ",".join("?" * len(coach_group_ids))
+                    groups = conn.execute(
+                        f"SELECT * FROM participant_groups WHERE id IN ({placeholders}) ORDER BY sort_order, id",
+                        coach_group_ids,
+                    ).fetchall()
+                    group_summaries = []
+                    for group in groups:
+                        participants = conn.execute(
+                            "SELECT * FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name",
+                            (group["id"],),
+                        ).fetchall()
+                        group_summaries.append((group, [make_summary(p) for p in participants]))
+                else:
+                    group_summaries = []
             ungrouped_summaries = []
         return Response(views.coach_dashboard_for(coach, group_summaries, ungrouped_summaries, message=message))
     finally:
@@ -784,9 +789,10 @@ def list_coaches(req):
     try:
         coaches = db.list_coaches(conn)
         groups = db.list_participant_groups(conn)
+        organisations = db.list_organisations(conn)
         coach_group_map = {c["id"]: db.get_coach_group_ids(conn, c["id"]) for c in coaches}
         message = req.get_query("flash")
-        return Response(views.coach_list_page(coach, coaches, groups=groups, coach_group_map=coach_group_map, message=message))
+        return Response(views.coach_list_page(coach, coaches, groups=groups, coach_group_map=coach_group_map, organisations=organisations, message=message))
     finally:
         conn.close()
 
@@ -796,7 +802,12 @@ def new_coach_get(req):
     coach = require_admin(req)
     if not coach:
         return redirect("/login")
-    return Response(views.new_coach_form(coach))
+    conn = db.get_conn()
+    try:
+        organisations = db.list_organisations(conn)
+        return Response(views.new_coach_form(coach, organisations=organisations))
+    finally:
+        conn.close()
 
 
 @router.post("/coach/coaches/new")
@@ -807,20 +818,32 @@ def new_coach_post(req):
     name = req.form_get("name").strip()
     email = req.form_get("email").strip().lower()
     password = req.form_get("password") or "CoachTemp123!"
-    organisation = (req.form_get("organisation") or "").strip()
+    org_id_raw = req.form_get("organisation_id").strip()
 
     if not name or not email:
-        return Response(views.new_coach_form(coach, error="Name and email are required."), status=400)
+        conn = db.get_conn()
+        try:
+            organisations = db.list_organisations(conn)
+        finally:
+            conn.close()
+        return Response(views.new_coach_form(coach, error="Name and email are required.", organisations=organisations), status=400)
 
     conn = db.get_conn()
     try:
+        organisations = db.list_organisations(conn)
         existing = conn.execute("SELECT id FROM users WHERE lower(email) = ?", (email,)).fetchone()
         if existing:
-            return Response(views.new_coach_form(coach, error="A user with that email already exists."), status=400)
+            return Response(views.new_coach_form(coach, error="A user with that email already exists.", organisations=organisations), status=400)
+        org_id = int(org_id_raw) if org_id_raw.isdigit() else None
+        # Set users.organisation text field from org name for display compat
+        org_name = None
+        if org_id:
+            org_row = db.get_organisation(conn, org_id)
+            org_name = org_row["name"] if org_row else None
         conn.execute(
-            "INSERT INTO users (name, email, password_hash, role, organisation, sport, programme, created_at) "
-            "VALUES (?, ?, ?, 'coach', ?, NULL, NULL, ?)",
-            (name, email, hash_password(password), organisation or None, db.now()),
+            "INSERT INTO users (name, email, password_hash, role, organisation, organisation_id, sport, programme, created_at) "
+            "VALUES (?, ?, ?, 'coach', ?, ?, NULL, NULL, ?)",
+            (name, email, hash_password(password), org_name, org_id, db.now()),
         )
         conn.commit()
         return flash_redirect("/coach/coaches", f"Added coach {name}. Share their login: {email} / {password}")
@@ -905,6 +928,134 @@ def toggle_coach(req, coach_id):
         db.set_active(conn, coach_id, new_active)
         action = "reactivated" if new_active else "deactivated"
         return flash_redirect("/coach/coaches", f"{target['name']} {action}.")
+    finally:
+        conn.close()
+
+
+# --------------------------------------------------------- coach org assignment
+
+
+@router.post("/coach/coaches/<int:coach_id>/assign-org")
+def assign_coach_org(req, coach_id):
+    admin = require_admin(req)
+    if not admin:
+        return redirect("/login")
+    org_id_raw = req.form_get("organisation_id").strip()
+    org_id = int(org_id_raw) if org_id_raw.isdigit() else None
+    conn = db.get_conn()
+    try:
+        target = conn.execute("SELECT * FROM users WHERE id = ? AND role = 'coach'", (coach_id,)).fetchone()
+        if not target:
+            return flash_redirect("/coach/coaches", "Coach not found.")
+        # Also update the text field for display compat
+        org_name = None
+        if org_id:
+            org_row = db.get_organisation(conn, org_id)
+            org_name = org_row["name"] if org_row else None
+        conn.execute(
+            "UPDATE users SET organisation_id = ?, organisation = ? WHERE id = ?",
+            (org_id, org_name, coach_id),
+        )
+        conn.commit()
+        label = org_name or "none"
+        return flash_redirect("/coach/coaches", f"Organisation for {target['name']} set to {label}.")
+    finally:
+        conn.close()
+
+
+# --------------------------------------------------------- organisations (admin)
+
+
+@router.get("/coach/organisations")
+def organisations_list(req):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        orgs = db.list_organisations(conn)
+        # Augment with group count and coach count
+        orgs_data = []
+        for o in orgs:
+            group_count = conn.execute(
+                "SELECT COUNT(*) AS c FROM participant_groups WHERE organisation_id = ?", (o["id"],)
+            ).fetchone()["c"]
+            coach_count = conn.execute(
+                "SELECT COUNT(*) AS c FROM users WHERE role='coach' AND organisation_id = ?", (o["id"],)
+            ).fetchone()["c"]
+            orgs_data.append({"org": o, "group_count": group_count, "coach_count": coach_count})
+        message = req.get_query("flash")
+        return Response(views.organisations_page(coach, orgs_data, message=message))
+    finally:
+        conn.close()
+
+
+@router.post("/coach/organisations/new")
+def organisation_new(req):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    name = req.form_get("name").strip()
+    org_type = req.form_get("type").strip() or None
+    if not name:
+        return flash_redirect("/coach/organisations", "Organisation name is required.")
+    conn = db.get_conn()
+    try:
+        db.add_organisation(conn, name, org_type)
+        return flash_redirect("/coach/organisations", f'Organisation "{name}" created.')
+    finally:
+        conn.close()
+
+
+@router.get("/coach/organisations/<int:org_id>/edit")
+def organisation_edit_get(req, org_id):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        org = db.get_organisation(conn, org_id)
+        if not org:
+            return flash_redirect("/coach/organisations", "Organisation not found.")
+        return Response(views.organisation_form(coach, org=org))
+    finally:
+        conn.close()
+
+
+@router.post("/coach/organisations/<int:org_id>/edit")
+def organisation_edit_post(req, org_id):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    name = req.form_get("name").strip()
+    org_type = req.form_get("type").strip() or None
+    if not name:
+        conn = db.get_conn()
+        try:
+            org = db.get_organisation(conn, org_id)
+        finally:
+            conn.close()
+        return Response(views.organisation_form(coach, org=org, error="Name is required."), status=400)
+    conn = db.get_conn()
+    try:
+        db.update_organisation(conn, org_id, name, org_type)
+        return flash_redirect("/coach/organisations", f'Organisation "{name}" updated.')
+    finally:
+        conn.close()
+
+
+@router.post("/coach/organisations/<int:org_id>/delete")
+def organisation_delete(req, org_id):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        org = db.get_organisation(conn, org_id)
+        if not org:
+            return flash_redirect("/coach/organisations", "Organisation not found.")
+        db.delete_organisation(conn, org_id)
+        return flash_redirect("/coach/organisations", f'Organisation "{org["name"]}" deleted.')
     finally:
         conn.close()
 
@@ -1364,10 +1515,15 @@ def participant_import_post(req):
                     skipped += 1
                     continue
 
-            # Resolve group
+            # Resolve organisation → organisations table
+            org_id = None
+            if organisation:
+                org_id = db.find_or_create_organisation(conn, organisation)
+
+            # Resolve group (link to org if known)
             group_id = None
             if group_name:
-                group_id = db.find_or_create_group(conn, group_name, coach["id"])
+                group_id = db.find_or_create_group(conn, group_name, coach["id"], organisation_id=org_id)
 
             # Check username uniqueness
             if username:
