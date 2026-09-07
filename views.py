@@ -3182,11 +3182,18 @@ Alex,Lee,Masterton School,Under 12s,Male,Football</pre>
         <li>If <code>athlete_number</code> is provided and already exists, that row is skipped (safe to re-run).</li>
       </ul>
 
-      <form method="post" action="/coach/participants/import">
-        <label style="display:block;font-weight:600;margin-bottom:6px;">Paste CSV here</label>
-        <textarea name="csv_data" rows="14" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:13px;
+      <form method="post" action="/coach/participants/import" enctype="multipart/form-data">
+        <label style="display:block;font-weight:600;margin-bottom:6px;">Upload CSV file</label>
+        <input type="file" name="csv_file" accept=".csv,.txt"
+               style="display:block;margin-bottom:16px;font-size:13px;" />
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+          <div style="flex:1;height:1px;background:var(--jag-border);"></div>
+          <span style="font-size:12px;color:var(--jag-muted);white-space:nowrap;">or paste CSV below</span>
+          <div style="flex:1;height:1px;background:var(--jag-border);"></div>
+        </div>
+        <textarea name="csv_data" rows="10" style="width:100%;box-sizing:border-box;font-family:monospace;font-size:13px;
           border:1px solid var(--jag-border);border-radius:8px;padding:10px;resize:vertical;"
-          placeholder="name,sport,group_name&#10;Jane Smith,Football,Under 12s&#10;..."></textarea>
+          placeholder="First Name,Last Name,Organisation,Group,Gender,Sport&#10;Jane,Smith,Makoura College,Under 12s,Female,Football&#10;..."></textarea>
         <div style="margin-top:14px;display:flex;gap:8px;">
           <button type="submit" class="btn btn-primary">Import Athletes</button>
           <a class="btn btn-ghost" href="/coach">Cancel</a>

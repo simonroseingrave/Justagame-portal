@@ -21,6 +21,7 @@ class Request:
         if cookie_header:
             self.cookies.load(cookie_header)
         self._form = None
+        self._files = {}  # name -> bytes for uploaded files
 
     def get_query(self, name, default=None):
         values = self.query.get(name)
@@ -34,13 +35,37 @@ class Request:
     @property
     def form(self):
         if self._form is None:
-            try:
-                length = int(self.environ.get("CONTENT_LENGTH") or 0)
-            except ValueError:
-                length = 0
-            body = self.environ["wsgi.input"].read(length) if length else b""
-            self._form = parse_qs(body.decode("utf-8"))
+            content_type = self.environ.get("CONTENT_TYPE", "")
+            if "multipart/form-data" in content_type:
+                import cgi
+                fs = cgi.FieldStorage(
+                    fp=self.environ["wsgi.input"],
+                    environ=self.environ,
+                    keep_blank_values=True,
+                )
+                self._form = {}
+                for key in fs.keys():
+                    items = fs[key] if isinstance(fs[key], list) else [fs[key]]
+                    for item in items:
+                        if getattr(item, "filename", None):
+                            self._files[key] = item.file.read()
+                        else:
+                            self._form.setdefault(key, []).append(
+                                item.value if hasattr(item, "value") else ""
+                            )
+            else:
+                try:
+                    length = int(self.environ.get("CONTENT_LENGTH") or 0)
+                except ValueError:
+                    length = 0
+                body = self.environ["wsgi.input"].read(length) if length else b""
+                self._form = parse_qs(body.decode("utf-8"))
         return self._form
+
+    def form_file(self, name):
+        """Return raw bytes of an uploaded file, or None if not present."""
+        _ = self.form  # ensure parsed
+        return self._files.get(name)
 
     def form_get(self, name, default=""):
         vals = self.form.get(name)

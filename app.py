@@ -1295,9 +1295,21 @@ def participant_import_post(req):
     if not coach:
         return redirect("/login")
 
-    raw_csv = req.form_get("csv_data").strip()
+    # Accept either an uploaded file or pasted textarea content
+    file_bytes = req.form_file("csv_file")
+    if file_bytes:
+        try:
+            raw_csv = file_bytes.decode("utf-8-sig").strip()  # utf-8-sig strips Excel BOM
+        except UnicodeDecodeError:
+            raw_csv = file_bytes.decode("latin-1").strip()
+    else:
+        raw_csv = req.form_get("csv_data").strip()
     if not raw_csv:
-        return Response(views.participant_import_form(coach, error="Please paste CSV data before importing."), status=400)
+        return Response(views.participant_import_form(coach, error="Please upload a CSV file or paste CSV data below."), status=400)
+
+    # Strip leading blank lines (Excel/Numbers sometimes exports an empty first row)
+    lines = [ln for ln in raw_csv.splitlines() if ln.strip().strip(",")]
+    raw_csv = "\n".join(lines)
 
     reader = csv.DictReader(io.StringIO(raw_csv))
     # Accept either "first name"+"last name" pair OR a single "name" column
