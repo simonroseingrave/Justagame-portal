@@ -14,7 +14,7 @@ CATEGORIES = [
     "Confidence & Resilience",
 ]
 
-SPORTS = ["Cricket", "Football", "Hockey", "Multi-sport"]
+SPORTS = ["Cricket", "Football", "Golf", "Hockey", "Multi-sport", "Netball", "Rugby", "Touch", "Volleyball"]
 
 
 # ----------------------------------------------------------------------
