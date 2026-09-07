@@ -925,7 +925,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
       <a class="btn btn-primary" href="/coach/participants/new">+ Add Participant</a>
       <button type="button" class="btn btn-primary" onclick="var p=document.getElementById('create-group-panel');p.style.display=p.style.display==='none'?'block':'none';">+ Create Group</button>
       <a class="btn btn-primary" href="/coach/session">Record Session</a>
-      {'<a class="btn btn-ghost" href="/coach/participants/import" title="Bulk-import athletes from CSV">&#8679; Import CSV</a><a class="btn btn-ghost" href="/coach/participants/export.csv" title="Export all athletes with new temp passwords">&#8681; Export CSV</a>' if is_admin else ''}
+      {'<a class="btn btn-ghost" href="/coach/participants/import" title="Bulk-import athletes from CSV">&#8679; Import Athletes</a><a class="btn btn-ghost" href="/coach/participants/export.csv" title="Export all athletes with new temp passwords">&#8681; Export Athletes</a><a class="btn btn-ghost" href="/coach/scores/import" title="Bulk-import test scores from CSV">&#8679; Import Scores</a>' if is_admin else ''}
     </div>
     {create_group_form}""" if is_admin else ""
 
@@ -3375,6 +3375,90 @@ def edit_resource_page(user, resource, folders, all_tags=None, selected_tag_ids=
     </div>
     """
     return layout("Edit Resource", body, user=user, active_nav="resources")
+
+
+def scores_import_form(user, groups=None, error=None):
+    from constants import MEASUREMENT_GAMES
+    error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
+    groups = groups or []
+
+    group_opts = '<option value="">— No group filter —</option>' + "".join(
+        f'<option value="{g["id"]}">{esc(g["name"])}</option>' for g in groups
+    )
+
+    # Build a reference table of column names
+    col_rows = ""
+    for section in MEASUREMENT_GAMES:
+        for game in section["games"]:
+            for field in game.get("fields", []):
+                col_rows += (
+                    f'<tr><td style="font-family:monospace;font-size:12px;color:var(--jag-navy);padding:3px 10px 3px 0;">'
+                    f'{esc(game["key"])}.{esc(field["key"])}</td>'
+                    f'<td style="font-size:12px;color:var(--jag-muted);">{esc(game["name"])} — {esc(field["label"])}</td></tr>'
+                )
+            for field in game.get("computed", []):
+                col_rows += (
+                    f'<tr><td style="font-family:monospace;font-size:12px;color:#999;padding:3px 10px 3px 0;">'
+                    f'{esc(game["key"])}.{esc(field["key"])}</td>'
+                    f'<td style="font-size:12px;color:#bbb;">{esc(game["name"])} — {esc(field["label"])} <em>(auto-computed if omitted)</em></td></tr>'
+                )
+
+    body = f"""
+    <div class="page-head">
+      <div>
+        <h1>Import Scores from CSV</h1>
+        <p class="muted">Bulk-upload test scores for existing athletes. Each row becomes one measurement session on the selected date.</p>
+      </div>
+      <div style="display:flex;gap:8px;">
+        <a href="/coach/scores/import/template.csv" class="btn btn-ghost">&#8681; Download Template CSV</a>
+        <a href="/coach" class="btn btn-ghost">← Back</a>
+      </div>
+    </div>
+    {error_html}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;max-width:1100px;align-items:start;">
+      <div>
+        <form method="post" action="/coach/scores/import" enctype="multipart/form-data">
+          <div class="form-group">
+            <label>Session Date <span style="color:red;">*</span></label>
+            <input type="date" name="session_date" required style="max-width:220px;" />
+            <small class="muted">All rows in this import are recorded on this date.</small>
+          </div>
+          <div class="form-group">
+            <label>Group (optional)</label>
+            <select name="group_id" style="max-width:300px;">{group_opts}</select>
+            <small class="muted">Overrides each athlete's current group for the session snapshot. Leave blank to use their assigned group.</small>
+          </div>
+          <div class="form-group">
+            <label>CSV File</label>
+            <input type="file" name="csv_file" accept=".csv,.txt" />
+            <small class="muted">Or paste CSV content below.</small>
+          </div>
+          <div class="form-group">
+            <label>Paste CSV (optional)</label>
+            <textarea name="csv_data" rows="8" placeholder="athlete_number,skipping_rope_sprint.time_1,balance_ball_catching.one_foot_balance_catch&#10;001,4.52,12&#10;002,5.10,9" style="font-family:monospace;font-size:13px;width:100%;"></textarea>
+          </div>
+          <button type="submit" class="btn btn-primary">Import Scores</button>
+        </form>
+      </div>
+      <div>
+        <h3 style="margin-top:0;font-size:15px;">CSV Format</h3>
+        <p style="font-size:13px;color:var(--jag-muted);">First column must be <code>athlete_number</code>. Each additional column is named <code>game_key.field_key</code>. Blank cells are skipped — you don't need to include all games.</p>
+        <p style="font-size:13px;color:var(--jag-muted);">Download the template above to get a pre-built header row with every available column.</p>
+        <div style="max-height:400px;overflow-y:auto;border:1px solid var(--jag-border);border-radius:8px;padding:12px;">
+          <table style="border-collapse:collapse;width:100%;">
+            <thead><tr>
+              <th style="font-size:11px;text-align:left;padding:3px 10px 6px 0;color:var(--jag-muted);border-bottom:1px solid var(--jag-border);">Column name</th>
+              <th style="font-size:11px;text-align:left;padding:3px 0 6px;color:var(--jag-muted);border-bottom:1px solid var(--jag-border);">Field</th>
+            </tr></thead>
+            <tbody>
+              <tr><td style="font-family:monospace;font-size:12px;color:var(--jag-green);padding:3px 10px 3px 0;font-weight:700;">athlete_number</td><td style="font-size:12px;">Athlete ID (required)</td></tr>
+              {col_rows}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>"""
+    return layout("Import Scores", body, user=user, active_nav="dashboard")
 
 
 def participant_import_form(user, error=None):

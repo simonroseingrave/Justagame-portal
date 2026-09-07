@@ -1565,6 +1565,216 @@ def participant_import_post(req):
     return flash_redirect("/coach", summary)
 
 
+# ---------------------------------------------------------------------------
+# Score CSV import
+# ---------------------------------------------------------------------------
+
+@router.get("/coach/scores/import")
+def scores_import_get(req):
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        groups = conn.execute(
+            "SELECT id, name FROM participant_groups ORDER BY sort_order, name"
+        ).fetchall()
+    finally:
+        conn.close()
+    return Response(views.scores_import_form(coach, groups=groups))
+
+
+@router.get("/coach/scores/import/template.csv")
+def scores_import_template(req):
+    import csv, io
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    from constants import all_measurement_games, MEASUREMENT_GAMES
+    output = io.StringIO()
+    writer = csv.writer(output)
+    # Build header: athlete_number + every game.field (skipping computed)
+    headers = ["athlete_number"]
+    for section in MEASUREMENT_GAMES:
+        for game in section["games"]:
+            for field in game.get("fields", []):
+                headers.append(f"{game['key']}.{field['key']}")
+            # Also include computed fields so coaches can optionally fill them
+            for field in game.get("computed", []):
+                headers.append(f"{game['key']}.{field['key']}")
+    writer.writerow(headers)
+    # One blank example row
+    writer.writerow([""] * len(headers))
+    body = output.getvalue().encode("utf-8")
+    return Response(
+        body,
+        status=200,
+        headers={
+            "Content-Type": "text/csv",
+            "Content-Disposition": 'attachment; filename="scores_template.csv"',
+        },
+    )
+
+
+@router.post("/coach/scores/import")
+def scores_import_post(req):
+    import csv, io
+    from constants import find_any_game, all_measurement_games, MEASUREMENT_GAMES
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+
+    file_bytes = req.form_file("csv_file")
+    if file_bytes:
+        try:
+            raw_csv = file_bytes.decode("utf-8-sig").strip()
+        except UnicodeDecodeError:
+            raw_csv = file_bytes.decode("latin-1").strip()
+    else:
+        raw_csv = req.form_get("csv_data", "").strip()
+
+    session_date = req.form_get("session_date", "").strip()
+    group_id_raw = req.form_get("group_id", "").strip()
+    group_id = int(group_id_raw) if group_id_raw else None
+
+    conn = db.get_conn()
+    try:
+        groups = conn.execute(
+            "SELECT id, name FROM participant_groups ORDER BY sort_order, name"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    if not raw_csv:
+        return Response(views.scores_import_form(coach, groups=groups,
+            error="Please upload a CSV file or paste CSV data."), status=400)
+    if not session_date:
+        return Response(views.scores_import_form(coach, groups=groups,
+            error="Please enter a session date."), status=400)
+
+    lines = [ln for ln in raw_csv.splitlines() if ln.strip().strip(",")]
+    raw_csv = "\n".join(lines)
+    reader = csv.DictReader(io.StringIO(raw_csv))
+    fieldnames = reader.fieldnames or []
+
+    # Validate: must have athlete_number
+    norm = {f.strip().lower(): f for f in fieldnames}
+    if "athlete_number" not in norm:
+        return Response(views.scores_import_form(coach, groups=groups,
+            error="CSV must have an 'athlete_number' column."), status=400)
+
+    # Parse columns into (game_key, field_key) pairs
+    # Column format: game_key.field_key  (dot-separated)
+    score_cols = []  # list of (original_col, game_key, field_key, is_computed)
+    unknown_cols = []
+    for col in fieldnames:
+        col_s = col.strip()
+        if col_s.lower() == "athlete_number":
+            continue
+        if "." not in col_s:
+            unknown_cols.append(col_s)
+            continue
+        gk, fk = col_s.split(".", 1)
+        game = find_any_game(gk)
+        if not game:
+            unknown_cols.append(col_s)
+            continue
+        all_field_keys = [f["key"] for f in game.get("fields", [])] + \
+                         [f["key"] for f in game.get("computed", [])]
+        if fk not in all_field_keys:
+            unknown_cols.append(col_s)
+            continue
+        is_computed = fk in [f["key"] for f in game.get("computed", [])]
+        score_cols.append((col, gk, fk, is_computed))
+
+    imported, skipped, errors = 0, 0, []
+    conn = db.get_conn()
+    try:
+        for i, row in enumerate(reader, start=2):
+            an = (row.get("athlete_number") or "").strip()
+            if not an:
+                errors.append(f"Row {i}: no athlete_number — skipped.")
+                skipped += 1
+                continue
+            athlete = conn.execute(
+                "SELECT id, name, group_id FROM users WHERE athlete_number = ? AND role = 'participant'",
+                (an,)
+            ).fetchone()
+            if not athlete:
+                errors.append(f"Row {i}: athlete #{an} not found — skipped.")
+                skipped += 1
+                continue
+
+            # Collect non-empty field values for this row
+            raw_results = []  # (game_key, field_key, value)
+            for col, gk, fk, is_computed in score_cols:
+                raw_val = (row.get(col) or "").strip()
+                if not raw_val:
+                    continue
+                try:
+                    val = float(raw_val)
+                except ValueError:
+                    errors.append(f"Row {i}: '{col}' value '{raw_val}' is not a number — skipped field.")
+                    continue
+                raw_results.append((gk, fk, val))
+
+            if not raw_results:
+                errors.append(f"Row {i}: athlete #{an} ({athlete['name']}) has no score values — skipped.")
+                skipped += 1
+                continue
+
+            # Auto-compute computed fields that weren't supplied
+            # Group raw_results by game_key
+            from collections import defaultdict
+            by_game = defaultdict(dict)
+            for gk, fk, val in raw_results:
+                by_game[gk][fk] = val
+
+            for section in MEASUREMENT_GAMES:
+                for game in section["games"]:
+                    gk = game["key"]
+                    if gk not in by_game:
+                        continue
+                    for comp in game.get("computed", []):
+                        if comp["key"] in by_game[gk]:
+                            continue  # already supplied
+                        src_vals = [by_game[gk].get(fk) for fk in comp.get("of", [])]
+                        src_vals = [v for v in src_vals if v is not None]
+                        if not src_vals:
+                            continue
+                        if comp.get("formula") == "average_of":
+                            computed_val = round(sum(src_vals) / len(src_vals), 3)
+                        elif comp.get("formula") == "sum_of":
+                            computed_val = round(sum(src_vals), 3)
+                        else:
+                            continue
+                        by_game[gk][comp["key"]] = computed_val
+                        raw_results.append((gk, comp["key"], computed_val))
+
+            # Use athlete's own group_id as snapshot if no override given
+            snap_group = group_id if group_id else athlete["group_id"]
+            session_id = db.find_or_create_session(
+                conn, athlete["id"], session_date, coach["id"], group_id=snap_group
+            )
+            for gk, fk, val in raw_results:
+                db.upsert_measurement_result(conn, session_id, gk, fk, val)
+            conn.commit()
+            imported += 1
+    finally:
+        conn.close()
+
+    summary = f"Scores imported: {imported} athletes recorded"
+    if skipped:
+        summary += f", {skipped} skipped"
+    if unknown_cols:
+        summary += f". Unrecognised columns ignored: {', '.join(unknown_cols)}"
+    if errors:
+        summary += ". Issues: " + " | ".join(errors[:10])
+        if len(errors) > 10:
+            summary += f" (and {len(errors)-10} more)"
+    return flash_redirect("/coach", summary)
+
+
 @router.get("/coach/participants/export.csv")
 def participant_export_csv(req):
     import csv
