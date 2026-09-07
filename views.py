@@ -2307,20 +2307,29 @@ def all_progress_page(coach, groups_data, sport_filter=None):
 # Statistics & Reports landing page + printable reports
 # ---------------------------------------------------------------------------
 
-def reports_landing_page(coach, groups):
+def reports_landing_page(coach, groups, orgs=None, sports=None):
     """Hub page: links to existing stats pages + new printable reports."""
-    group_opts = '<option value="">Select a group…</option>' + "".join(
+    orgs = orgs or []
+    sports = sports or []
+
+    group_opts = '<option value="">— All groups in org —</option>' + "".join(
         f'<option value="{g["id"]}">{esc(g["name"])}</option>' for g in groups
     )
+    org_opts = '<option value="">— No org filter —</option>' + "".join(
+        f'<option value="{o["id"]}">{esc(o["name"])}</option>' for o in orgs
+    )
+    sport_opts = '<option value="">— All sports —</option>' + "".join(
+        f'<option value="{esc(s)}">{esc(s)}</option>' for s in sports
+    )
 
-    def _report_card(icon, title, desc, action_js, btn_label="Generate Report"):
+    def _report_card(icon, title, desc, report_type, btn_label="Generate Report"):
         return f"""
         <div style="background:var(--jag-card);border:1px solid var(--jag-border);border-radius:12px;padding:24px;display:flex;flex-direction:column;gap:12px;">
           <div style="font-size:32px;">{icon}</div>
           <h2 style="margin:0;font-size:17px;font-weight:700;color:var(--jag-navy);">{title}</h2>
           <p style="margin:0;font-size:13px;color:var(--jag-muted);line-height:1.5;">{desc}</p>
           <div style="margin-top:auto;">
-            <button class="btn btn-primary" onclick="{action_js}" style="width:100%;">{btn_label}</button>
+            <button class="btn btn-primary" onclick="openReport('{report_type}')" style="width:100%;">{btn_label}</button>
           </div>
         </div>"""
 
@@ -2332,28 +2341,56 @@ def reports_landing_page(coach, groups):
       </div>
     </div>
 
-    <div style="background:var(--jag-card);border:1px solid var(--jag-border);border-radius:10px;padding:16px 20px;margin-bottom:32px;display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-      <label style="font-size:13px;font-weight:700;white-space:nowrap;">Select group for printable reports:</label>
-      <select id="report-group" style="min-width:240px;max-width:340px;">{group_opts}</select>
-      <span style="font-size:12px;color:var(--jag-muted);">Used by the two printable reports below.</span>
+    <div style="background:var(--jag-card);border:1px solid var(--jag-border);border-radius:10px;padding:20px;margin-bottom:32px;">
+      <h3 style="margin:0 0 14px;font-size:14px;font-weight:700;color:var(--jag-navy);">Report Scope</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:16px;align-items:end;">
+        <div>
+          <label style="font-size:12px;font-weight:700;color:var(--jag-muted);display:block;margin-bottom:4px;">Organisation</label>
+          <select id="report-org" style="width:100%;" onchange="document.getElementById('report-group').value='';">{org_opts}</select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:700;color:var(--jag-muted);display:block;margin-bottom:4px;">Group <span style="font-weight:400;">(overrides org)</span></label>
+          <select id="report-group" style="width:100%;" onchange="if(this.value)document.getElementById('report-org').value='';">{group_opts}</select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:700;color:var(--jag-muted);display:block;margin-bottom:4px;">Sport <span style="font-weight:400;">(optional)</span></label>
+          <select id="report-sport" style="width:100%;">{sport_opts}</select>
+        </div>
+      </div>
+      <p style="font-size:12px;color:var(--jag-muted);margin-top:12px;">Select an organisation OR a specific group, then optionally filter by sport. Click a report button below to generate.</p>
     </div>
 
     <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--jag-muted);margin-bottom:16px;">Printable Reports</h2>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;margin-bottom:40px;">
       {_report_card("📋", "Athlete Baseline Report",
-          "All athletes in a group with their Round 1 (baseline) scores across every game. Print and share at the start of a programme.",
-          "var g=document.getElementById('report-group').value;if(!g){{alert('Please select a group first.');return;}}window.open('/coach/reports/baseline?group_id='+g,'_blank');")}
+          "All athletes in the selected scope with their Round 1 (baseline) scores. Print and share at the start of a programme.",
+          "baseline")}
       {_report_card("📈", "Round 2 Progress Report",
-          "Side-by-side Round 1 vs Round 2 scores with percentage improvement per field, colour-coded green/red. Only athletes with 2+ sessions appear.",
-          "var g=document.getElementById('report-group').value;if(!g){{alert('Please select a group first.');return;}}window.open('/coach/reports/progress?group_id='+g,'_blank');")}
+          "Side-by-side Round 1 vs Round 2 scores with % improvement, colour-coded green/red. Only athletes with 2+ sessions appear.",
+          "progress")}
     </div>
 
     <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--jag-muted);margin-bottom:16px;">Live Statistics</h2>
     <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:20px;">
       {_report_card("📊", "Achievement Statistics Overview",
           "Live view of group averages across all measurement rounds, with sport filter and admin overall table.",
-          "window.location='/coach/progress';", "View Statistics")}
+          "stats", "View Statistics")}
     </div>
+
+    <script>
+    function openReport(type) {{
+      if (type === 'stats') {{ window.location = '/coach/progress'; return; }}
+      var group = document.getElementById('report-group').value;
+      var org   = document.getElementById('report-org').value;
+      var sport = document.getElementById('report-sport').value;
+      if (!group && !org) {{ alert('Please select an organisation or group first.'); return; }}
+      var params = [];
+      if (group) params.push('group_id=' + group);
+      else if (org) params.push('org_id=' + org);
+      if (sport) params.push('sport=' + encodeURIComponent(sport));
+      window.open('/coach/reports/' + type + '?' + params.join('&'), '_blank');
+    }}
+    </script>
     """
     return layout("Statistics & Reports", body, user=coach, active_nav="progress")
 

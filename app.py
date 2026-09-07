@@ -343,9 +343,57 @@ def reports_landing(req):
         groups = conn.execute(
             "SELECT id, name FROM participant_groups ORDER BY sort_order, name"
         ).fetchall()
+        orgs = db.list_organisations(conn)
+        sports = [r[0] for r in conn.execute(
+            "SELECT DISTINCT sport FROM users WHERE role='participant' AND sport IS NOT NULL AND sport != '' ORDER BY sport"
+        ).fetchall()]
     finally:
         conn.close()
-    return Response(views.reports_landing_page(coach, groups))
+    return Response(views.reports_landing_page(coach, groups, orgs=orgs, sports=sports))
+
+
+def _resolve_report_scope(req, conn):
+    """Parse group_id / org_id / sport from query string.
+    Returns (athletes, scope_label, scope_dict) where scope_dict has group/org keys for views."""
+    group_id_raw = req.query.get("group_id", [""])[0].strip()
+    org_id_raw   = req.query.get("org_id",   [""])[0].strip()
+    sport        = req.query.get("sport",     [""])[0].strip() or None
+    group_id = int(group_id_raw) if group_id_raw.isdigit() else None
+    org_id   = int(org_id_raw)   if org_id_raw.isdigit()   else None
+
+    sport_clause = " AND sport = ?" if sport else ""
+    sport_params = (sport,) if sport else ()
+
+    if group_id:
+        group = conn.execute("SELECT * FROM participant_groups WHERE id = ?", (group_id,)).fetchone()
+        if not group:
+            return None, None, None
+        athletes = conn.execute(
+            f"SELECT * FROM users WHERE role='participant' AND group_id=?{sport_clause} "
+            "ORDER BY CAST(athlete_number AS INTEGER), name",
+            (group_id,) + sport_params
+        ).fetchall()
+        label = group["name"]
+        if sport:
+            label += f" — {sport}"
+        return athletes, label, {"group": dict(group)}
+
+    elif org_id:
+        org = conn.execute("SELECT * FROM organisations WHERE id = ?", (org_id,)).fetchone()
+        if not org:
+            return None, None, None
+        athletes = conn.execute(
+            f"SELECT u.* FROM users u JOIN participant_groups pg ON u.group_id = pg.id "
+            f"WHERE u.role='participant' AND pg.organisation_id=?{sport_clause} "
+            "ORDER BY CAST(u.athlete_number AS INTEGER), u.name",
+            (org_id,) + sport_params
+        ).fetchall()
+        label = org["name"]
+        if sport:
+            label += f" — {sport}"
+        return athletes, label, {"group": {"name": label}}
+
+    return None, None, None
 
 
 @router.get("/coach/reports/baseline")
@@ -353,21 +401,14 @@ def reports_baseline(req):
     coach = require_role(req, "coach")
     if not coach:
         return redirect("/login")
-    group_id_raw = req.query.get("group_id", [""])[0].strip()
-    group_id = int(group_id_raw) if group_id_raw.isdigit() else None
-    if not group_id:
-        return flash_redirect("/coach/reports", "Please select a group first.")
     conn = db.get_conn()
     try:
-        group = conn.execute("SELECT * FROM participant_groups WHERE id = ?", (group_id,)).fetchone()
-        if not group:
-            return flash_redirect("/coach/reports", "Group not found.")
-        athletes = conn.execute(
-            "SELECT * FROM users WHERE role='participant' AND group_id=? "
-            "ORDER BY CAST(athlete_number AS INTEGER), name",
-            (group_id,)
+        athletes, label, scope = _resolve_report_scope(req, conn)
+        if athletes is None:
+            return flash_redirect("/coach/reports", "Please select an organisation or group.")
+        resources = conn.execute(
+            "SELECT name, self_organisation FROM resources WHERE self_organisation IS NOT NULL"
         ).fetchall()
-        resources = conn.execute("SELECT name, self_organisation FROM resources WHERE self_organisation IS NOT NULL").fetchall()
         athletes_data = []
         for a in athletes:
             sessions = db.measurement_sessions_for(conn, a["id"])
@@ -375,7 +416,9 @@ def reports_baseline(req):
                 athletes_data.append((dict(a), sessions))
     finally:
         conn.close()
-    return Response(views.baseline_report_page(coach, dict(group), athletes_data, resources=resources))
+    group_dict = scope["group"]
+    group_dict["name"] = label
+    return Response(views.baseline_report_page(coach, group_dict, athletes_data, resources=resources))
 
 
 @router.get("/coach/reports/progress")
@@ -383,28 +426,23 @@ def reports_progress(req):
     coach = require_role(req, "coach")
     if not coach:
         return redirect("/login")
-    group_id_raw = req.query.get("group_id", [""])[0].strip()
-    group_id = int(group_id_raw) if group_id_raw.isdigit() else None
-    if not group_id:
-        return flash_redirect("/coach/reports", "Please select a group first.")
     conn = db.get_conn()
     try:
-        group = conn.execute("SELECT * FROM participant_groups WHERE id = ?", (group_id,)).fetchone()
-        if not group:
-            return flash_redirect("/coach/reports", "Group not found.")
-        athletes = conn.execute(
-            "SELECT * FROM users WHERE role='participant' AND group_id=? "
-            "ORDER BY CAST(athlete_number AS INTEGER), name",
-            (group_id,)
+        athletes, label, scope = _resolve_report_scope(req, conn)
+        if athletes is None:
+            return flash_redirect("/coach/reports", "Please select an organisation or group.")
+        resources = conn.execute(
+            "SELECT name, self_organisation FROM resources WHERE self_organisation IS NOT NULL"
         ).fetchall()
-        resources = conn.execute("SELECT name, self_organisation FROM resources WHERE self_organisation IS NOT NULL").fetchall()
         athletes_data = []
         for a in athletes:
             sessions = db.measurement_sessions_for(conn, a["id"])
             athletes_data.append((dict(a), sessions))
     finally:
         conn.close()
-    return Response(views.progress_report_page(coach, dict(group), athletes_data, resources=resources))
+    group_dict = scope["group"]
+    group_dict["name"] = label
+    return Response(views.progress_report_page(coach, group_dict, athletes_data, resources=resources))
 
 
 @router.get("/coach/progress")
