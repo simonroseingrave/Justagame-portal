@@ -725,13 +725,13 @@ def edit_group_page(user, group, error=None):
     return layout(f"Edit Group — {group['name']}", body, user=user, active_nav="dashboard")
 
 
-def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None, org_icon_map=None):
+def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None, org_map=None):
     message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
     is_admin = user.get("is_admin")
+    org_map = org_map or {}
 
-    org_icon_map = org_icon_map or {}
-    group_sections = ""
-    for group, participants in group_summaries:
+    # ---- helper: render one group section ----
+    def _render_group(group, participants, indent=False):
         gkey = f"g{group['id']}"
         count = len(participants)
         tiles_html = "".join(_athlete_tile(p, is_admin=is_admin) for p in participants)
@@ -747,28 +747,18 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
               onsubmit="return confirm('Delete group \\'{esc(group['name'])}\\'? Participants move to ungrouped.');">
               <button type="submit" class="btn btn-ghost btn-sm" style="font-size:12px;">Delete</button>
             </form>""" if is_admin else ""
-        # Org logo — show if this group belongs to an org that has a logo
-        org_id = group["organisation_id"] if "organisation_id" in group.keys() else None
-        org_logo_url = org_icon_map.get(org_id) if org_id else None
-        org_logo_html = (
-            f'<img src="{esc(org_logo_url)}" alt="org logo" '
-            f'style="height:36px;width:auto;object-fit:contain;border-radius:4px;flex-shrink:0;" '
-            f'onerror="this.style.display=\'none\'" />'
-        ) if org_logo_url else ""
-        group_sections += f"""
-        <div class="group-section" data-group-id="{group['id']}" data-group-key="{gkey}" style="margin-bottom:28px;">
+        left_pad = "margin-left:20px;" if indent else ""
+        return f"""
+        <div class="group-section" data-group-id="{group['id']}" data-group-key="{gkey}" style="margin-bottom:20px;{left_pad}">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
             {folder_handle}
-            <div style="border-left:4px solid var(--jag-green);padding-left:12px;flex:1;min-width:0;cursor:pointer;display:flex;align-items:center;gap:10px;"
+            <div style="border-left:4px solid var(--jag-green);padding-left:12px;flex:1;min-width:0;cursor:pointer;"
                  onclick="toggleGroup('{gkey}')">
-              {org_logo_html}
-              <div>
-                <div style="display:flex;align-items:center;gap:8px;">
-                  <h2 style="margin:0;font-size:20px;font-weight:700;color:var(--jag-navy);line-height:1.2;">{esc(group['name'])}</h2>
-                  <span id="toggle-{gkey}" style="font-size:13px;color:var(--jag-muted);user-select:none;">&#9660;</span>
-                </div>
-                <span class="muted group-count" style="font-size:13px;">{count} athlete{"s" if count != 1 else ""}</span>
+              <div style="display:flex;align-items:center;gap:8px;">
+                <h3 style="margin:0;font-size:17px;font-weight:700;color:var(--jag-navy);line-height:1.2;">{esc(group['name'])}</h3>
+                <span id="toggle-{gkey}" style="font-size:13px;color:var(--jag-muted);user-select:none;">&#9660;</span>
               </div>
+              <span class="muted group-count" style="font-size:13px;">{count} athlete{"s" if count != 1 else ""}</span>
             </div>
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
               {summary_link}
@@ -778,37 +768,99 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
           {tiles_wrap}
         </div>"""
 
-    # Ungrouped section
+    # ---- bucket group_summaries by org_id ----
+    # Using a list to preserve insertion/sort order
+    org_order = []   # list of org_ids in order encountered
+    org_buckets = {} # org_id (or None) → [(group, participants), ...]
+    for group, participants in group_summaries:
+        oid = group["organisation_id"] if "organisation_id" in group.keys() else None
+        if oid not in org_buckets:
+            org_order.append(oid)
+            org_buckets[oid] = []
+        org_buckets[oid].append((group, participants))
+
+    # ---- build org-level sections ----
+    all_sections = ""
+    for oid in org_order:
+        bucket = org_buckets[oid]
+        group_html = "".join(_render_group(g, ps, indent=(oid is not None)) for g, ps in bucket)
+        total_athletes = sum(len(ps) for _, ps in bucket)
+
+        if oid and oid in org_map:
+            org = org_map[oid]
+            okey = f"org{oid}"
+            logo_html = (
+                f'<img src="{esc(org["icon_url"])}" alt="{esc(org["name"])} logo" '
+                f'style="height:44px;width:auto;max-width:120px;object-fit:contain;border-radius:4px;flex-shrink:0;" '
+                f'onerror="this.style.display=\'none\'" />'
+            ) if org["icon_url"] else ""
+            type_badge = (f'<span style="font-size:11px;background:rgba(255,255,255,0.35);color:var(--jag-navy);'
+                          f'border-radius:999px;padding:2px 10px;font-weight:600;">{esc(org["type"])}</span>') if org["type"] else ""
+            group_count = len(bucket)
+            all_sections += f"""
+        <div class="org-section" style="margin-bottom:32px;" data-org-id="{oid}">
+          <div style="background:linear-gradient(135deg,var(--jag-navy) 0%,#3d4451 100%);
+                      border-radius:10px 10px 0 0;padding:14px 18px;
+                      display:flex;align-items:center;gap:14px;cursor:pointer;flex-wrap:wrap;"
+               onclick="toggleOrg('{okey}')">
+            {logo_html}
+            <div style="flex:1;min-width:0;">
+              <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span style="font-size:20px;font-weight:800;color:#fff;line-height:1.2;">{esc(org["name"])}</span>
+                {type_badge}
+                <span id="toggle-{okey}" style="font-size:13px;color:rgba(255,255,255,0.6);user-select:none;margin-left:4px;">&#9660;</span>
+              </div>
+              <span style="font-size:13px;color:rgba(255,255,255,0.65);">{group_count} group{"s" if group_count != 1 else ""} &middot; {total_athletes} athlete{"s" if total_athletes != 1 else ""}</span>
+            </div>
+          </div>
+          <div id="body-{okey}" style="border:1px solid var(--jag-border);border-top:none;border-radius:0 0 10px 10px;padding:16px 12px 4px;">
+            <div class="org-groups-container" data-org-id="{oid}">
+              {group_html}
+            </div>
+          </div>
+        </div>"""
+        else:
+            # Groups with no org — show under "Other Groups" label
+            all_sections += f"""
+        <div class="org-section" style="margin-bottom:32px;">
+          <div style="border-left:4px solid var(--jag-border);padding-left:14px;margin-bottom:12px;">
+            <h2 style="margin:0;font-size:18px;font-weight:700;color:var(--jag-muted);">Other Groups</h2>
+            <span style="font-size:13px;color:var(--jag-muted);">{len(bucket)} group{"s" if len(bucket) != 1 else ""} not assigned to an organisation</span>
+          </div>
+          <div class="org-groups-container">
+            {group_html}
+          </div>
+        </div>"""
+
+    # ---- ungrouped athletes section ----
     ug_count = len(ungrouped_summaries)
     ug_tiles = "".join(_athlete_tile(p, is_admin=is_admin) for p in ungrouped_summaries)
     ug_empty = '<p class="muted" style="font-size:13px;padding:8px 0;">No ungrouped athletes.</p>'
     ug_wrap = (f'<div id="body-ungrouped" class="athlete-tiles-wrap" data-group-list-id="ungrouped"'
                f' style="display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;padding:8px 0 4px;">'
                f'{ug_tiles or ug_empty}</div>')
-    ug_label = "Athletes" if not group_summaries else "Ungrouped"
     ungrouped_section = f"""
     <div class="group-section" data-group-key="ungrouped" style="margin-bottom:28px;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;cursor:pointer;"
            onclick="toggleGroup('ungrouped')">
         <div style="border-left:4px solid var(--jag-border);padding-left:12px;">
           <div style="display:flex;align-items:center;gap:8px;">
-            <h2 style="margin:0;font-size:20px;font-weight:700;color:var(--jag-muted);line-height:1.2;">{ug_label}</h2>
+            <h3 style="margin:0;font-size:17px;font-weight:700;color:var(--jag-muted);line-height:1.2;">Ungrouped</h3>
             <span id="toggle-ungrouped" style="font-size:13px;color:var(--jag-muted);user-select:none;">&#9660;</span>
           </div>
           <span class="muted group-count" style="font-size:13px;">{ug_count} athlete{"s" if ug_count != 1 else ""}</span>
         </div>
       </div>
       {ug_wrap}
-    </div>"""
+    </div>""" if ungrouped_summaries else ""
 
-    # Collect unique sports across all participants for filter bar
+    # ---- sport filter bar ----
     all_sports = sorted(set(
         p.get("sport") or ""
         for _, participants in list(group_summaries) + [("__ug__", ungrouped_summaries)]
         for p in (participants if isinstance(participants, list) else [])
         if p.get("sport")
     ))
-
     if all_sports:
         sport_btns = "".join(
             f'<button onclick="filterSport(this, \'{esc(s)}\')" '
@@ -822,16 +874,12 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
           <span style="font-size:13px;color:var(--jag-muted);font-weight:600;">Filter by sport:</span>
           <button onclick="filterSport(this, '')" class="filter-active"
             style="padding:5px 14px;border-radius:999px;border:1px solid var(--jag-green);
-                   background:var(--jag-green);color:var(--jag-navy);font-size:13px;cursor:pointer;font-weight:600;">
-            All
-          </button>
+                   background:var(--jag-green);color:var(--jag-navy);font-size:13px;cursor:pointer;font-weight:600;">All</button>
           {sport_btns}
         </div>"""
         filter_js = """
         <script>
-        var activeSport = '';
         function filterSport(btn, sport) {
-          activeSport = sport;
           document.querySelectorAll('#sport-filter button').forEach(function(b) {
             var isSel = (b === btn);
             b.style.background = isSel ? 'var(--jag-green)' : 'var(--jag-card)';
@@ -854,13 +902,12 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         }
         </script>"""
     else:
-        filter_bar = ""
-        filter_js = ""
+        filter_bar = filter_js = ""
 
     if not group_summaries and not ungrouped_summaries:
         content = '<p class="muted">No participants yet. Add one to get started.</p>' if is_admin else '<p class="muted">You haven\'t been assigned to a group yet. Contact an admin.</p>'
     else:
-        content = f'<div id="groups-container">{group_sections}</div>{ungrouped_section}'
+        content = f'<div id="groups-container">{all_sections}</div>{ungrouped_section}'
 
     create_group_form = f"""
     <div id="create-group-panel" style="display:none; margin-top:10px; max-width:400px;">
@@ -886,17 +933,17 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     function post(url, body) {
       fetch(url, { method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body: body });
     }
-    var gc = document.getElementById('groups-container');
-    if (gc) {
+    // Make groups sortable within each org container
+    document.querySelectorAll('.org-groups-container').forEach(function(gc) {
       Sortable.create(gc, {
         handle: '.folder-handle', animation: 150,
         onEnd: function() {
-          var ids = Array.from(gc.querySelectorAll('.group-section[data-group-id]'))
+          var ids = Array.from(document.querySelectorAll('#groups-container .group-section[data-group-id]'))
                         .map(function(el){ return el.dataset.groupId; });
           post('/coach/groups/reorder', 'ids=' + ids.join(','));
         }
       });
-    }
+    });
     document.querySelectorAll('.athlete-tiles-wrap').forEach(function(wrap) {
       Sortable.create(wrap, {
         group: { name:'participants', pull:true, put:true },
@@ -921,12 +968,12 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
       var badge = section.querySelector('.group-count');
       if (!badge) return;
       var n = wrap.querySelectorAll('.athlete-tile').length;
-      badge.textContent = '(' + n + (n === 1 ? ' athlete' : ' athletes') + ')';
+      badge.textContent = n + (n === 1 ? ' athlete' : ' athletes');
     }
     </script>""" if is_admin else ""
 
     if is_admin:
-        subtitle = 'Viewing all participant groups &mdash; administrator access.'
+        subtitle = 'Viewing all participants &mdash; administrator access.'
     elif user.get("organisation"):
         org_name = esc(user["organisation"])
         subtitle = f'Showing all groups for <strong>{org_name}</strong>.'
@@ -939,7 +986,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     collapse_js = """
     <script>
     function toggleGroup(key) {
-      var wrap   = document.getElementById('body-' + key);
+      var wrap = document.getElementById('body-' + key);
       var toggle = document.getElementById('toggle-' + key);
       if (!wrap) return;
       var isCollapsed = wrap.style.display === 'none';
@@ -947,11 +994,32 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
       if (toggle) toggle.innerHTML = isCollapsed ? '&#9660;' : '&#9654;';
       try { localStorage.setItem('jag-grp-' + key, isCollapsed ? '0' : '1'); } catch(e) {}
     }
+    function toggleOrg(key) {
+      var wrap = document.getElementById('body-' + key);
+      var toggle = document.getElementById('toggle-' + key);
+      if (!wrap) return;
+      var isCollapsed = wrap.style.display === 'none';
+      wrap.style.display = isCollapsed ? 'block' : 'none';
+      if (toggle) toggle.innerHTML = isCollapsed ? '&#9660;' : '&#9654;';
+      try { localStorage.setItem('jag-org-' + key, isCollapsed ? '0' : '1'); } catch(e) {}
+    }
     // Restore collapsed state on load
     document.querySelectorAll('[data-group-key]').forEach(function(sec) {
       var key = sec.dataset.groupKey;
       var collapsed;
       try { collapsed = localStorage.getItem('jag-grp-' + key) === '1'; } catch(e) { collapsed = false; }
+      if (collapsed) {
+        var wrap = document.getElementById('body-' + key);
+        if (wrap) wrap.style.display = 'none';
+        var toggle = document.getElementById('toggle-' + key);
+        if (toggle) toggle.innerHTML = '&#9654;';
+      }
+    });
+    document.querySelectorAll('.org-section[data-org-id]').forEach(function(sec) {
+      var oid = sec.dataset.orgId;
+      var key = 'org' + oid;
+      var collapsed;
+      try { collapsed = localStorage.getItem('jag-org-' + key) === '1'; } catch(e) { collapsed = false; }
       if (collapsed) {
         var wrap = document.getElementById('body-' + key);
         if (wrap) wrap.style.display = 'none';

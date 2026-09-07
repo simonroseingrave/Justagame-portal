@@ -244,10 +244,10 @@ def coach_dashboard(req):
                 else:
                     group_summaries = []
             ungrouped_summaries = []
-        # Build org icon map for group header logos
+        # Build org map for grouped dashboard headers
         orgs = db.list_organisations(conn)
-        org_icon_map = {o["id"]: o["icon_url"] for o in orgs if o["icon_url"]}
-        return Response(views.coach_dashboard_for(coach, group_summaries, ungrouped_summaries, message=message, org_icon_map=org_icon_map))
+        org_map = {o["id"]: o for o in orgs}
+        return Response(views.coach_dashboard_for(coach, group_summaries, ungrouped_summaries, message=message, org_map=org_map))
     finally:
         conn.close()
 
