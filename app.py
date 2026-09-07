@@ -1379,10 +1379,12 @@ def participant_import_post(req):
                     skipped += 1
                     continue
 
+            import secrets as _sec
+            placeholder_email = f"_csv_{_sec.token_hex(8)}@noreply.local"
             pid = conn.execute(
-                "INSERT INTO users (name, username, role, sport, gender, organisation, group_id, created_at) "
-                "VALUES (?, ?, 'participant', ?, ?, ?, ?, ?)",
-                (name, username or None, sport, gender, organisation, group_id, db.now()),
+                "INSERT INTO users (name, username, email, password_hash, role, sport, gender, organisation, group_id, created_at) "
+                "VALUES (?, ?, ?, '', 'participant', ?, ?, ?, ?, ?)",
+                (name, username or None, placeholder_email, sport, gender, organisation, group_id, db.now()),
             ).lastrowid
 
             # Use supplied athlete_number or auto-assign
