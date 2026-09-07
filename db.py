@@ -573,6 +573,10 @@ def update_participant_group(conn, group_id, name, icon_url=None):
 def delete_participant_group(conn, group_id):
     # Move participants in this group to ungrouped rather than removing them
     conn.execute("UPDATE users SET group_id = NULL WHERE group_id = ?", (group_id,))
+    # Remove coach-group assignments (FK constraint would block the delete otherwise)
+    conn.execute("DELETE FROM coach_groups WHERE group_id = ?", (group_id,))
+    # Unlink measurement sessions (keep the data, just remove the group snapshot)
+    conn.execute("UPDATE measurement_sessions SET group_id = NULL WHERE group_id = ?", (group_id,))
     conn.execute("DELETE FROM participant_groups WHERE id = ?", (group_id,))
     conn.commit()
 
