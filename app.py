@@ -267,6 +267,7 @@ def new_participant_post(req):
     email = req.form_get("email").strip().lower() if setup_login else None
     password = req.form_get("password") or "Athlete123!" if setup_login else None
     sport = req.form_get("sport")
+    gender = req.form_get("gender").strip() or None
     programme = req.form_get("programme").strip()
     group_id = req.form_get("group_id").strip() or None
 
@@ -282,9 +283,9 @@ def new_participant_post(req):
             if existing:
                 return Response(views.new_participant_form(coach, groups=groups, error="A user with that email already exists."), status=400)
         pid = conn.execute(
-            "INSERT INTO users (name, email, password_hash, role, sport, programme, group_id, created_at) "
-            "VALUES (?, ?, ?, 'participant', ?, ?, ?, ?)",
-            (name, email, hash_password(password) if password else None, sport, programme, group_id or None, db.now()),
+            "INSERT INTO users (name, email, password_hash, role, sport, gender, programme, group_id, created_at) "
+            "VALUES (?, ?, ?, 'participant', ?, ?, ?, ?, ?)",
+            (name, email, hash_password(password) if password else None, sport, gender, programme, group_id or None, db.now()),
         ).lastrowid
         athlete_number = db.next_athlete_number(conn)
         conn.execute("UPDATE users SET athlete_number = ? WHERE id = ?", (athlete_number, pid))
@@ -1299,10 +1300,13 @@ def participant_import_post(req):
         return Response(views.participant_import_form(coach, error="Please paste CSV data before importing."), status=400)
 
     reader = csv.DictReader(io.StringIO(raw_csv))
-    required_cols = {"name"}
-    if not reader.fieldnames or not required_cols.issubset({f.strip().lower() for f in reader.fieldnames}):
+    # Accept either "first name"+"last name" pair OR a single "name" column
+    norm_fields = {f.strip().lower() for f in (reader.fieldnames or [])}
+    has_split_name = "first name" in norm_fields and "last name" in norm_fields
+    has_full_name  = "name" in norm_fields
+    if not (has_split_name or has_full_name):
         return Response(
-            views.participant_import_form(coach, error="CSV must have at least a 'name' column. Optional: sport, group_name, username, athlete_number."),
+            views.participant_import_form(coach, error="CSV must have either a 'name' column or both 'first name' and 'last name' columns."),
             status=400,
         )
 
@@ -1319,16 +1323,24 @@ def participant_import_post(req):
     conn = db.get_conn()
     try:
         for i, row in enumerate(reader, start=2):  # row 1 = header
-            name = col(row, "name")
+            # Build full name from split columns or single column
+            if has_split_name:
+                first = col(row, "first name")
+                last  = col(row, "last name")
+                name  = f"{first} {last}".strip()
+            else:
+                name = col(row, "name")
             if not name:
                 errors.append(f"Row {i}: name is empty — skipped.")
                 skipped += 1
                 continue
 
             athlete_number_raw = col(row, "athlete_number")
-            sport = col(row, "sport") or None
-            group_name = col(row, "group_name") or None
-            username = col(row, "username") or None
+            sport        = col(row, "sport") or None
+            gender       = col(row, "gender") or None
+            organisation = col(row, "organisation") or None
+            group_name   = col(row, "group", "group_name") or None
+            username     = col(row, "username") or None
 
             # Deduplication: if athlete_number supplied and already exists, skip
             if athlete_number_raw:
@@ -1356,9 +1368,9 @@ def participant_import_post(req):
                     continue
 
             pid = conn.execute(
-                "INSERT INTO users (name, username, role, sport, group_id, created_at) "
-                "VALUES (?, ?, 'participant', ?, ?, ?)",
-                (name, username or None, sport, group_id, db.now()),
+                "INSERT INTO users (name, username, role, sport, gender, organisation, group_id, created_at) "
+                "VALUES (?, ?, 'participant', ?, ?, ?, ?, ?)",
+                (name, username or None, sport, gender, organisation, group_id, db.now()),
             ).lastrowid
 
             # Use supplied athlete_number or auto-assign
@@ -1391,7 +1403,8 @@ def participant_export_csv(req):
     try:
         rows = conn.execute(
             """
-            SELECT u.id, u.athlete_number, u.name, u.username, u.email, u.sport,
+            SELECT u.id, u.athlete_number, u.name, u.username, u.email,
+                   u.organisation, u.sport, u.gender,
                    pg.name AS group_name
             FROM users u
             LEFT JOIN participant_groups pg ON pg.id = u.group_id
@@ -1402,19 +1415,25 @@ def participant_export_csv(req):
 
         buf = io.StringIO()
         writer = csv.writer(buf)
-        writer.writerow(["athlete_number", "name", "username", "email", "group", "sport", "temp_password"])
+        writer.writerow(["athlete_number", "first name", "last name", "organisation", "group", "gender", "sport", "username", "email", "temp_password"])
 
         for r in rows:
             temp_pw = secrets.token_urlsafe(6)
-            # Store the new temp password so coach can share it and athlete can log in
             db.update_password(conn, r["id"], temp_pw)
+            # Split stored name into first / last (last word = last name)
+            name_parts = r["name"].strip().split()
+            first_name = " ".join(name_parts[:-1]) if len(name_parts) > 1 else r["name"]
+            last_name  = name_parts[-1] if len(name_parts) > 1 else ""
             writer.writerow([
                 r["athlete_number"] or "",
-                r["name"],
+                first_name,
+                last_name,
+                r["organisation"] or "",
+                r["group_name"] or "",
+                r["gender"] or "",
+                r["sport"] or "",
                 r["username"] or "",
                 r["email"] or "",
-                r["group_name"] or "",
-                r["sport"] or "",
                 temp_pw,
             ])
 

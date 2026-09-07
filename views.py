@@ -983,6 +983,14 @@ def new_participant_form(user, error=None, groups=None):
       <form method="post" action="/coach/participants/new">
         <label for="name">Full name</label>
         <input type="text" id="name" name="name" required />
+        <label for="gender">Gender</label>
+        <select id="gender" name="gender">
+          <option value="">— Not specified —</option>
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+          <option value="Non-binary">Non-binary</option>
+          <option value="Prefer not to say">Prefer not to say</option>
+        </select>
         <label for="sport">Sport</label>
         <select id="sport" name="sport">{sport_options}</select>
         <label for="programme">Programme / notes</label>
@@ -1058,6 +1066,12 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
     number_pill = (f'<span style="font-size:12px;font-weight:700;background:var(--jag-navy);color:var(--jag-gold);'
                    f'border-radius:999px;padding:2px 10px;letter-spacing:.04em;">#{esc(an)}</span>'
                    ) if an else ""
+    gender_val = participant.get("gender") or ""
+    gender_pill = (f'<span style="font-size:12px;font-weight:600;background:var(--jag-bg);color:var(--jag-muted);'
+                   f'border-radius:999px;padding:2px 10px;border:1px solid var(--jag-border);">{esc(gender_val)}</span>'
+                   ) if gender_val else ""
+    org_val = participant.get("organisation") or ""
+    org_text = (f'<p style="margin:0;font-size:13px;color:var(--jag-muted);">{esc(org_val)}</p>') if org_val else ""
     session_count = len(measurement_sessions)
 
     # Build group transfer history notice
@@ -1085,9 +1099,10 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
       <div style="flex:1;min-width:0;">
         <h1 style="margin:0 0 4px;font-size:26px;">{esc(participant['name'])}</h1>
         <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px;">
-          {number_pill}{sport_pill}{group_pill}
+          {number_pill}{sport_pill}{gender_pill}{group_pill}
           <span style="font-size:12px;color:var(--jag-muted);">{esc(participant['email'] or '')}</span>
         </div>
+        {org_text}
         {f'<p style="margin:0;font-size:13px;color:var(--jag-muted);">{esc(participant["programme"])}</p>' if participant.get("programme") else ""}
       </div>
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
@@ -3155,16 +3170,16 @@ def participant_import_form(user, error=None):
 
     <div class="card form-card" style="max-width:680px;">
       <h3 style="margin-top:0;font-size:14px;color:var(--jag-muted);text-transform:uppercase;letter-spacing:.04em;">CSV Format</h3>
-      <p style="font-size:13px;margin:0 0 12px;">Required column: <code>name</code>. Optional: <code>sport</code>, <code>group_name</code>, <code>username</code>, <code>athlete_number</code>.</p>
-      <pre style="background:var(--jag-bg);border:1px solid var(--jag-border);border-radius:8px;padding:12px;font-size:12px;overflow-x:auto;margin:0 0 16px;">name,sport,group_name,username
-Jane Smith,Football,Under 12s,janesmith
-Tom Brown,Basketball,Under 14s,tombrown
-Alex Lee,Football,Under 12s,</pre>
+      <p style="font-size:13px;margin:0 0 12px;">Use <code>First Name</code> and <code>Last Name</code> as separate columns, or a single <code>Name</code> column. All other columns are optional.</p>
+      <pre style="background:var(--jag-bg);border:1px solid var(--jag-border);border-radius:8px;padding:12px;font-size:12px;overflow-x:auto;margin:0 0 16px;">First Name,Last Name,Organisation,Group,Gender,Sport
+Jane,Smith,Masterton School,Under 12s,Female,Football
+Tom,Brown,Wellington College,Under 14s,Male,Basketball
+Alex,Lee,Masterton School,Under 12s,Male,Football</pre>
       <ul style="font-size:13px;color:var(--jag-muted);margin:0 0 20px;padding-left:18px;">
-        <li>Athletes without a login (no username/email) are created as data-only records.</li>
+        <li>Column order doesn't matter — headers are matched by name.</li>
         <li>Groups are created automatically if they don't exist.</li>
-        <li>If <code>athlete_number</code> is provided and already exists, that row is skipped.</li>
-        <li>Export CSV afterwards to get temp passwords for athletes who need login access.</li>
+        <li>Athletes without a login are created as data-only records — use Export CSV to get temp passwords.</li>
+        <li>If <code>athlete_number</code> is provided and already exists, that row is skipped (safe to re-run).</li>
       </ul>
 
       <form method="post" action="/coach/participants/import">

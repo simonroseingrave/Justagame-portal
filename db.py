@@ -161,6 +161,7 @@ def init_db():
         "ALTER TABLE measurement_sessions ADD COLUMN group_id INTEGER REFERENCES participant_groups(id)",
         "ALTER TABLE users ADD COLUMN organisation TEXT",
         "ALTER TABLE users ADD COLUMN athlete_number TEXT",
+        "ALTER TABLE users ADD COLUMN gender TEXT",
     ]:
         try:
             conn.execute(sql)
