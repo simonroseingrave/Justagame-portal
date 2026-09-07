@@ -10,6 +10,43 @@ from http.cookies import SimpleCookie
 from urllib.parse import parse_qs, urlsplit
 
 
+def _parse_multipart(environ):
+    """Parse multipart/form-data using the email module (works on Python 3.13+)."""
+    from email import message_from_bytes
+    from email.policy import compat32
+    content_type = environ.get("CONTENT_TYPE", "")
+    try:
+        length = int(environ.get("CONTENT_LENGTH") or 0)
+    except ValueError:
+        length = 0
+    body = environ["wsgi.input"].read(length) if length else b""
+    msg = message_from_bytes(
+        f"Content-Type: {content_type}\r\n\r\n".encode() + body,
+        policy=compat32,
+    )
+    form, files = {}, {}
+    payload = msg.get_payload()
+    if not isinstance(payload, list):
+        return form, files
+    for part in payload:
+        disp = part.get("Content-Disposition", "")
+        params = {}
+        for chunk in disp.split(";"):
+            chunk = chunk.strip()
+            if "=" in chunk:
+                k, v = chunk.split("=", 1)
+                params[k.strip().lower()] = v.strip().strip('"')
+        name = params.get("name")
+        if not name:
+            continue
+        data = part.get_payload(decode=True) or b""
+        if params.get("filename"):
+            files[name] = data
+        else:
+            form.setdefault(name, []).append(data.decode("utf-8", errors="replace"))
+    return form, files
+
+
 class Request:
     def __init__(self, environ):
         self.environ = environ
@@ -37,22 +74,7 @@ class Request:
         if self._form is None:
             content_type = self.environ.get("CONTENT_TYPE", "")
             if "multipart/form-data" in content_type:
-                import cgi
-                fs = cgi.FieldStorage(
-                    fp=self.environ["wsgi.input"],
-                    environ=self.environ,
-                    keep_blank_values=True,
-                )
-                self._form = {}
-                for key in fs.keys():
-                    items = fs[key] if isinstance(fs[key], list) else [fs[key]]
-                    for item in items:
-                        if getattr(item, "filename", None):
-                            self._files[key] = item.file.read()
-                        else:
-                            self._form.setdefault(key, []).append(
-                                item.value if hasattr(item, "value") else ""
-                            )
+                self._form, self._files = _parse_multipart(self.environ)
             else:
                 try:
                     length = int(self.environ.get("CONTENT_LENGTH") or 0)
