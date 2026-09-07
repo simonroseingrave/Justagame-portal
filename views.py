@@ -789,11 +789,13 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         if oid and oid in org_map:
             org = org_map[oid]
             okey = f"org{oid}"
+            _raw_logo = org["icon_url"] or ""
+            _logo_src = _gdrive_thumbnail(_raw_logo) or _raw_logo or None
             logo_html = (
-                f'<img src="{esc(org["icon_url"])}" alt="{esc(org["name"])} logo" '
+                f'<img src="{esc(_logo_src)}" alt="{esc(org["name"])} logo" '
                 f'style="height:44px;width:auto;max-width:120px;object-fit:contain;border-radius:4px;flex-shrink:0;" '
                 f'onerror="this.style.display=\'none\'" />'
-            ) if org["icon_url"] else ""
+            ) if _logo_src else ""
             type_badge = (f'<span style="font-size:11px;background:rgba(255,255,255,0.35);color:var(--jag-navy);'
                           f'border-radius:999px;padding:2px 10px;font-weight:600;">{esc(org["type"])}</span>') if org["type"] else ""
             group_count = len(bucket)
