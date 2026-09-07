@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS organisations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     type TEXT,
+    icon_url TEXT,
     created_at TEXT NOT NULL
 );
 
@@ -173,6 +174,7 @@ def init_db():
         "ALTER TABLE users ADD COLUMN gender TEXT",
         "ALTER TABLE users ADD COLUMN organisation_id INTEGER REFERENCES organisations(id)",
         "ALTER TABLE participant_groups ADD COLUMN organisation_id INTEGER REFERENCES organisations(id)",
+        "ALTER TABLE organisations ADD COLUMN icon_url TEXT",
     ]:
         try:
             conn.execute(sql)
@@ -264,20 +266,20 @@ def find_or_create_organisation(conn, name):
     return oid
 
 
-def add_organisation(conn, name, org_type=None):
+def add_organisation(conn, name, org_type=None, icon_url=None):
     name = name.strip()
     oid = conn.execute(
-        "INSERT INTO organisations (name, type, created_at) VALUES (?, ?, ?)",
-        (name, org_type or None, now()),
+        "INSERT INTO organisations (name, type, icon_url, created_at) VALUES (?, ?, ?, ?)",
+        (name, org_type or None, icon_url or None, now()),
     ).lastrowid
     conn.commit()
     return oid
 
 
-def update_organisation(conn, org_id, name, org_type=None):
+def update_organisation(conn, org_id, name, org_type=None, icon_url=None):
     conn.execute(
-        "UPDATE organisations SET name = ?, type = ? WHERE id = ?",
-        (name.strip(), org_type or None, org_id),
+        "UPDATE organisations SET name = ?, type = ?, icon_url = ? WHERE id = ?",
+        (name.strip(), org_type or None, icon_url or None, org_id),
     )
     conn.commit()
 

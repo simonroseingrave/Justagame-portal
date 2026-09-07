@@ -244,7 +244,10 @@ def coach_dashboard(req):
                 else:
                     group_summaries = []
             ungrouped_summaries = []
-        return Response(views.coach_dashboard_for(coach, group_summaries, ungrouped_summaries, message=message))
+        # Build org icon map for group header logos
+        orgs = db.list_organisations(conn)
+        org_icon_map = {o["id"]: o["icon_url"] for o in orgs if o["icon_url"]}
+        return Response(views.coach_dashboard_for(coach, group_summaries, ungrouped_summaries, message=message, org_icon_map=org_icon_map))
     finally:
         conn.close()
 
@@ -997,11 +1000,12 @@ def organisation_new(req):
         return redirect("/login")
     name = req.form_get("name").strip()
     org_type = req.form_get("type").strip() or None
+    icon_url = req.form_get("icon_url").strip() or None
     if not name:
         return flash_redirect("/coach/organisations", "Organisation name is required.")
     conn = db.get_conn()
     try:
-        db.add_organisation(conn, name, org_type)
+        db.add_organisation(conn, name, org_type, icon_url=icon_url)
         return flash_redirect("/coach/organisations", f'Organisation "{name}" created.')
     finally:
         conn.close()
@@ -1029,6 +1033,7 @@ def organisation_edit_post(req, org_id):
         return redirect("/login")
     name = req.form_get("name").strip()
     org_type = req.form_get("type").strip() or None
+    icon_url = req.form_get("icon_url").strip() or None
     if not name:
         conn = db.get_conn()
         try:
@@ -1038,7 +1043,7 @@ def organisation_edit_post(req, org_id):
         return Response(views.organisation_form(coach, org=org, error="Name is required."), status=400)
     conn = db.get_conn()
     try:
-        db.update_organisation(conn, org_id, name, org_type)
+        db.update_organisation(conn, org_id, name, org_type, icon_url=icon_url)
         return flash_redirect("/coach/organisations", f'Organisation "{name}" updated.')
     finally:
         conn.close()

@@ -725,10 +725,11 @@ def edit_group_page(user, group, error=None):
     return layout(f"Edit Group — {group['name']}", body, user=user, active_nav="dashboard")
 
 
-def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None):
+def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None, org_icon_map=None):
     message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
     is_admin = user.get("is_admin")
 
+    org_icon_map = org_icon_map or {}
     group_sections = ""
     for group, participants in group_summaries:
         gkey = f"g{group['id']}"
@@ -746,17 +747,28 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
               onsubmit="return confirm('Delete group \\'{esc(group['name'])}\\'? Participants move to ungrouped.');">
               <button type="submit" class="btn btn-ghost btn-sm" style="font-size:12px;">Delete</button>
             </form>""" if is_admin else ""
+        # Org logo — show if this group belongs to an org that has a logo
+        org_id = group["organisation_id"] if "organisation_id" in group.keys() else None
+        org_logo_url = org_icon_map.get(org_id) if org_id else None
+        org_logo_html = (
+            f'<img src="{esc(org_logo_url)}" alt="org logo" '
+            f'style="height:36px;width:auto;object-fit:contain;border-radius:4px;flex-shrink:0;" '
+            f'onerror="this.style.display=\'none\'" />'
+        ) if org_logo_url else ""
         group_sections += f"""
         <div class="group-section" data-group-id="{group['id']}" data-group-key="{gkey}" style="margin-bottom:28px;">
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap;">
             {folder_handle}
-            <div style="border-left:4px solid var(--jag-green);padding-left:12px;flex:1;min-width:0;cursor:pointer;"
+            <div style="border-left:4px solid var(--jag-green);padding-left:12px;flex:1;min-width:0;cursor:pointer;display:flex;align-items:center;gap:10px;"
                  onclick="toggleGroup('{gkey}')">
-              <div style="display:flex;align-items:center;gap:8px;">
-                <h2 style="margin:0;font-size:20px;font-weight:700;color:var(--jag-navy);line-height:1.2;">{esc(group['name'])}</h2>
-                <span id="toggle-{gkey}" style="font-size:13px;color:var(--jag-muted);user-select:none;">&#9660;</span>
+              {org_logo_html}
+              <div>
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <h2 style="margin:0;font-size:20px;font-weight:700;color:var(--jag-navy);line-height:1.2;">{esc(group['name'])}</h2>
+                  <span id="toggle-{gkey}" style="font-size:13px;color:var(--jag-muted);user-select:none;">&#9660;</span>
+                </div>
+                <span class="muted group-count" style="font-size:13px;">{count} athlete{"s" if count != 1 else ""}</span>
               </div>
-              <span class="muted group-count" style="font-size:13px;">{count} athlete{"s" if count != 1 else ""}</span>
             </div>
             <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
               {summary_link}
@@ -2786,9 +2798,14 @@ def organisations_page(user, orgs_data, message=None):
         o = od["org"]
         type_badge = (f'<span style="font-size:11px;background:rgba(45,50,59,0.08);color:var(--jag-muted);'
                       f'border-radius:999px;padding:1px 8px;">{esc(o["type"])}</span> ') if o["type"] else ""
+        logo_html = (
+            f'<img src="{esc(o["icon_url"])}" alt="" '
+            f'style="height:28px;width:auto;object-fit:contain;border-radius:3px;margin-right:8px;vertical-align:middle;" '
+            f'onerror="this.style.display=\'none\'" />'
+        ) if o["icon_url"] else ""
         rows.append(f"""
         <tr>
-          <td>{type_badge}<strong>{esc(o["name"])}</strong></td>
+          <td>{logo_html}{type_badge}<strong>{esc(o["name"])}</strong></td>
           <td style="text-align:center;">{od["group_count"]}</td>
           <td style="text-align:center;">{od["coach_count"]}</td>
           <td>
@@ -2830,6 +2847,11 @@ def organisations_page(user, orgs_data, message=None):
             {type_options}
           </select>
         </div>
+        <div>
+          <label for="new-org-icon" style="margin-bottom:4px;">Logo URL <span style="font-weight:400;color:var(--jag-muted);">(optional — paste a public image link)</span></label>
+          <input type="url" id="new-org-icon" name="icon_url" placeholder="https://…" />
+          <p style="font-size:12px;color:var(--jag-muted);margin-top:4px;">Google Drive: open file → Share → Anyone with link → copy URL.</p>
+        </div>
         <div><button type="submit" class="btn btn-primary">Create Organisation</button></div>
       </form>
     </div>
@@ -2841,12 +2863,18 @@ def organisation_form(user, org=None, error=None):
     error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
     name_val = esc(org["name"]) if org else ""
     type_val = org["type"] if org else ""
+    icon_val = esc(org["icon_url"]) if org and org["icon_url"] else ""
     type_options = "".join(
         f'<option value="{t}"{" selected" if type_val == t else ""}>{t}</option>'
         for t in ["School", "Club", "Programme", "Other"]
     )
     action = f"/coach/organisations/{org['id']}/edit" if org else "/coach/organisations/new"
     title = f"Edit Organisation — {org['name']}" if org else "Add Organisation"
+    logo_preview = (
+        f'<div style="margin-bottom:12px;"><img src="{icon_val}" alt="Current logo" '
+        f'style="height:48px;width:auto;object-fit:contain;border-radius:4px;border:1px solid var(--jag-border);padding:4px;" '
+        f'onerror="this.style.display=\'none\'" /></div>'
+    ) if icon_val else ""
     body = f"""
     <div class="page-head">
       <h1>{esc(title)}</h1>
@@ -2862,7 +2890,11 @@ def organisation_form(user, org=None, error=None):
           <option value="">— Select type —</option>
           {type_options}
         </select>
-        <button type="submit" class="btn btn-primary">{"Save Changes" if org else "Create"}</button>
+        <label for="icon_url">Logo URL <span style="font-weight:400;color:var(--jag-muted);">(optional — paste a public image link)</span></label>
+        {logo_preview}
+        <input type="url" id="icon_url" name="icon_url" value="{icon_val}" placeholder="https://…" />
+        <p style="font-size:12px;color:var(--jag-muted);margin-top:-10px;">Google Drive: open file → Share → Anyone with link → copy the sharing URL.</p>
+        <button type="submit" class="btn btn-primary" style="margin-top:8px;">{"Save Changes" if org else "Create"}</button>
       </form>
     </div>
     """
