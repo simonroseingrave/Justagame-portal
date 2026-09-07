@@ -3377,14 +3377,34 @@ def edit_resource_page(user, resource, folders, all_tags=None, selected_tag_ids=
     return layout("Edit Resource", body, user=user, active_nav="resources")
 
 
-def scores_import_form(user, groups=None, error=None):
+def scores_import_form(user, groups=None, orgs=None, error=None):
     from constants import MEASUREMENT_GAMES
     error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
     groups = groups or []
+    orgs = orgs or []
 
     group_opts = '<option value="">— No group filter —</option>' + "".join(
         f'<option value="{g["id"]}">{esc(g["name"])}</option>' for g in groups
     )
+
+    # Template download section — blank, by group, or by org
+    group_template_opts = "".join(
+        f'<option value="/coach/scores/import/template.csv?group_id={g["id"]}">{esc(g["name"])}</option>'
+        for g in groups
+    )
+    org_template_opts = "".join(
+        f'<option value="/coach/scores/import/template.csv?org_id={o["id"]}">{esc(o["name"])}</option>'
+        for o in orgs
+    )
+    template_section = f"""
+    <div style="background:var(--jag-card);border:1px solid var(--jag-border);border-radius:10px;padding:16px 20px;margin-bottom:24px;display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;">
+      <div>
+        <p style="margin:0 0 6px;font-size:13px;font-weight:600;">Download blank template</p>
+        <a href="/coach/scores/import/template.csv" class="btn btn-ghost btn-sm">&#8681; All columns (no athletes)</a>
+      </div>
+      {'<div><p style="margin:0 0 6px;font-size:13px;font-weight:600;">Pre-filled by group</p><select id="tmpl-group" onchange="if(this.value)window.location=this.value" style="max-width:220px;"><option value="">Select group…</option>' + group_template_opts + '</select></div>' if groups else ''}
+      {'<div><p style="margin:0 0 6px;font-size:13px;font-weight:600;">Pre-filled by organisation</p><select id="tmpl-org" onchange="if(this.value)window.location=this.value" style="max-width:220px;"><option value="">Select organisation…</option>' + org_template_opts + '</select></div>' if orgs else ''}
+    </div>"""
 
     # Build a reference table of column names
     col_rows = ""
@@ -3409,11 +3429,9 @@ def scores_import_form(user, groups=None, error=None):
         <h1>Import Scores from CSV</h1>
         <p class="muted">Bulk-upload test scores for existing athletes. Each row becomes one measurement session on the selected date.</p>
       </div>
-      <div style="display:flex;gap:8px;">
-        <a href="/coach/scores/import/template.csv" class="btn btn-ghost">&#8681; Download Template CSV</a>
-        <a href="/coach" class="btn btn-ghost">← Back</a>
-      </div>
+      <a href="/coach" class="btn btn-ghost">← Back</a>
     </div>
+    {template_section}
     {error_html}
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;max-width:1100px;align-items:start;">
       <div>

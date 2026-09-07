@@ -1579,9 +1579,10 @@ def scores_import_get(req):
         groups = conn.execute(
             "SELECT id, name FROM participant_groups ORDER BY sort_order, name"
         ).fetchall()
+        orgs = db.list_organisations(conn)
     finally:
         conn.close()
-    return Response(views.scores_import_form(coach, groups=groups))
+    return Response(views.scores_import_form(coach, groups=groups, orgs=orgs))
 
 
 @router.get("/coach/scores/import/template.csv")
@@ -1590,24 +1591,65 @@ def scores_import_template(req):
     coach = require_admin(req)
     if not coach:
         return redirect("/login")
-    from constants import all_measurement_games, MEASUREMENT_GAMES
+    from constants import MEASUREMENT_GAMES
+
+    group_id_raw = req.query.get("group_id", [""])[0].strip()
+    org_id_raw   = req.query.get("org_id",   [""])[0].strip()
+    group_id = int(group_id_raw) if group_id_raw.isdigit() else None
+    org_id   = int(org_id_raw)   if org_id_raw.isdigit()   else None
+
+    # Fetch athletes for the filter (if any)
+    athletes = []
+    filename = "scores_template.csv"
+    conn = db.get_conn()
+    try:
+        if group_id:
+            athletes = conn.execute(
+                "SELECT athlete_number, name FROM users WHERE role='participant' AND group_id=? "
+                "ORDER BY CAST(athlete_number AS INTEGER), name",
+                (group_id,)
+            ).fetchall()
+            row = conn.execute("SELECT name FROM participant_groups WHERE id=?", (group_id,)).fetchone()
+            label = row["name"].replace(" ", "_") if row else f"group{group_id}"
+            filename = f"scores_{label}.csv"
+        elif org_id:
+            athletes = conn.execute(
+                "SELECT u.athlete_number, u.name FROM users u "
+                "JOIN participant_groups pg ON u.group_id = pg.id "
+                "WHERE u.role='participant' AND pg.organisation_id=? "
+                "ORDER BY CAST(u.athlete_number AS INTEGER), u.name",
+                (org_id,)
+            ).fetchall()
+            row = conn.execute("SELECT name FROM organisations WHERE id=?", (org_id,)).fetchone()
+            label = row["name"].replace(" ", "_") if row else f"org{org_id}"
+            filename = f"scores_{label}.csv"
+    finally:
+        conn.close()
+
     output = io.StringIO()
     writer = csv.writer(output)
-    # Build header: athlete_number + every game.field (skipping computed)
-    headers = ["athlete_number"]
+
+    # Header: athlete_number, name (reference), then all score columns
+    headers = ["athlete_number", "name"]
     for section in MEASUREMENT_GAMES:
         for game in section["games"]:
             for field in game.get("fields", []):
                 headers.append(f"{game['key']}.{field['key']}")
-            # Also include computed fields so coaches can optionally fill them
             for field in game.get("computed", []):
                 headers.append(f"{game['key']}.{field['key']}")
     writer.writerow(headers)
-    # One blank example row
-    writer.writerow([""] * len(headers))
+
+    if athletes:
+        for a in athletes:
+            row_data = [a["athlete_number"] or "", a["name"]] + [""] * (len(headers) - 2)
+            writer.writerow(row_data)
+    else:
+        # Blank example row
+        writer.writerow(["", ""] + [""] * (len(headers) - 2))
+
     body = output.getvalue().encode("utf-8")
     resp = Response(body=body, content_type="text/csv; charset=utf-8")
-    resp.headers.append(("Content-Disposition", 'attachment; filename="scores_template.csv"'))
+    resp.headers.append(("Content-Disposition", f'attachment; filename="{filename}"'))
     resp.headers.append(("Content-Length", str(len(body))))
     return resp
 
@@ -1665,8 +1707,8 @@ def scores_import_post(req):
     unknown_cols = []
     for col in fieldnames:
         col_s = col.strip()
-        if col_s.lower() == "athlete_number":
-            continue
+        if col_s.lower() in ("athlete_number", "name"):
+            continue  # name is a reference column, not a score
         if "." not in col_s:
             unknown_cols.append(col_s)
             continue
