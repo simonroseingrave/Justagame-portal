@@ -2368,6 +2368,9 @@ def reports_landing_page(coach, groups, orgs=None, sports=None):
       {_report_card("📈", "Round 2 Progress Report",
           "Side-by-side Round 1 vs Round 2 scores with % improvement, colour-coded green/red. Only athletes with 2+ sessions appear.",
           "progress")}
+      {_report_card("✅", "Test Completion Sheet",
+          "At-a-glance view of which measurement tests each athlete has completed. Shows a fraction (e.g. 4/6 fields) per game. Batch-printable by group or org.",
+          "completion")}
     </div>
 
     <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--jag-muted);margin-bottom:16px;">Live Statistics</h2>
@@ -2393,6 +2396,84 @@ def reports_landing_page(coach, groups, orgs=None, sports=None):
     </script>
     """
     return layout("Statistics & Reports", body, user=coach, active_nav="progress")
+
+
+def completion_report_page(coach, group, athletes_data):
+    """Printable test completion sheet — one row per athlete, one column per game."""
+    from constants import MEASUREMENT_GAMES
+    today = _dt.date.today().strftime("%d %B %Y")
+    group_name = group.get("name", "Group")
+
+    # Build game list: (key, short_name, total_non_computed_fields)
+    games_info = []
+    for section in MEASUREMENT_GAMES:
+        for game in section["games"]:
+            total = len(game.get("fields", []))
+            # Abbreviate long names for column headers
+            name = game["name"]
+            games_info.append((game["key"], name, total))
+
+    # Table header
+    th_games = "".join(
+        f'<th style="text-align:center;min-width:70px;font-size:9px;line-height:1.3;">{esc(n)}</th>'
+        for _, n, _ in games_info
+    )
+    thead = (
+        f'<tr>'
+        f'<th style="min-width:36px;">#</th>'
+        f'<th style="min-width:150px;">Athlete</th>'
+        f'{th_games}'
+        f'<th style="text-align:center;min-width:70px;">Games Done</th>'
+        f'</tr>'
+    )
+
+    rows_html = ""
+    for athlete, sessions in athletes_data:
+        an = esc(athlete.get("athlete_number") or "—")
+        name = esc(athlete.get("name") or "")
+
+        # Aggregate all results across all sessions for this athlete
+        recorded = {}  # game_key → set of field_keys with a value
+        for s in sessions:
+            for (gk, fk), val in s["results"].items():
+                if val is not None:
+                    recorded.setdefault(gk, set()).add(fk)
+
+        game_tds = ""
+        completed_count = 0
+        for gk, gname, total_fields in games_info:
+            n = len(recorded.get(gk, set()))
+            if n > 0:
+                completed_count += 1
+                cell = f"{n}/{total_fields}" if total_fields > 1 else "✓"
+                game_tds += f'<td style="text-align:center;color:#1a7a3a;font-weight:700;">{cell}</td>'
+            else:
+                game_tds += '<td style="text-align:center;color:#bbb;">—</td>'
+
+        total_games = len(games_info)
+        summary = f"{completed_count}/{total_games}"
+        if completed_count == total_games:
+            sc = "#1a7a3a"
+        elif completed_count > 0:
+            sc = "#e67e22"
+        else:
+            sc = "#c0392b"
+
+        rows_html += (
+            f'<tr>'
+            f'<td style="color:#888;">{an}</td>'
+            f'<td style="font-weight:600;">{name}</td>'
+            f'{game_tds}'
+            f'<td style="text-align:center;font-weight:700;color:{sc};">{summary}</td>'
+            f'</tr>'
+        )
+
+    if not rows_html:
+        colspan = 2 + len(games_info) + 1
+        rows_html = f'<tr><td colspan="{colspan}" style="text-align:center;color:#888;padding:20px;">No athletes found.</td></tr>'
+
+    body = f'<table><thead>{thead}</thead><tbody>{rows_html}</tbody></table>'
+    return _report_html_shell("Test Completion Sheet", group_name, group_name, body, today)
 
 
 _STOPWORDS = {"the", "and", "for", "with", "from", "into", "onto", "over",

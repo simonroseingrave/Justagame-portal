@@ -445,6 +445,27 @@ def reports_progress(req):
     return Response(views.progress_report_page(coach, group_dict, athletes_data, resources=resources))
 
 
+@router.get("/coach/reports/completion")
+def reports_completion(req):
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        athletes, label, scope = _resolve_report_scope(req, conn)
+        if athletes is None:
+            return flash_redirect("/coach/reports", "Please select an organisation or group.")
+        athletes_data = []
+        for a in athletes:
+            sessions = db.measurement_sessions_for(conn, a["id"])
+            athletes_data.append((dict(a), sessions))
+    finally:
+        conn.close()
+    group_dict = scope["group"]
+    group_dict["name"] = label
+    return Response(views.completion_report_page(coach, group_dict, athletes_data))
+
+
 @router.get("/coach/progress")
 def all_progress(req):
     coach = require_role(req, "coach")
