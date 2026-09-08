@@ -1863,16 +1863,22 @@ def scores_import_post(req):
     try:
         for i, row in enumerate(reader, start=2):
             an = (row.get("athlete_number") or "").strip()
-            if not an:
-                errors.append(f"Row {i}: no athlete_number — skipped.")
-                skipped += 1
-                continue
-            athlete = conn.execute(
-                "SELECT id, name, group_id FROM users WHERE athlete_number = ? AND role = 'participant'",
-                (an,)
-            ).fetchone()
+            name_col = (row.get("name") or "").strip()
+            athlete = None
+            if an:
+                athlete = conn.execute(
+                    "SELECT id, name, group_id FROM users WHERE athlete_number = ? AND role = 'participant'",
+                    (an,)
+                ).fetchone()
+            # Fallback: match by name (case-insensitive) if no number or number not found
+            if not athlete and name_col:
+                athlete = conn.execute(
+                    "SELECT id, name, group_id FROM users WHERE lower(name) = lower(?) AND role = 'participant'",
+                    (name_col,)
+                ).fetchone()
             if not athlete:
-                errors.append(f"Row {i}: athlete #{an} not found — skipped.")
+                label = f"#{an}" if an else f'"{name_col}"' if name_col else f"row {i}"
+                errors.append(f"Row {i}: athlete {label} not found — skipped.")
                 skipped += 1
                 continue
 
