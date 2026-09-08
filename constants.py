@@ -101,7 +101,8 @@ MEASUREMENT_GAMES = [
                 "key": "diamond_gym",
                 "name": "Step Up",
                 "fields": [
-                    {"key": "step_bench", "label": "Step / Bench Points", "type": "number", "unit": "Number of Gates"},
+                    {"key": "step_bench",       "label": "Large Ball", "type": "number", "unit": "Number of Gates"},
+                    {"key": "step_bench_small",  "label": "Small Ball", "type": "number", "unit": "Number of Gates"},
                 ],
             },
             {
