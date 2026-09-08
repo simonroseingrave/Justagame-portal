@@ -109,7 +109,8 @@ MEASUREMENT_GAMES = [
                 "key": "step_over",
                 "name": "Step Over",
                 "fields": [
-                    {"key": "low_hurdle", "label": "Low Hurdle Points", "type": "number", "unit": "Number of Gates"},
+                    {"key": "low_hurdle",       "label": "Large Ball", "type": "number", "unit": "Number of Gates"},
+                    {"key": "low_hurdle_small",  "label": "Small Ball", "type": "number", "unit": "Number of Gates"},
                 ],
             },
         ],
