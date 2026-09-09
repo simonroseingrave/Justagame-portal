@@ -2498,7 +2498,10 @@ def completion_report_page(coach, group, athletes_data):
   .sum-zero{{color:#c0392b;font-weight:700;text-align:center;}}
   @media print{{
     .no-print{{display:none!important;}}
-    body{{padding:8px;}}
+    body{{padding:0;}}
+    table{{width:100%;font-size:8px;}}
+    th{{font-size:8px;padding:4px 5px;}}
+    td{{font-size:8px;padding:3px 5px;}}
     tr{{page-break-inside:avoid;}}
   }}
 </style>
@@ -2507,6 +2510,7 @@ def completion_report_page(coach, group, athletes_data):
   <div class="no-print">
     <button onclick="window.print()" style="background:#2D323B;color:#fff;border:none;border-radius:6px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#128196; Print / Save as PDF</button>
     <button onclick="window.close()" style="background:#f3f4f5;border:1px solid #ddd;border-radius:6px;padding:8px 18px;font-size:13px;cursor:pointer;margin-left:6px;">Close</button>
+    <span style="font-size:11px;color:#888;margin-left:10px;">Tip: select <strong>Landscape</strong> in your print dialog for best fit.</span>
   </div>
   <div class="header">
     <div class="header-logo">
