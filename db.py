@@ -176,6 +176,8 @@ def init_db():
         "ALTER TABLE participant_groups ADD COLUMN organisation_id INTEGER REFERENCES organisations(id)",
         "ALTER TABLE organisations ADD COLUMN icon_url TEXT",
         "ALTER TABLE resources ADD COLUMN self_organisation TEXT",
+        "ALTER TABLE measurement_sessions ADD COLUMN session_label TEXT",
+        "ALTER TABLE measurement_sessions ADD COLUMN session_month TEXT",
     ]:
         try:
             conn.execute(sql)
@@ -390,13 +392,18 @@ def seed_demo_data():
 # never needs to change if games/fields are added or removed later.
 
 
-def create_measurement_session(conn, participant_id, date, logged_by, results, group_id=None):
+def create_measurement_session(conn, participant_id, date, logged_by, results, group_id=None,
+                               session_label=None, session_month=None):
     """results: an iterable of (game_key, field_key, value) tuples, already
     filtered down to just the fields the coach actually filled in.
-    group_id: the group the athlete belonged to at recording time (snapshot)."""
+    group_id: the group the athlete belonged to at recording time (snapshot).
+    session_label: e.g. 'baseline' or 'progress_1' (from SESSION_TYPES).
+    session_month: YYYY-MM string; date is derived as YYYY-MM-01 if provided."""
+    if session_month:
+        date = session_month + "-01"
     session_id = conn.execute(
-        "INSERT INTO measurement_sessions (participant_id, group_id, date, logged_by, created_at) VALUES (?, ?, ?, ?, ?)",
-        (participant_id, group_id, date, logged_by, now()),
+        "INSERT INTO measurement_sessions (participant_id, group_id, date, logged_by, created_at, session_label, session_month) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (participant_id, group_id, date, logged_by, now(), session_label, session_month),
     ).lastrowid
     for game_key, field_key, value in results:
         conn.execute(
@@ -434,6 +441,8 @@ def measurement_sessions_for(conn, participant_id, group_id=None):
             "id": s["id"],
             "date": s["date"],
             "group_id": s["group_id"],
+            "session_label": s.get("session_label"),
+            "session_month": s.get("session_month"),
             "results": {(r["game_key"], r["field_key"]): r["value"] for r in rows},
         })
     return out
@@ -452,24 +461,43 @@ def delete_measurement_session(conn, session_id):
     conn.commit()
 
 
-def find_or_create_session(conn, participant_id, date, logged_by, group_id=None):
-    """Return the existing session id for this athlete+date, or create one.
+def find_session_by_label(conn, participant_id, session_label):
+    """Return existing session dict for this athlete+label, or None."""
+    return conn.execute(
+        "SELECT * FROM measurement_sessions WHERE participant_id = ? AND session_label = ? ORDER BY id DESC LIMIT 1",
+        (participant_id, session_label),
+    ).fetchone()
+
+
+def find_or_create_session(conn, participant_id, date, logged_by, group_id=None,
+                           session_label=None, session_month=None):
+    """Return the existing session id for this athlete+label (or date if no label), or create one.
     group_id is snapshotted on creation so the session stays attributed to
     the group the athlete was in at recording time."""
-    existing = conn.execute(
-        "SELECT id FROM measurement_sessions WHERE participant_id = ? AND date = ? ORDER BY id DESC LIMIT 1",
-        (participant_id, date),
-    ).fetchone()
+    if session_label:
+        existing = conn.execute(
+            "SELECT id FROM measurement_sessions WHERE participant_id = ? AND session_label = ? ORDER BY id DESC LIMIT 1",
+            (participant_id, session_label),
+        ).fetchone()
+    else:
+        existing = conn.execute(
+            "SELECT id FROM measurement_sessions WHERE participant_id = ? AND date = ? ORDER BY id DESC LIMIT 1",
+            (participant_id, date),
+        ).fetchone()
     if existing:
         return existing["id"]
-    return create_bare_session(conn, participant_id, date, logged_by, group_id=group_id)
+    return create_bare_session(conn, participant_id, date, logged_by, group_id=group_id,
+                               session_label=session_label, session_month=session_month)
 
 
-def create_bare_session(conn, participant_id, date, logged_by, group_id=None):
+def create_bare_session(conn, participant_id, date, logged_by, group_id=None,
+                        session_label=None, session_month=None):
     """Create a session with no results yet (used by quick-save flow)."""
+    if session_month:
+        date = session_month + "-01"
     session_id = conn.execute(
-        "INSERT INTO measurement_sessions (participant_id, group_id, date, logged_by, created_at) VALUES (?, ?, ?, ?, ?)",
-        (participant_id, group_id, date, logged_by, now()),
+        "INSERT INTO measurement_sessions (participant_id, group_id, date, logged_by, created_at, session_label, session_month) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (participant_id, group_id, date, logged_by, now(), session_label, session_month),
     ).lastrowid
     conn.commit()
     return session_id

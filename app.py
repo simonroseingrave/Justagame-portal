@@ -22,7 +22,7 @@ from core import Router, Response, App, redirect
 from urllib.parse import urlencode
 import db
 from auth import verify_password, hash_password, new_session_token, generate_temp_password
-from constants import APP_NAME, all_measurement_games
+from constants import APP_NAME, all_measurement_games, SESSION_TYPES, SESSION_LABEL_MAP
 import views
 
 router = Router()
@@ -652,7 +652,7 @@ def group_session_get(req):
                     f"SELECT * FROM participant_groups WHERE id IN ({placeholders}) ORDER BY sort_order, name",
                     coach_group_ids,
                 ).fetchall()
-        return Response(views.group_session_page(coach, [dict(p) for p in participants], [dict(g) for g in groups]))
+        return Response(views.group_session_page(coach, [dict(p) for p in participants], [dict(g) for g in groups], session_types=SESSION_TYPES))
     finally:
         conn.close()
 
@@ -669,10 +669,14 @@ def group_session_save(req):
         athlete_id = int(req.form_get("athlete_id"))
     except (ValueError, TypeError):
         return Response('{"error":"invalid athlete"}', status=400, content_type="application/json")
-    date      = req.form_get("date") or db.today()
-    game_key  = req.form_get("game_key")
-    field_key = req.form_get("field_key")
-    raw       = req.form_get("value").strip()
+    date          = req.form_get("date") or db.today()
+    session_label = req.form_get("session_label") or None
+    session_month = req.form_get("session_month") or None
+    game_key      = req.form_get("game_key")
+    field_key     = req.form_get("field_key")
+    raw           = req.form_get("value").strip()
+    if session_month:
+        date = session_month + "-01"
     try:
         value = float(raw)
     except (ValueError, TypeError):
@@ -681,7 +685,8 @@ def group_session_save(req):
     try:
         athlete = conn.execute("SELECT group_id FROM users WHERE id = ?", (athlete_id,)).fetchone()
         athlete_group_id = athlete["group_id"] if athlete else None
-        session_id = db.find_or_create_session(conn, athlete_id, date, coach["id"], group_id=athlete_group_id)
+        session_id = db.find_or_create_session(conn, athlete_id, date, coach["id"], group_id=athlete_group_id,
+                                               session_label=session_label, session_month=session_month)
         db.upsert_measurement_result(conn, session_id, game_key, field_key, value)
         # Recalculate computed fields
         computed_updates = {}
@@ -711,12 +716,17 @@ def start_measurement_session(req, participant_id):
     coach = require_role(req, "coach")
     if not coach:
         return Response('{"error":"unauthenticated"}', status=401, content_type="application/json")
-    date = req.form_get("date") or db.today()
+    date          = req.form_get("date") or db.today()
+    session_label = req.form_get("session_label") or None
+    session_month = req.form_get("session_month") or None
+    if session_month:
+        date = session_month + "-01"
     conn = db.get_conn()
     try:
         participant = conn.execute("SELECT group_id FROM users WHERE id = ?", (participant_id,)).fetchone()
         participant_group_id = participant["group_id"] if participant else None
-        session_id = db.create_bare_session(conn, participant_id, date, coach["id"], group_id=participant_group_id)
+        session_id = db.create_bare_session(conn, participant_id, date, coach["id"], group_id=participant_group_id,
+                                            session_label=session_label, session_month=session_month)
         return Response(json.dumps({"session_id": session_id}), content_type="application/json")
     finally:
         conn.close()
@@ -788,7 +798,10 @@ def log_measurement_session(req, participant_id):
             conn.close()
         if not p or p["group_id"] not in coach_group_ids:
             return flash_redirect("/coach", "You don't have access to that participant.")
-    date = req.form_get("date") or db.today()
+    session_label  = req.form_get("session_label") or None
+    session_month  = req.form_get("session_month") or None
+    confirm_replace = req.form_get("confirm_replace") == "1"
+    date = (session_month + "-01") if session_month else (req.form_get("date") or db.today())
 
     results = []
     for game in all_measurement_games():
@@ -820,12 +833,34 @@ def log_measurement_session(req, participant_id):
 
     conn = db.get_conn()
     try:
-        participant = conn.execute("SELECT group_id FROM users WHERE id = ?", (participant_id,)).fetchone()
+        participant = conn.execute("SELECT * FROM users WHERE id = ?", (participant_id,)).fetchone()
         participant_group_id = participant["group_id"] if participant else None
-        db.create_measurement_session(conn, participant_id, date, coach["id"], results, group_id=participant_group_id)
+
+        # Duplicate session warning
+        if session_label and not confirm_replace:
+            existing = db.find_session_by_label(conn, participant_id, session_label)
+            if existing:
+                label_display = SESSION_LABEL_MAP.get(session_label, session_label)
+                existing_month = existing.get("session_month") or existing.get("date", "")[:7]
+                return Response(views.confirm_replace_session_page(
+                    coach, dict(participant), results, session_label, session_month,
+                    label_display, existing_month
+                ))
+
+        # Delete existing session for this label if replacing
+        if session_label and confirm_replace:
+            existing = db.find_session_by_label(conn, participant_id, session_label)
+            if existing:
+                db.delete_measurement_session(conn, existing["id"])
+
+        db.create_measurement_session(conn, participant_id, date, coach["id"], results,
+                                      group_id=participant_group_id,
+                                      session_label=session_label, session_month=session_month)
     finally:
         conn.close()
-    return flash_redirect(f"/coach/participants/{participant_id}", "Measurement Games results saved.")
+    label_display = SESSION_LABEL_MAP.get(session_label, "") if session_label else ""
+    msg = f"{label_display} results saved." if label_display else "Measurement Games results saved."
+    return flash_redirect(f"/coach/participants/{participant_id}", msg)
 
 
 @router.post("/coach/participants/<int:participant_id>/reset-password")

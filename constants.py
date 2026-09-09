@@ -16,6 +16,23 @@ CATEGORIES = [
 
 SPORTS = ["Cricket", "Football", "Golf", "Hockey", "Multi-sport", "Netball", "Rugby", "Touch", "Volleyball"]
 
+# Session types for Measurement Games testing.
+# Each testing phase can span multiple days — coaches pick a named phase
+# and a month/year rather than a specific date.
+SESSION_TYPES = [
+    {"key": "baseline",    "label": "Baseline Test"},
+    {"key": "progress_1",  "label": "Progress Test 1"},
+    {"key": "progress_2",  "label": "Progress Test 2"},
+    {"key": "progress_3",  "label": "Progress Test 3"},
+    {"key": "progress_4",  "label": "Progress Test 4"},
+    {"key": "progress_5",  "label": "Progress Test 5"},
+    {"key": "progress_6",  "label": "Progress Test 6"},
+    {"key": "progress_7",  "label": "Progress Test 7"},
+    {"key": "progress_8",  "label": "Progress Test 8"},
+]
+
+SESSION_LABEL_MAP = {s["key"]: s["label"] for s in SESSION_TYPES}
+
 
 # ----------------------------------------------------------------------
 # Measurement Games -- the structured physical-test battery coaches run

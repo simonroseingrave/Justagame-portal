@@ -12,7 +12,63 @@ from constants import (
     MEASUREMENT_GAMES,
     SPORT_SPECIFIC_GAMES,
     all_measurement_games,
+    SESSION_TYPES,
+    SESSION_LABEL_MAP,
 )
+
+
+def _session_label_pickers(selected_label=None, selected_month=None):
+    """Render session type dropdown + month/year selectors (reused across forms)."""
+    import datetime as _dt2
+    now = _dt2.datetime.now()
+    # Build month options: current month back 24 months, then forward 2
+    months = []
+    for delta in range(-24, 3):
+        d = (now.replace(day=1) + _dt2.timedelta(days=delta * 31)).replace(day=1)
+        val = d.strftime("%Y-%m")
+        label = d.strftime("%B %Y")
+        months.append((val, label))
+    # Default selected_month to current
+    if not selected_month:
+        selected_month = now.strftime("%Y-%m")
+    type_opts = "".join(
+        f'<option value="{s["key"]}"{"selected" if s["key"] == selected_label else ""}>{esc(s["label"])}</option>'
+        for s in SESSION_TYPES
+    )
+    month_opts = "".join(
+        f'<option value="{val}"{"selected" if val == selected_month else ""}>{esc(lbl)}</option>'
+        for val, lbl in months
+    )
+    return f"""
+    <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;align-items:flex-end;">
+      <div>
+        <label for="session_label" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Test Phase</label>
+        <select id="session_label" name="session_label" required style="min-width:200px;">
+          <option value="">— Select phase —</option>
+          {type_opts}
+        </select>
+      </div>
+      <div>
+        <label for="session_month" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Month</label>
+        <select id="session_month" name="session_month" required style="min-width:160px;">
+          {month_opts}
+        </select>
+      </div>
+    </div>"""
+
+
+def _session_display_label(session):
+    """Return a human-readable label for a session, e.g. 'Baseline Test — Sep 2026'."""
+    label = SESSION_LABEL_MAP.get(session.get("session_label"), "")
+    month = session.get("session_month", "")
+    if label and month:
+        try:
+            d = _dt.datetime.strptime(month, "%Y-%m")
+            return f"{label} — {d.strftime('%b %Y')}"
+        except Exception:
+            return f"{label} — {month}"
+    # Fallback for legacy sessions with no label
+    return session.get("date", "")[:10]
 
 
 def layout(title, body, user=None, flash=None, active_nav=None):
@@ -320,9 +376,13 @@ def measurement_games_form(participant_id):
       var sessionId = null;
       var baseUrl = '/coach/participants/{participant_id}/measurement';
 
-      function getDate() {{
-        var d = document.getElementById('mg-date').value;
-        return d || new Date().toISOString().slice(0, 10);
+      function getSessionLabel() {{
+        var sel = document.getElementById('session_label');
+        return sel ? sel.value : '';
+      }}
+      function getSessionMonth() {{
+        var sel = document.getElementById('session_month');
+        return sel ? sel.value : '';
       }}
 
       function markBtn(btn, state) {{
@@ -359,10 +419,16 @@ def measurement_games_form(participant_id):
 
       async function ensureSession() {{
         if (sessionId) return sessionId;
+        var lbl = getSessionLabel();
+        if (!lbl) {{
+          alert('Please select a Test Phase before saving.');
+          throw new Error('No session label');
+        }}
         var resp = await fetch(baseUrl + '/start', {{
           method: 'POST',
           headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
-          body: 'date=' + encodeURIComponent(getDate()),
+          body: 'session_label=' + encodeURIComponent(lbl) +
+                '&session_month=' + encodeURIComponent(getSessionMonth()),
         }});
         if (!resp.ok) throw new Error('Could not create session');
         var data = await resp.json();
@@ -489,10 +555,9 @@ def measurement_games_form(participant_id):
     return f"""
     <div class="card form-card">
       <h3>Base Adaptability Testing</h3>
-      <p class="muted">Enter a value and click <strong>&#10003; Save</strong> next to each field.
+      <p class="muted">Select the test phase and month, then enter values and click <strong>&#10003; Save</strong> next to each field.
       The Skipping Rope Sprint average is calculated automatically from Time 1/2/3.</p>
-      <label for="mg-date">Session date</label>
-      <input type="date" id="mg-date" name="date" style="max-width:200px; margin-bottom:16px;" />
+      {_session_label_pickers()}
       {sections_html}
       {sport_ui_html}
       <div style="margin-top:16px; display:flex; gap:12px; align-items:center;">
@@ -550,10 +615,11 @@ def _measurement_session_card(session, show_delete=False, participant_id=None):
         </form>
         """
 
+    display_label = _session_display_label(session)
     return f"""
     <div class="card mg-session-card">
       <div class="mg-session-head">
-        <strong>{esc(session['date'])}</strong>
+        <strong>{esc(display_label)}</strong>
         {delete_html}
       </div>
       {''.join(game_blocks)}
@@ -2992,7 +3058,7 @@ def progress_report_page(coach, group, athletes_data, resources=None):
     return _report_html_shell("Round 2 Progress Report", group_name, group_name, body_content, today)
 
 
-def group_session_page(coach, participants, groups=None):
+def group_session_page(coach, participants, groups=None, session_types=None):
     """Rapid-fire session entry: select group → select athlete → select game → fields appear → quick-save.
     All saves for the same athlete+date land in one session (find-or-create).
     """
@@ -3075,8 +3141,7 @@ def group_session_page(coach, participants, groups=None):
     </div>
 
     <div class="card form-card" style="max-width:560px;">
-      <label for="qs-date">Date</label>
-      <input type="date" id="qs-date" value="{today}" style="max-width:200px; margin-bottom:16px;" />
+      {_session_label_pickers()}
 
       <div id="qs-group-wrap" style="display:{show_group_filter}; margin-bottom:16px;">
         <label for="qs-group">Group</label>
@@ -3117,7 +3182,6 @@ def group_session_page(coach, participants, groups=None):
       var SPORT_FIELDS  = {sport_fields_js};
       var saveUrl = '/coach/session/save';
 
-      var dateEl       = document.getElementById('qs-date');
       var groupEl      = document.getElementById('qs-group');
       var athleteEl    = document.getElementById('qs-athlete');
       var fieldEl      = document.getElementById('qs-field');
@@ -3267,11 +3331,15 @@ def group_session_page(coach, participants, groups=None):
         markBtn(btn, 'saving');
         try {{
           var athleteName = athleteEl.options[athleteEl.selectedIndex].text;
-          var body = 'athlete_id=' + encodeURIComponent(athleteId) +
-                     '&date='      + encodeURIComponent(dateEl.value) +
-                     '&game_key='  + encodeURIComponent(gameKey) +
-                     '&field_key=' + encodeURIComponent(fieldKey) +
-                     '&value='     + encodeURIComponent(value);
+          var sessionLabel = (document.getElementById('session_label') || {{}}).value || '';
+          var sessionMonth = (document.getElementById('session_month') || {{}}).value || '';
+          if (!sessionLabel) {{ alert('Please select a Test Phase before saving.'); markBtn(btn, 'error'); return; }}
+          var body = 'athlete_id='     + encodeURIComponent(athleteId) +
+                     '&session_label=' + encodeURIComponent(sessionLabel) +
+                     '&session_month=' + encodeURIComponent(sessionMonth) +
+                     '&game_key='      + encodeURIComponent(gameKey) +
+                     '&field_key='     + encodeURIComponent(fieldKey) +
+                     '&value='         + encodeURIComponent(value);
           var resp = await fetch(saveUrl, {{
             method: 'POST',
             headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
@@ -3315,6 +3383,42 @@ def group_session_page(coach, participants, groups=None):
 def simple_message_page(title, message, user=None):
     body = f'<div class="card"><p>{esc(message)}</p></div>'
     return layout(title, body, user=user)
+
+
+def confirm_replace_session_page(coach, participant, results, session_label, session_month,
+                                  label_display, existing_month):
+    """Warn the coach that a session with this label already exists, ask whether to replace."""
+    import datetime as _dt2
+    try:
+        em = _dt2.datetime.strptime(existing_month, "%Y-%m")
+        existing_month_str = em.strftime("%B %Y")
+    except Exception:
+        existing_month_str = existing_month
+    # Re-encode all results as hidden fields so they survive the round-trip
+    # results is a list of (game_key, field_key, value) tuples
+    hidden_results = "".join(
+        f'<input type="hidden" name="mg__{gk}__{fk}" value="{v}" />'
+        for gk, fk, v in results
+    )
+    pid = participant["id"]
+    body = f"""
+    <div class="card" style="max-width:520px;">
+      <h2 style="margin-top:0;">&#9888; Session Already Recorded</h2>
+      <p>A <strong>{esc(label_display)}</strong> session for <strong>{esc(participant['name'])}</strong>
+         was already recorded in <strong>{esc(existing_month_str)}</strong>.</p>
+      <p>Do you want to <strong>replace</strong> it with the new data you just entered?</p>
+      <form method="post" action="/coach/participants/{pid}/measurement/log">
+        <input type="hidden" name="session_label" value="{esc(session_label)}" />
+        <input type="hidden" name="session_month" value="{esc(session_month or '')}" />
+        <input type="hidden" name="confirm_replace" value="1" />
+        {hidden_results}
+        <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;">
+          <button type="submit" class="btn btn-primary">Yes, Replace It</button>
+          <a href="/coach/participants/{pid}" class="btn btn-ghost">Cancel — Keep Existing</a>
+        </div>
+      </form>
+    </div>"""
+    return layout(f"Replace Session — {participant['name']}", body, user=coach, active_nav="dashboard")
 
 
 def account_page(user, profile_error=None, profile_success=None, password_error=None, password_success=None):
