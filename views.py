@@ -2420,10 +2420,10 @@ def completion_report_page(coach, group, athletes_data):
     )
     thead = (
         f'<tr>'
-        f'<th style="min-width:36px;">#</th>'
-        f'<th style="min-width:150px;">Athlete</th>'
+        f'<th class="left" style="min-width:36px;">#</th>'
+        f'<th class="left" style="min-width:150px;">Athlete</th>'
         f'{th_games}'
-        f'<th style="text-align:center;min-width:70px;">Games Done</th>'
+        f'<th style="min-width:70px;">Games Done</th>'
         f'</tr>'
     )
 
@@ -2472,19 +2472,54 @@ def completion_report_page(coach, group, athletes_data):
         colspan = 2 + len(games_info) + 1
         rows_html = f'<tr><td colspan="{colspan}" style="text-align:center;color:#888;padding:20px;">No athletes found.</td></tr>'
 
-    # Inject print-safe CSS overrides so headers/colors survive browser print stripping
-    print_css = """<style>
-      @media print {
-        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-        thead th { background: #2D323B !important; color: #fff !important; border: 1px solid #555; }
-        td { color: #2D323B !important; border-bottom: 1px solid #ccc; }
-        tr:nth-child(even) td { background: #f3f4f5 !important; }
-      }
-      table { font-size: 10px; }
-      th { font-size: 9px; }
-    </style>"""
-    body = f'{print_css}<table><thead>{thead}</thead><tbody>{rows_html}</tbody></table>'
-    return _report_html_shell("Test Completion Sheet", group_name, group_name, body, today)
+    table_html = f'<table><thead>{thead}</thead><tbody>{rows_html}</tbody></table>'
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Test Completion Sheet — {esc(group_name)}</title>
+<style>
+  *{{box-sizing:border-box;margin:0;padding:0;-webkit-print-color-adjust:exact;print-color-adjust:exact;color-adjust:exact;}}
+  body{{font-family:Arial,Helvetica,sans-serif;background:#fff;color:#2D323B;padding:20px;font-size:11px;}}
+  .no-print{{margin-bottom:14px;}}
+  .header{{display:flex;align-items:center;gap:12px;margin-bottom:16px;padding-bottom:12px;border-bottom:3px solid #F0A82E;}}
+  .header-logo{{background:#2D323B;border-radius:7px;padding:8px;flex-shrink:0;}}
+  h1{{font-size:18px;font-weight:800;color:#2D323B;}}
+  .sub{{font-size:11px;color:#888;margin-top:3px;}}
+  table{{width:100%;border-collapse:collapse;margin-top:0;}}
+  th{{background:#2D323B;color:#fff;padding:6px 8px;text-align:center;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;border:1px solid #444;}}
+  th.left{{text-align:left;}}
+  td{{padding:5px 8px;border:1px solid #ddd;vertical-align:middle;font-size:10px;}}
+  tr:nth-child(even) td{{background:#F3F4F5;}}
+  .done{{color:#1a7a3a;font-weight:700;text-align:center;}}
+  .none{{color:#bbb;text-align:center;}}
+  .sum-all{{color:#1a7a3a;font-weight:700;text-align:center;}}
+  .sum-part{{color:#e67e22;font-weight:700;text-align:center;}}
+  .sum-zero{{color:#c0392b;font-weight:700;text-align:center;}}
+  @media print{{
+    .no-print{{display:none!important;}}
+    body{{padding:8px;}}
+    tr{{page-break-inside:avoid;}}
+  }}
+</style>
+</head>
+<body>
+  <div class="no-print">
+    <button onclick="window.print()" style="background:#2D323B;color:#fff;border:none;border-radius:6px;padding:8px 18px;font-size:13px;font-weight:700;cursor:pointer;">&#128196; Print / Save as PDF</button>
+    <button onclick="window.close()" style="background:#f3f4f5;border:1px solid #ddd;border-radius:6px;padding:8px 18px;font-size:13px;cursor:pointer;margin-left:6px;">Close</button>
+  </div>
+  <div class="header">
+    <div class="header-logo">
+      <svg width="22" height="22" fill="#F0A82E" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" stroke="#F0A82E" stroke-width="1.5" fill="none"/></svg>
+    </div>
+    <div>
+      <h1>Test Completion Sheet</h1>
+      <div class="sub">{esc(group_name)} &nbsp;·&nbsp; Generated {today} &nbsp;·&nbsp; Just A Game</div>
+    </div>
+  </div>
+  {table_html}
+</body>
+</html>"""
 
 
 _STOPWORDS = {"the", "and", "for", "with", "from", "into", "onto", "over",
