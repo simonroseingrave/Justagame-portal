@@ -463,7 +463,12 @@ def reports_completion(req):
         conn.close()
     group_dict = scope["group"]
     group_dict["name"] = label
-    return Response(views.completion_report_page(coach, group_dict, athletes_data))
+    try:
+        html = views.completion_report_page(coach, group_dict, athletes_data)
+    except Exception as exc:
+        import traceback
+        return Response(f"<pre style='color:red;padding:20px;'>Error generating report:\n{traceback.format_exc()}</pre>", status=500)
+    return Response(html)
 
 
 @router.get("/coach/progress")
