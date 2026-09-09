@@ -18,27 +18,33 @@ from constants import (
 
 
 def _session_label_pickers(selected_label=None, selected_month=None):
-    """Render session type dropdown + month/year selectors (reused across forms)."""
+    """Render session type dropdown + separate month + year selectors."""
     import datetime as _dt2
     now = _dt2.datetime.now()
-    # Build month options: current month back 24 months, then forward 2
-    months = []
-    for delta in range(-24, 3):
-        d = (now.replace(day=1) + _dt2.timedelta(days=delta * 31)).replace(day=1)
-        val = d.strftime("%Y-%m")
-        label = d.strftime("%B %Y")
-        months.append((val, label))
-    # Default selected_month to current
-    if not selected_month:
-        selected_month = now.strftime("%Y-%m")
+    cur_m = now.month
+    cur_y = now.year
+    if selected_month:
+        try:
+            parts = selected_month.split("-")
+            cur_y = int(parts[0])
+            cur_m = int(parts[1])
+        except Exception:
+            pass
     type_opts = "".join(
         f'<option value="{s["key"]}"{"selected" if s["key"] == selected_label else ""}>{esc(s["label"])}</option>'
         for s in SESSION_TYPES
     )
+    month_names = ["January","February","March","April","May","June",
+                   "July","August","September","October","November","December"]
     month_opts = "".join(
-        f'<option value="{val}"{"selected" if val == selected_month else ""}>{esc(lbl)}</option>'
-        for val, lbl in months
+        f'<option value="{i}"{"selected" if i == cur_m else ""}>{m}</option>'
+        for i, m in enumerate(month_names, 1)
     )
+    year_opts = "".join(
+        f'<option value="{y}"{"selected" if y == cur_y else ""}>{y}</option>'
+        for y in range(2026, now.year + 4)
+    )
+    uid = "sm"  # unique prefix for IDs
     return f"""
     <div style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:16px;align-items:flex-end;">
       <div>
@@ -49,27 +55,59 @@ def _session_label_pickers(selected_label=None, selected_month=None):
         </select>
       </div>
       <div>
-        <label for="session_month" style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Month</label>
-        <select id="session_month" name="session_month" required style="min-width:160px;">
-          {month_opts}
-        </select>
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:6px;">Month</label>
+        <div style="display:flex;gap:6px;">
+          <select id="{uid}_m" style="min-width:130px;" onchange="updateSessionMonth('{uid}')">{month_opts}</select>
+          <select id="{uid}_y" style="min-width:80px;"  onchange="updateSessionMonth('{uid}')">{year_opts}</select>
+        </div>
+        <input type="hidden" id="{uid}_val" name="session_month" value="{cur_y:04d}-{cur_m:02d}" />
       </div>
-    </div>"""
+    </div>
+    <script>
+    function updateSessionMonth(uid) {{
+      var m = document.getElementById(uid + '_m').value;
+      var y = document.getElementById(uid + '_y').value;
+      document.getElementById(uid + '_val').value = y + '-' + String(m).padStart(2, '0');
+    }}
+    </script>"""
 
 
 def _month_select(name="session_month", selected=None):
-    """Standalone month <select> (reusable without the full label-picker layout)."""
+    """Standalone month+year selectors (reusable without the full label-picker layout)."""
     import datetime as _dt2
     now = _dt2.datetime.now()
-    if not selected:
-        selected = now.strftime("%Y-%m")
-    opts = ""
-    for delta in range(-24, 3):
-        d = (now.replace(day=1) + _dt2.timedelta(days=delta * 31)).replace(day=1)
-        val = d.strftime("%Y-%m")
-        lbl = d.strftime("%B %Y")
-        opts += f'<option value="{val}"{"selected" if val == selected else ""}>{esc(lbl)}</option>'
-    return f'<select name="{name}" id="{name}" style="min-width:160px;">{opts}</select>'
+    cur_m = now.month
+    cur_y = now.year
+    if selected:
+        try:
+            parts = selected.split("-")
+            cur_y = int(parts[0])
+            cur_m = int(parts[1])
+        except Exception:
+            pass
+    month_names = ["January","February","March","April","May","June",
+                   "July","August","September","October","November","December"]
+    month_opts = "".join(
+        f'<option value="{i}"{"selected" if i == cur_m else ""}>{m}</option>'
+        for i, m in enumerate(month_names, 1)
+    )
+    year_opts = "".join(
+        f'<option value="{y}"{"selected" if y == cur_y else ""}>{y}</option>'
+        for y in range(2026, now.year + 4)
+    )
+    uid = name.replace("_", "")
+    return f"""<div style="display:flex;gap:6px;">
+      <select id="{uid}_m" style="min-width:130px;" onchange="updateSessionMonth('{uid}')">{month_opts}</select>
+      <select id="{uid}_y" style="min-width:80px;"  onchange="updateSessionMonth('{uid}')">{year_opts}</select>
+    </div>
+    <input type="hidden" id="{uid}_val" name="{name}" value="{cur_y:04d}-{cur_m:02d}" />
+    <script>
+    function updateSessionMonth(uid) {{
+      var m = document.getElementById(uid + '_m').value;
+      var y = document.getElementById(uid + '_y').value;
+      document.getElementById(uid + '_val').value = y + '-' + String(m).padStart(2, '0');
+    }}
+    </script>"""
 
 
 def _session_display_label(session):
