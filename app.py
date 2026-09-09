@@ -253,15 +253,33 @@ def coach_dashboard(req):
         sessions_this_month = (conn.execute(
             "SELECT COUNT(*) as n FROM measurement_sessions WHERE date >= ?", (month_start,)
         ).fetchone() or {}).get("n", 0)
-        last_row = conn.execute("SELECT MAX(date) as d FROM measurement_sessions").fetchone()
-        last_session_date = last_row["d"] if last_row else None
+        latest_phase_row = conn.execute(
+            "SELECT session_label, session_month FROM measurement_sessions "
+            "WHERE session_label IS NOT NULL AND session_label != '' "
+            "ORDER BY date DESC, id DESC LIMIT 1"
+        ).fetchone()
+        latest_phase = None
+        if latest_phase_row:
+            lbl = SESSION_LABEL_MAP.get(latest_phase_row["session_label"], latest_phase_row["session_label"])
+            sm = latest_phase_row["session_month"] or ""
+            if sm:
+                try:
+                    import datetime as _dt
+                    d = _dt.datetime.strptime(sm, "%Y-%m")
+                    sm = d.strftime("%b %Y")
+                except Exception:
+                    pass
+            latest_phase = f"{lbl}\n{sm}" if sm else lbl
+        untested = sum(1 for _, ps in group_summaries for p in ps if p["test_count"] == 0) + \
+                   sum(1 for p in ungrouped_summaries if p["test_count"] == 0)
         total_athletes = sum(len(ps) for _, ps in group_summaries) + len(ungrouped_summaries)
         total_sessions = sum(p["test_count"] for _, ps in group_summaries for p in ps) + sum(p["test_count"] for p in ungrouped_summaries)
         dashboard_stats = {
             "total_athletes": total_athletes,
             "total_sessions": total_sessions,
             "sessions_this_month": sessions_this_month,
-            "last_session_date": last_session_date,
+            "latest_phase": latest_phase,
+            "untested": untested,
         }
         return Response(views.coach_dashboard_for(coach, group_summaries, ungrouped_summaries, message=message, org_map=org_map, stats=dashboard_stats))
     finally:

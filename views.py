@@ -1157,17 +1157,18 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
 
     # ---- stat cards ----
     if stats:
-        last_date = stats.get("last_session_date") or None
-        if last_date:
-            try:
-                d = _dt.datetime.strptime(last_date[:10], "%Y-%m-%d")
-                last_date_str = f"{d.day} {d.strftime('%b')} {d.year}"
-            except Exception:
-                last_date_str = last_date[:10]
-        else:
-            last_date_str = "None yet"
+        latest_phase = stats.get("latest_phase") or "None yet"
+        # Split label from month onto two lines
+        phase_parts = latest_phase.split("\n") if "\n" in latest_phase else [latest_phase, ""]
+        phase_line1 = esc(phase_parts[0])
+        phase_line2 = esc(phase_parts[1]) if len(phase_parts) > 1 else ""
+        phase_html = f'<div style="font-size:15px;font-weight:800;color:var(--jag-navy);line-height:1.2;">{phase_line1}</div>'
+        if phase_line2:
+            phase_html += f'<div style="font-size:12px;color:var(--jag-muted);margin-top:2px;">{phase_line2}</div>'
+        untested = stats.get("untested", 0)
+        untested_color = "color:#9b1c1c;" if untested > 0 else "color:var(--jag-navy);"
         stat_cards_html = f"""
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;margin-bottom:24px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:24px;">
           <div class="card stat-card">
             <div class="stat-number">{stats['total_athletes']}</div>
             <div class="stat-label">Athletes</div>
@@ -1181,8 +1182,12 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
             <div class="stat-label">Sessions This Month</div>
           </div>
           <div class="card stat-card">
-            <div class="stat-number" style="font-size:18px;line-height:1.3;">{last_date_str}</div>
-            <div class="stat-label">Last Session</div>
+            {phase_html}
+            <div class="stat-label" style="margin-top:6px;">Latest Phase</div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-number" style="{untested_color}">{untested}</div>
+            <div class="stat-label">Not Yet Tested</div>
           </div>
         </div>"""
     else:
