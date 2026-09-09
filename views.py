@@ -2472,7 +2472,18 @@ def completion_report_page(coach, group, athletes_data):
         colspan = 2 + len(games_info) + 1
         rows_html = f'<tr><td colspan="{colspan}" style="text-align:center;color:#888;padding:20px;">No athletes found.</td></tr>'
 
-    body = f'<table><thead>{thead}</thead><tbody>{rows_html}</tbody></table>'
+    # Inject print-safe CSS overrides so headers/colors survive browser print stripping
+    print_css = """<style>
+      @media print {
+        * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+        thead th { background: #2D323B !important; color: #fff !important; border: 1px solid #555; }
+        td { color: #2D323B !important; border-bottom: 1px solid #ccc; }
+        tr:nth-child(even) td { background: #f3f4f5 !important; }
+      }
+      table { font-size: 10px; }
+      th { font-size: 9px; }
+    </style>"""
+    body = f'{print_css}<table><thead>{thead}</thead><tbody>{rows_html}</tbody></table>'
     return _report_html_shell("Test Completion Sheet", group_name, group_name, body, today)
 
 
@@ -2539,10 +2550,13 @@ def _report_html_shell(title, subtitle, group_name, body_content, today):
   .imp-zero{{color:#888;}}
   .no-print{{}}
   @media print{{
+    *{{-webkit-print-color-adjust:exact!important;print-color-adjust:exact!important;}}
     .no-print{{display:none!important;}}
     body{{padding:10px;}}
     table{{page-break-inside:auto;}}
     tr{{page-break-inside:avoid;}}
+    th{{background:#2D323B!important;color:#fff!important;}}
+    tr:nth-child(even) td{{background:#F3F4F5!important;}}
   }}
 </style>
 </head>
