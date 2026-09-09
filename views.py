@@ -41,11 +41,12 @@ def layout(title, body, user=None, flash=None, active_nav=None):
               <img src="/static/img/logo.png" alt="Just A Game" class="brand-logo" />
               <span style="font-size:14px;letter-spacing:0.01em;">{APP_NAME}</span>
             </a>
-            <nav class="nav">{nav_items}</nav>
+            <nav class="nav" id="main-nav">{nav_items}</nav>
             <div class="user-pill">
               <a href="/account/password" class="btn btn-ghost btn-sm">My Account</a>
               <a href="/logout" class="btn btn-ghost btn-sm">Log out</a>
             </div>
+            <button class="nav-toggle" onclick="var n=document.getElementById('main-nav');n.classList.toggle('nav--open');" aria-label="Menu">&#9776;</button>
           </div>
         </header>
         """
@@ -69,7 +70,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{esc(title)} - {APP_NAME}</title>
-  <link rel="stylesheet" href="/static/css/style.css?v=19" />
+  <link rel="stylesheet" href="/static/css/style.css?v=20" />
   <link rel="icon" type="image/png" href="/static/img/logo.png" />
   <link rel="shortcut icon" type="image/png" href="/static/img/logo.png" />
   <style>
@@ -728,7 +729,7 @@ def edit_group_page(user, group, error=None):
     return layout(f"Edit Group — {group['name']}", body, user=user, active_nav="dashboard")
 
 
-def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None, org_map=None):
+def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None, org_map=None, stats=None):
     message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
     is_admin = user.get("is_admin")
     org_map = org_map or {}
@@ -1034,6 +1035,39 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     });
     </script>"""
 
+    # ---- stat cards ----
+    if stats:
+        last_date = stats.get("last_session_date") or None
+        if last_date:
+            try:
+                d = _dt.datetime.strptime(last_date[:10], "%Y-%m-%d")
+                last_date_str = d.strftime("%-d %b %Y")
+            except Exception:
+                last_date_str = last_date[:10]
+        else:
+            last_date_str = "None yet"
+        stat_cards_html = f"""
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;margin-bottom:24px;">
+          <div class="card stat-card">
+            <div class="stat-number">{stats['total_athletes']}</div>
+            <div class="stat-label">Athletes</div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-number">{stats['total_sessions']}</div>
+            <div class="stat-label">Total Sessions</div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-number">{stats['sessions_this_month']}</div>
+            <div class="stat-label">Sessions This Month</div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-number" style="font-size:18px;line-height:1.3;">{last_date_str}</div>
+            <div class="stat-label">Last Session</div>
+          </div>
+        </div>"""
+    else:
+        stat_cards_html = ""
+
     body = f"""
     <style>.athlete-tile {{transition:box-shadow 0.18s ease,border-color 0.18s ease,transform 0.18s ease;}}</style>
     <div style="max-width:1320px;">
@@ -1043,6 +1077,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         <p class="muted">{subtitle}</p>
       </div>
     </div>
+    {stat_cards_html}
     {action_btns}
     {message_html}
     <div style="margin-top:28px;">

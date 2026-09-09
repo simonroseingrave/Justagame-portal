@@ -247,7 +247,23 @@ def coach_dashboard(req):
         # Build org map for grouped dashboard headers
         orgs = db.list_organisations(conn)
         org_map = {o["id"]: o for o in orgs}
-        return Response(views.coach_dashboard_for(coach, group_summaries, ungrouped_summaries, message=message, org_map=org_map))
+
+        # Dashboard stat cards
+        month_start = datetime.datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0).strftime("%Y-%m-%d")
+        sessions_this_month = (conn.execute(
+            "SELECT COUNT(*) as n FROM measurement_sessions WHERE date >= ?", (month_start,)
+        ).fetchone() or {}).get("n", 0)
+        last_row = conn.execute("SELECT MAX(date) as d FROM measurement_sessions").fetchone()
+        last_session_date = last_row["d"] if last_row else None
+        total_athletes = sum(len(ps) for _, ps in group_summaries) + len(ungrouped_summaries)
+        total_sessions = sum(p["test_count"] for _, ps in group_summaries for p in ps) + sum(p["test_count"] for p in ungrouped_summaries)
+        dashboard_stats = {
+            "total_athletes": total_athletes,
+            "total_sessions": total_sessions,
+            "sessions_this_month": sessions_this_month,
+            "last_session_date": last_session_date,
+        }
+        return Response(views.coach_dashboard_for(coach, group_summaries, ungrouped_summaries, message=message, org_map=org_map, stats=dashboard_stats))
     finally:
         conn.close()
 

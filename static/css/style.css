@@ -77,11 +77,13 @@ a:hover { text-decoration: underline; }
 .card {
   background: var(--jag-card);
   border: 1px solid var(--jag-border);
+  border-top: 3px solid var(--jag-green);
   border-radius: var(--radius);
   box-shadow: var(--shadow);
   padding: 20px;
   margin-bottom: 20px;
 }
+.card-navy { border-top-color: var(--jag-navy); }
 .page-head {
   display: flex;
   align-items: flex-end;
@@ -300,3 +302,54 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
 
 /* ---- Footer ---- */
 .footer { text-align: center; color: var(--jag-muted); font-size: 13px; padding: 20px; }
+
+/* ---- Animations ---- */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+body { animation: fadeIn 0.22s ease both; }
+
+/* Card hover lift */
+.card {
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+}
+.card:hover {
+  box-shadow: 0 4px 12px rgba(45, 50, 59, 0.14), 0 2px 6px rgba(45, 50, 59, 0.08);
+  transform: translateY(-2px);
+}
+
+/* Smooth button transitions */
+.btn { transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease; }
+
+/* ---- Mobile Nav (hamburger) ---- */
+.nav-toggle {
+  display: none;
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 6px 8px;
+  margin-left: auto;
+  line-height: 1;
+}
+@media (max-width: 768px) {
+  .nav-toggle { display: block; }
+  .nav {
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: var(--jag-navy);
+    padding: 12px 16px 16px;
+    z-index: 100;
+    border-top: 1px solid rgba(255,255,255,0.1);
+  }
+  .nav.nav--open { display: flex; }
+  .topbar-inner { flex-wrap: wrap; position: relative; }
+  .user-pill { margin-left: auto; }
+}
