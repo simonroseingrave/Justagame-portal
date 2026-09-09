@@ -39,7 +39,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
           <div class="topbar-inner">
             <a class="brand" href="/">
               <img src="/static/img/logo.png" alt="Just A Game" class="brand-logo" />
-              <span>Just A Game <small>{APP_NAME}</small></span>
+              <span style="font-size:14px;letter-spacing:0.01em;">{APP_NAME}</span>
             </a>
             <nav class="nav">{nav_items}</nav>
             <div class="user-pill">
@@ -55,7 +55,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
           <div class="topbar-inner">
             <a class="brand" href="/">
               <img src="/static/img/logo.png" alt="Just A Game" class="brand-logo" />
-              <span>Just A Game <small>{APP_NAME}</small></span>
+              <span style="font-size:14px;letter-spacing:0.01em;">{APP_NAME}</span>
             </a>
           </div>
         </header>
@@ -69,7 +69,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{esc(title)} - {APP_NAME}</title>
-  <link rel="stylesheet" href="/static/css/style.css?v=18" />
+  <link rel="stylesheet" href="/static/css/style.css?v=19" />
   <style>
     /* Folder styling — inlined to bypass CDN caching */
     .res-folder {{ margin-top: 50px; margin-bottom: 32px; }}

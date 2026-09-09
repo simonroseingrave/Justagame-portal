@@ -60,7 +60,7 @@ a:hover { text-decoration: underline; }
   font-size: 18px;
 }
 .brand:hover { text-decoration: none; opacity: 0.9; }
-.brand-logo { width: 32px; height: 32px; }
+.brand-logo { width: 48px; height: 48px; border-radius: 50%; }
 .brand small { font-weight: 400; opacity: 0.7; font-size: 12px; }
 .nav { display: flex; gap: 8px; flex: 1; }
 .nav-link {
@@ -136,7 +136,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
 /* ---- Login ---- */
 .login-wrap { display: flex; justify-content: center; padding-top: 40px; }
 .login-card { max-width: 380px; width: 100%; text-align: center; }
-.login-logo { width: 56px; height: 56px; margin-bottom: 8px; }
+.login-logo { width: 120px; height: 120px; margin-bottom: 12px; border-radius: 50%; }
 .login-card h1 { font-size: 20px; margin: 6px 0; }
 .login-card form { text-align: left; margin-top: 16px; }
 .demo-creds { margin-top: 18px; font-size: 13px; color: var(--jag-muted); text-align: left; }
@@ -290,6 +290,7 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--jag-green);
 .res-item:last-child { border-bottom: none; }
 .res-item:hover { background: var(--jag-bg); border-radius: 6px; }
 .res-item--ghost { opacity: 0.35; background: var(--jag-green) !important; border-radius: 6px; }
+.res-tile--ghost { opacity: 0.35; background: var(--jag-green) !important; border-radius: 10px; }
 .res-item-body { flex: 1; min-width: 0; }
 .res-item-body a { font-weight: 600; font-size: 14px; }
 .res-desc { display: block; font-size: 12px; margin-top: 2px; color: var(--jag-muted); }
