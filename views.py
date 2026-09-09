@@ -70,6 +70,8 @@ def layout(title, body, user=None, flash=None, active_nav=None):
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>{esc(title)} - {APP_NAME}</title>
   <link rel="stylesheet" href="/static/css/style.css?v=19" />
+  <link rel="icon" type="image/png" href="/static/img/logo.png" />
+  <link rel="shortcut icon" type="image/png" href="/static/img/logo.png" />
   <style>
     /* Folder styling — inlined to bypass CDN caching */
     .res-folder {{ margin-top: 50px; margin-bottom: 32px; }}
