@@ -2497,11 +2497,16 @@ def completion_report_page(coach, group, athletes_data):
   .sum-part{{color:#e67e22;font-weight:700;text-align:center;}}
   .sum-zero{{color:#c0392b;font-weight:700;text-align:center;}}
   @media print{{
+    @page{{size:landscape;margin:8mm;}}
     .no-print{{display:none!important;}}
-    body{{padding:0;}}
-    table{{width:100%;font-size:8px;}}
-    th{{font-size:8px;padding:4px 5px;}}
-    td{{font-size:8px;padding:3px 5px;}}
+    body{{padding:0;font-size:8px;}}
+    .header{{margin-bottom:8px;padding-bottom:6px;}}
+    h1{{font-size:14px;}}
+    .sub{{font-size:9px;}}
+    table{{width:100%;font-size:7px;border-collapse:collapse;}}
+    th{{font-size:7px;padding:3px 4px;background:#2D323B!important;color:#fff!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
+    td{{font-size:7px;padding:3px 4px;border:1px solid #ccc;}}
+    tr:nth-child(even) td{{background:#f3f4f5!important;-webkit-print-color-adjust:exact;print-color-adjust:exact;}}
     tr{{page-break-inside:avoid;}}
   }}
 </style>
