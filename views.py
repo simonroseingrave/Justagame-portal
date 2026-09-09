@@ -1041,7 +1041,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         if last_date:
             try:
                 d = _dt.datetime.strptime(last_date[:10], "%Y-%m-%d")
-                last_date_str = d.strftime("%-d %b %Y")
+                last_date_str = f"{d.day} {d.strftime('%b')} {d.year}"
             except Exception:
                 last_date_str = last_date[:10]
         else:
