@@ -491,6 +491,120 @@ def reports_completion(req):
     return resp
 
 
+@router.get("/coach/session-sheet")
+def session_sheet_get(req):
+    """Blank recording sheet: coach picks games/fields, downloads a printable PDF."""
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        if coach.get("is_admin"):
+            groups = conn.execute(
+                "SELECT id, name FROM participant_groups ORDER BY sort_order, name"
+            ).fetchall()
+        else:
+            coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
+            if coach_group_ids:
+                placeholders = ",".join("?" * len(coach_group_ids))
+                groups = conn.execute(
+                    f"SELECT id, name FROM participant_groups WHERE id IN ({placeholders}) ORDER BY sort_order, name",
+                    coach_group_ids,
+                ).fetchall()
+            else:
+                groups = []
+    finally:
+        conn.close()
+    return Response(views.session_sheet_page(coach, [dict(g) for g in groups], SESSION_TYPES))
+
+
+@router.post("/coach/session-sheet/pdf")
+def session_sheet_pdf_post(req):
+    """Generate and return blank PDF recording sheet."""
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    from constants import MEASUREMENT_GAMES, SPORT_SPECIFIC_GAMES, find_measurement_game
+    session_label  = req.form_get("session_label") or ""
+    session_month  = req.form_get("session_month") or ""
+    group_id_raw   = req.form_get("group_id") or ""
+    include_names  = req.form_get("include_names") == "1"
+    num_blank_rows = int(req.form_get("blank_rows") or "0")
+    selected_fields = req.form_get_list("fields")  # list of "game_key||field_key"
+
+    # Parse label display
+    label_display = SESSION_LABEL_MAP.get(session_label, session_label or "Recording Sheet")
+    try:
+        import datetime as _dt
+        d = _dt.datetime.strptime(session_month, "%Y-%m")
+        month_str = d.strftime("%B %Y")
+    except Exception:
+        month_str = session_month
+
+    conn = db.get_conn()
+    try:
+        group_name = ""
+        athletes = []
+        if group_id_raw.isdigit():
+            gid = int(group_id_raw)
+            g = conn.execute("SELECT name FROM participant_groups WHERE id = ?", (gid,)).fetchone()
+            group_name = g["name"] if g else ""
+            if include_names:
+                rows = conn.execute(
+                    "SELECT name FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name",
+                    (gid,),
+                ).fetchall()
+                athletes = [r["name"] for r in rows]
+        if num_blank_rows > 0:
+            athletes += [""] * num_blank_rows
+    finally:
+        conn.close()
+
+    # Build selected game/field structure
+    # selected_fields = ["game_key||field_key", ...]
+    # Group by game_key preserving order
+    from collections import OrderedDict
+    games_fields = OrderedDict()
+    all_games = [g for section in MEASUREMENT_GAMES for g in section["games"]]
+    for sf in selected_fields:
+        if "||" not in sf:
+            continue
+        gk, fk = sf.split("||", 1)
+        if gk not in games_fields:
+            game = next((g for g in all_games if g["key"] == gk), None)
+            if not game:
+                # check sport-specific
+                for sport_sections in SPORT_SPECIFIC_GAMES.values():
+                    for sec in sport_sections:
+                        for g in sec["games"]:
+                            if g["key"] == gk:
+                                game = g
+                                break
+            games_fields[gk] = {"game": game, "fields": []}
+        if games_fields[gk]["game"]:
+            field = next(
+                (f for f in games_fields[gk]["game"]["fields"] if f["key"] == fk),
+                None
+            )
+            if field:
+                games_fields[gk]["fields"].append(field)
+
+    try:
+        pdf_bytes = views.session_sheet_pdf(
+            label_display, month_str, group_name, athletes, list(games_fields.values())
+        )
+    except Exception:
+        import traceback
+        return Response(f"<pre style='color:red;padding:20px;'>PDF error:\n{traceback.format_exc()}</pre>", status=500)
+
+    safe_label = (label_display + "_" + month_str).replace(" ", "_")
+    filename = f"session_sheet_{safe_label}.pdf"
+    resp = Response(body=pdf_bytes, content_type="application/pdf")
+    resp.headers.append(("Content-Disposition", f'attachment; filename="{filename}"'))
+    resp.headers.append(("Content-Length", str(len(pdf_bytes))))
+    return resp
+
+
 @router.get("/coach/progress")
 def all_progress(req):
     coach = require_role(req, "coach")

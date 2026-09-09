@@ -57,6 +57,21 @@ def _session_label_pickers(selected_label=None, selected_month=None):
     </div>"""
 
 
+def _month_select(name="session_month", selected=None):
+    """Standalone month <select> (reusable without the full label-picker layout)."""
+    import datetime as _dt2
+    now = _dt2.datetime.now()
+    if not selected:
+        selected = now.strftime("%Y-%m")
+    opts = ""
+    for delta in range(-24, 3):
+        d = (now.replace(day=1) + _dt2.timedelta(days=delta * 31)).replace(day=1)
+        val = d.strftime("%Y-%m")
+        lbl = d.strftime("%B %Y")
+        opts += f'<option value="{val}"{"selected" if val == selected else ""}>{esc(lbl)}</option>'
+    return f'<select name="{name}" id="{name}" style="min-width:160px;">{opts}</select>'
+
+
 def _session_display_label(session):
     """Return a human-readable label for a session, e.g. 'Baseline Test — Sep 2026'."""
     label = SESSION_LABEL_MAP.get(session.get("session_label"), "")
@@ -79,6 +94,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             if user.get("is_admin"):
                 links.append(("/coach/participants/new", "Add Participant", "new_participant"))
             links.append(("/coach/session", "Record Session", "session"))
+            links.append(("/coach/session-sheet", "Session Sheet", "session_sheet"))
             links.append(("/coach/resources", "Resources", "resources"))
             if user.get("is_admin"):
                 links.append(("/coach/coaches", "Coaches", "coaches"))
@@ -2407,6 +2423,217 @@ def all_progress_page(coach, groups_data, sport_filter=None):
 
 
 # ---------------------------------------------------------------------------
+# ---------------------------------------------------------------------------
+# Session Sheet (blank printable PDF for field recording)
+# ---------------------------------------------------------------------------
+
+def session_sheet_page(coach, groups, session_types):
+    """Form to select phase, month, group, games/fields → download blank PDF."""
+    group_opts = '<option value="">— No group / blank rows only —</option>' + "".join(
+        f'<option value="{g["id"]}">{esc(g["name"])}</option>' for g in groups
+    )
+    type_opts = "".join(
+        f'<option value="{s["key"]}">{esc(s["label"])}</option>' for s in session_types
+    )
+
+    # Build game checkboxes with nested field checkboxes
+    game_blocks = ""
+    for section in MEASUREMENT_GAMES:
+        games_html = ""
+        for game in section["games"]:
+            fields_html = "".join(
+                f"""<label style="display:flex;align-items:center;gap:6px;font-size:13px;font-weight:400;margin:4px 0 4px 20px;cursor:pointer;">
+                  <input type="checkbox" name="fields" value="{esc(game['key'])}||{esc(f['key'])}"
+                         class="field-cb cb-{esc(game['key'])}" style="width:auto;margin:0;" />
+                  {esc(f['label'])}{"<span style='color:var(--jag-muted);font-size:11px;margin-left:4px;'>(" + esc(f.get('unit','')) + ")</span>" if f.get('unit') else ""}
+                </label>"""
+                for f in game["fields"]
+            )
+            games_html += f"""
+            <div style="margin-bottom:10px;">
+              <label style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;cursor:pointer;">
+                <input type="checkbox" class="game-cb" data-game="{esc(game['key'])}"
+                       style="width:auto;margin:0;"
+                       onchange="toggleGameFields(this)" />
+                {esc(game['name'])}
+              </label>
+              <div class="game-fields-{esc(game['key'])}" style="display:none;">
+                {fields_html}
+              </div>
+            </div>"""
+        game_blocks += f"""
+        <div style="margin-bottom:18px;">
+          <div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;
+                      color:var(--jag-muted);margin-bottom:8px;">{esc(section['section'])}</div>
+          {games_html}
+        </div>"""
+
+    body = f"""
+    <div class="page-head">
+      <div>
+        <h1>Session Recording Sheet</h1>
+        <p class="muted">Choose your test phase, group, and fields — then download a blank PDF to take to the field.</p>
+      </div>
+    </div>
+    <form method="post" action="/coach/session-sheet/pdf">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:820px;">
+        <div class="card">
+          <h3 style="margin-top:0;">Session Details</h3>
+          <label>Test Phase
+            <select name="session_label" required>{type_opts}</select>
+          </label>
+          <label>Month
+            {_month_select("session_month")}
+          </label>
+          <label>Group
+            <select name="group_id">{group_opts}</select>
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:14px;cursor:pointer;">
+            <input type="checkbox" name="include_names" value="1" checked style="width:auto;margin:0;" />
+            <span style="font-size:13px;font-weight:600;">Pre-fill athlete names from group</span>
+          </label>
+          <label style="margin-top:14px;">Extra blank rows
+            <input type="number" name="blank_rows" value="0" min="0" max="30" style="max-width:100px;" />
+          </label>
+        </div>
+        <div class="card">
+          <h3 style="margin-top:0;">Games &amp; Fields</h3>
+          <p class="muted" style="font-size:13px;">Tick the games to include, then the specific fields within each.</p>
+          {game_blocks}
+        </div>
+      </div>
+      <div style="margin-top:20px;max-width:820px;">
+        <button type="submit" class="btn btn-primary" style="font-size:15px;padding:12px 28px;">
+          &#8681; Download PDF Recording Sheet
+        </button>
+      </div>
+    </form>
+    <script>
+    function toggleGameFields(cb) {{
+      var gameKey = cb.dataset.game;
+      var wrap = document.querySelector('.game-fields-' + gameKey);
+      if (!wrap) return;
+      wrap.style.display = cb.checked ? 'block' : 'none';
+      wrap.querySelectorAll('input[type=checkbox]').forEach(function(c) {{
+        c.checked = cb.checked;
+      }});
+    }}
+    </script>
+    """
+    return layout("Session Recording Sheet", body, user=coach, active_nav="session_sheet")
+
+
+def session_sheet_pdf(label_display, month_str, group_name, athletes, games_fields):
+    """Generate a blank landscape PDF recording sheet.
+    games_fields: list of {{'game': game_dict, 'fields': [field_dict, ...]}}
+    athletes: list of name strings (may include empty strings for blank rows)
+    """
+    import io
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+
+    JAG_NAVY = colors.HexColor("#2D323B")
+    JAG_GOLD  = colors.HexColor("#F0A82E")
+    JAG_BG    = colors.HexColor("#F3F4F5")
+    JAG_BORDER = colors.HexColor("#DDE0E3")
+    WHITE = colors.white
+
+    buf = io.BytesIO()
+    page_size = landscape(A4)
+    doc = SimpleDocTemplate(buf, pagesize=page_size,
+                            leftMargin=10*mm, rightMargin=10*mm,
+                            topMargin=10*mm, bottomMargin=10*mm)
+
+    styles = getSampleStyleSheet()
+    title_style  = ParagraphStyle("title",  fontSize=14, fontName="Helvetica-Bold", textColor=WHITE, spaceAfter=0)
+    sub_style    = ParagraphStyle("sub",    fontSize=10, fontName="Helvetica",      textColor=JAG_GOLD, spaceAfter=0)
+    game_style   = ParagraphStyle("game",   fontSize=10, fontName="Helvetica-Bold", textColor=JAG_NAVY, spaceBefore=8, spaceAfter=4)
+    cell_style   = ParagraphStyle("cell",   fontSize=8,  fontName="Helvetica",      textColor=JAG_NAVY)
+    header_style = ParagraphStyle("header", fontSize=8,  fontName="Helvetica-Bold", textColor=WHITE, alignment=1)
+
+    story = []
+
+    # ---- Header banner ----
+    page_w = page_size[0] - 20*mm
+    header_table = Table([[
+        Paragraph(f"{label_display}", title_style),
+        Paragraph(f"{month_str}{('  ·  ' + group_name) if group_name else ''}", sub_style),
+    ]], colWidths=[page_w * 0.5, page_w * 0.5])
+    header_table.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, -1), JAG_NAVY),
+        ("VALIGN",     (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING",  (0, 0), (-1, -1), 12),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 12),
+        ("TOPPADDING",   (0, 0), (-1, -1), 8),
+        ("BOTTOMPADDING",(0, 0), (-1, -1), 8),
+        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
+    ]))
+    story.append(header_table)
+    story.append(Spacer(1, 4*mm))
+
+    # ---- One table per selected game ----
+    for gf in games_fields:
+        game = gf.get("game")
+        fields = gf.get("fields", [])
+        if not game or not fields:
+            continue
+
+        story.append(Paragraph(game["name"], game_style))
+
+        # Build table: header row + one row per athlete
+        col_headers = ["Athlete Name"] + [f["label"] for f in fields]
+        num_cols = len(col_headers)
+        name_w = 50*mm
+        remaining = page_w - name_w
+        field_w = remaining / max(len(fields), 1)
+        col_widths = [name_w] + [field_w] * len(fields)
+
+        # Limit to reasonable column width
+        col_widths = [min(w, 55*mm) for w in col_widths]
+
+        header_row = [Paragraph(h, header_style) for h in col_headers]
+        data = [header_row]
+
+        row_height = 7*mm
+        for name in athletes:
+            row = [Paragraph(esc(name) if name else "", cell_style)]
+            row += [""] * len(fields)
+            data.append(row)
+
+        # Add at least 15 rows total
+        while len(data) < 16:
+            data.append([""] + [""] * len(fields))
+
+        tbl = Table(data, colWidths=col_widths, rowHeights=[8*mm] + [row_height] * (len(data) - 1))
+        style_cmds = [
+            ("BACKGROUND",   (0, 0), (-1, 0),   JAG_NAVY),
+            ("TEXTCOLOR",    (0, 0), (-1, 0),   WHITE),
+            ("FONTNAME",     (0, 0), (-1, 0),   "Helvetica-Bold"),
+            ("FONTSIZE",     (0, 0), (-1, 0),   8),
+            ("ALIGN",        (0, 0), (-1, 0),   "CENTER"),
+            ("VALIGN",       (0, 0), (-1, -1),  "MIDDLE"),
+            ("FONTNAME",     (0, 1), (-1, -1),  "Helvetica"),
+            ("FONTSIZE",     (0, 1), (-1, -1),  8),
+            ("GRID",         (0, 0), (-1, -1),  0.5, JAG_BORDER),
+            ("BACKGROUND",   (0, 1), (0, -1),   JAG_BG),
+            ("LEFTPADDING",  (0, 0), (-1, -1),  4),
+            ("RIGHTPADDING", (0, 0), (-1, -1),  4),
+        ]
+        # Alternate row shading
+        for i in range(1, len(data)):
+            if i % 2 == 0:
+                style_cmds.append(("BACKGROUND", (1, i), (-1, i), colors.HexColor("#FAFAFA")))
+        tbl.setStyle(TableStyle(style_cmds))
+        story.append(tbl)
+        story.append(Spacer(1, 4*mm))
+
+    doc.build(story)
+    return buf.getvalue()
+
+
 # Statistics & Reports landing page + printable reports
 # ---------------------------------------------------------------------------
 
