@@ -2601,9 +2601,6 @@ def session_sheet_pdf(label_display, month_str, group_name, athletes, games_fiel
     game_hdr   = ParagraphStyle("gh", fontSize=10, fontName="Helvetica-Bold", textColor=WHITE)
     field_lbl  = ParagraphStyle("fl", fontSize=9,  fontName="Helvetica",      textColor=JAG_NAVY)
     unit_lbl   = ParagraphStyle("ul", fontSize=8,  fontName="Helvetica",      textColor=colors.HexColor("#6E737B"))
-    notes_lbl  = ParagraphStyle("nl2",fontSize=8,  fontName="Helvetica",      textColor=colors.HexColor("#6E737B"),
-                                 spaceAfter=0)
-
     def _athlete_story(athlete_name):
         s = []
         # ---- Top header bar ----
@@ -2658,9 +2655,6 @@ def session_sheet_pdf(label_display, month_str, group_name, athletes, games_fiel
                 lbl_cell = [Paragraph(f["label"], field_lbl),
                             Paragraph(unit_txt, unit_lbl)] if unit_txt else [Paragraph(f["label"], field_lbl)]
                 rows.append([lbl_cell if len(lbl_cell) > 1 else lbl_cell[0], ""])
-
-            # Notes row
-            rows.append([Paragraph("Notes", notes_lbl), ""])
 
             data_tbl = Table(rows, colWidths=[label_w, value_w],
                              rowHeights=[9*mm] * len(rows))
