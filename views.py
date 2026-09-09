@@ -2391,7 +2391,9 @@ def reports_landing_page(coach, groups, orgs=None, sports=None):
       if (group) params.push('group_id=' + group);
       else if (org) params.push('org_id=' + org);
       if (sport) params.push('sport=' + encodeURIComponent(sport));
-      window.open('/coach/reports/' + type + '?' + params.join('&'), '_blank');
+      var url = '/coach/reports/' + type + '?' + params.join('&');
+      if (type === 'completion') {{ window.location = url; }}
+      else {{ window.open(url, '_blank'); }}
     }}
     </script>
     """
@@ -2530,6 +2532,148 @@ def completion_report_page(coach, group, athletes_data):
   {table_html}
 </body>
 </html>"""
+
+
+def completion_report_pdf(group, athletes_data):
+    """Generate a landscape PDF of the test completion sheet using reportlab."""
+    import io
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    from constants import MEASUREMENT_GAMES
+
+    JAG_NAVY  = colors.HexColor("#2D323B")
+    JAG_GOLD  = colors.HexColor("#F0A82E")
+    JAG_LIGHT = colors.HexColor("#F3F4F5")
+    GREEN     = colors.HexColor("#1a7a3a")
+    AMBER     = colors.HexColor("#e67e22")
+    RED       = colors.HexColor("#c0392b")
+    GREY      = colors.HexColor("#aaaaaa")
+
+    buf = io.BytesIO()
+    page_size = landscape(A4)
+    doc = SimpleDocTemplate(
+        buf, pagesize=page_size,
+        leftMargin=10*mm, rightMargin=10*mm,
+        topMargin=10*mm, bottomMargin=10*mm,
+    )
+
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle("title", fontName="Helvetica-Bold", fontSize=16, textColor=JAG_NAVY)
+    sub_style   = ParagraphStyle("sub",   fontName="Helvetica",      fontSize=9,  textColor=colors.grey)
+    hdr_style   = ParagraphStyle("hdr",   fontName="Helvetica-Bold", fontSize=7,  textColor=colors.white, alignment=TA_CENTER, leading=9)
+    cell_style  = ParagraphStyle("cell",  fontName="Helvetica",      fontSize=8,  alignment=TA_CENTER)
+
+    today = _dt.date.today().strftime("%d %B %Y")
+    group_name = group.get("name", "Group")
+
+    # Build game info list
+    games_info = []
+    for section in MEASUREMENT_GAMES:
+        for game in section["games"]:
+            total = len(game.get("fields", []))
+            games_info.append((game["key"], game["name"], total))
+
+    # Build table data
+    # Header row
+    header = (
+        [Paragraph("#", hdr_style), Paragraph("Athlete", hdr_style)] +
+        [Paragraph(n, hdr_style) for _, n, _ in games_info] +
+        [Paragraph("Done", hdr_style)]
+    )
+    table_data = [header]
+
+    for athlete, sessions in athletes_data:
+        an   = str(athlete.get("athlete_number") or "—")
+        name = str(athlete.get("name") or "")
+
+        recorded = {}
+        for s in sessions:
+            for (gk, fk), val in s["results"].items():
+                if val is not None:
+                    recorded.setdefault(gk, set()).add(fk)
+
+        row = [an, name]
+        completed_count = 0
+        for gk, gname, total_fields in games_info:
+            n = len(recorded.get(gk, set()))
+            if n > 0:
+                completed_count += 1
+                cell = f"{n}/{total_fields}" if total_fields > 1 else "✓"
+            else:
+                cell = "—"
+            row.append(cell)
+
+        total_games = len(games_info)
+        row.append(f"{completed_count}/{total_games}")
+        table_data.append(row)
+
+    # Column widths: #=10mm, Name=40mm, games share remaining, Done=16mm
+    page_w = page_size[0] - 20*mm  # subtract margins
+    fixed  = 10*mm + 40*mm + 16*mm
+    game_w = max(14*mm, (page_w - fixed) / max(len(games_info), 1))
+    col_widths = [10*mm, 40*mm] + [game_w]*len(games_info) + [16*mm]
+
+    tbl = Table(table_data, colWidths=col_widths, repeatRows=1)
+
+    # Base style
+    style_cmds = [
+        ("BACKGROUND",    (0,0), (-1,0),  JAG_NAVY),
+        ("TEXTCOLOR",     (0,0), (-1,0),  colors.white),
+        ("FONTNAME",      (0,0), (-1,0),  "Helvetica-Bold"),
+        ("FONTSIZE",      (0,0), (-1,0),  7),
+        ("ALIGN",         (0,0), (-1,-1), "CENTER"),
+        ("ALIGN",         (1,0), (1,-1),  "LEFT"),
+        ("FONTNAME",      (0,1), (-1,-1), "Helvetica"),
+        ("FONTSIZE",      (0,1), (-1,-1), 8),
+        ("ROWBACKGROUNDS",(0,1), (-1,-1), [colors.white, JAG_LIGHT]),
+        ("GRID",          (0,0), (-1,-1), 0.4, colors.HexColor("#cccccc")),
+        ("TOPPADDING",    (0,0), (-1,-1), 3),
+        ("BOTTOMPADDING", (0,0), (-1,-1), 3),
+        ("LEFTPADDING",   (0,0), (-1,-1), 3),
+        ("RIGHTPADDING",  (0,0), (-1,-1), 3),
+        ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+        ("WORDWRAP",      (0,0), (-1,-1), "CJK"),
+    ]
+
+    # Colour the game cells per-row
+    for ri, (athlete, sessions) in enumerate(athletes_data, start=1):
+        recorded = {}
+        for s in sessions:
+            for (gk, fk), val in s["results"].items():
+                if val is not None:
+                    recorded.setdefault(gk, set()).add(fk)
+        completed_count = sum(1 for gk,_,_ in games_info if recorded.get(gk))
+        total_games = len(games_info)
+        for ci, (gk, _, _) in enumerate(games_info, start=2):
+            if recorded.get(gk):
+                style_cmds.append(("TEXTCOLOR", (ci,ri), (ci,ri), GREEN))
+                style_cmds.append(("FONTNAME",  (ci,ri), (ci,ri), "Helvetica-Bold"))
+            else:
+                style_cmds.append(("TEXTCOLOR", (ci,ri), (ci,ri), GREY))
+        # Summary column colour
+        sc_col = len(games_info) + 2
+        if completed_count == total_games:
+            style_cmds.append(("TEXTCOLOR", (sc_col,ri), (sc_col,ri), GREEN))
+        elif completed_count > 0:
+            style_cmds.append(("TEXTCOLOR", (sc_col,ri), (sc_col,ri), AMBER))
+        else:
+            style_cmds.append(("TEXTCOLOR", (sc_col,ri), (sc_col,ri), RED))
+        style_cmds.append(("FONTNAME", (sc_col,ri), (sc_col,ri), "Helvetica-Bold"))
+
+    tbl.setStyle(TableStyle(style_cmds))
+
+    story = [
+        Paragraph("Test Completion Sheet", title_style),
+        Paragraph(f"{group_name}  ·  Generated {today}  ·  Just A Game", sub_style),
+        Spacer(1, 4*mm),
+        tbl,
+    ]
+    doc.build(story)
+    return buf.getvalue()
 
 
 _STOPWORDS = {"the", "and", "for", "with", "from", "into", "onto", "over",

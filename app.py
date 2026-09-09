@@ -464,11 +464,15 @@ def reports_completion(req):
     group_dict = scope["group"]
     group_dict["name"] = label
     try:
-        html = views.completion_report_page(coach, group_dict, athletes_data)
-    except Exception as exc:
+        pdf_bytes = views.completion_report_pdf(group_dict, athletes_data)
+    except Exception:
         import traceback
-        return Response(f"<pre style='color:red;padding:20px;'>Error generating report:\n{traceback.format_exc()}</pre>", status=500)
-    return Response(html)
+        return Response(f"<pre style='color:red;padding:20px;'>Error generating PDF:\n{traceback.format_exc()}</pre>", status=500)
+    filename = (label or "completion").replace(" ", "_") + ".pdf"
+    resp = Response(body=pdf_bytes, content_type="application/pdf")
+    resp.headers.append(("Content-Disposition", f'attachment; filename="{filename}"'))
+    resp.headers.append(("Content-Length", str(len(pdf_bytes))))
+    return resp
 
 
 @router.get("/coach/progress")

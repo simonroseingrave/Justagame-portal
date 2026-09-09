@@ -6,3 +6,4 @@
 # dev server built into app.py):
 #
 # gunicorn
+reportlab
