@@ -2567,111 +2567,129 @@ def session_sheet_page(coach, groups, session_types):
 
 
 def session_sheet_pdf(label_display, month_str, group_name, athletes, games_fields):
-    """Generate a blank landscape PDF recording sheet.
+    """Generate a per-athlete portrait PDF recording sheet — one page per athlete.
     games_fields: list of {{'game': game_dict, 'fields': [field_dict, ...]}}
-    athletes: list of name strings (may include empty strings for blank rows)
+    athletes: list of name strings (may include empty strings for blank sheets)
     """
     import io
-    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.pagesizes import A4
     from reportlab.lib import colors
     from reportlab.lib.units import mm
-    from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
-    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                    Paragraph, Spacer, PageBreak)
+    from reportlab.lib.styles import ParagraphStyle
 
-    JAG_NAVY = colors.HexColor("#2D323B")
+    JAG_NAVY  = colors.HexColor("#2D323B")
     JAG_GOLD  = colors.HexColor("#F0A82E")
     JAG_BG    = colors.HexColor("#F3F4F5")
-    JAG_BORDER = colors.HexColor("#DDE0E3")
-    WHITE = colors.white
+    JAG_BORDER= colors.HexColor("#DDE0E3")
+    WHITE     = colors.white
 
     buf = io.BytesIO()
-    page_size = landscape(A4)
-    doc = SimpleDocTemplate(buf, pagesize=page_size,
-                            leftMargin=10*mm, rightMargin=10*mm,
-                            topMargin=10*mm, bottomMargin=10*mm)
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            leftMargin=14*mm, rightMargin=14*mm,
+                            topMargin=12*mm, bottomMargin=12*mm)
 
-    styles = getSampleStyleSheet()
-    title_style  = ParagraphStyle("title",  fontSize=14, fontName="Helvetica-Bold", textColor=WHITE, spaceAfter=0)
-    sub_style    = ParagraphStyle("sub",    fontSize=10, fontName="Helvetica",      textColor=JAG_GOLD, spaceAfter=0)
-    game_style   = ParagraphStyle("game",   fontSize=10, fontName="Helvetica-Bold", textColor=JAG_NAVY, spaceBefore=8, spaceAfter=4)
-    cell_style   = ParagraphStyle("cell",   fontSize=8,  fontName="Helvetica",      textColor=JAG_NAVY)
-    header_style = ParagraphStyle("header", fontSize=8,  fontName="Helvetica-Bold", textColor=WHITE, alignment=1)
+    page_w = A4[0] - 28*mm   # usable width
+
+    hdr_title  = ParagraphStyle("ht", fontSize=13, fontName="Helvetica-Bold", textColor=WHITE)
+    hdr_sub    = ParagraphStyle("hs", fontSize=9,  fontName="Helvetica",      textColor=JAG_GOLD)
+    name_style = ParagraphStyle("ns", fontSize=18, fontName="Helvetica-Bold", textColor=JAG_NAVY,
+                                 spaceBefore=6, spaceAfter=2)
+    name_label = ParagraphStyle("nl", fontSize=9,  fontName="Helvetica",      textColor=colors.HexColor("#6E737B"),
+                                 spaceAfter=8)
+    game_hdr   = ParagraphStyle("gh", fontSize=10, fontName="Helvetica-Bold", textColor=WHITE)
+    field_lbl  = ParagraphStyle("fl", fontSize=9,  fontName="Helvetica",      textColor=JAG_NAVY)
+    unit_lbl   = ParagraphStyle("ul", fontSize=8,  fontName="Helvetica",      textColor=colors.HexColor("#6E737B"))
+    notes_lbl  = ParagraphStyle("nl2",fontSize=8,  fontName="Helvetica",      textColor=colors.HexColor("#6E737B"),
+                                 spaceAfter=0)
+
+    def _athlete_story(athlete_name):
+        s = []
+        # ---- Top header bar ----
+        subtitle = f"{month_str}"
+        if group_name:
+            subtitle += f"  ·  {group_name}"
+        hdr = Table([[
+            Paragraph(label_display, hdr_title),
+            Paragraph(subtitle, hdr_sub),
+        ]], colWidths=[page_w * 0.6, page_w * 0.4])
+        hdr.setStyle(TableStyle([
+            ("BACKGROUND",    (0,0), (-1,-1), JAG_NAVY),
+            ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+            ("LEFTPADDING",   (0,0), (-1,-1), 10),
+            ("RIGHTPADDING",  (0,0), (-1,-1), 10),
+            ("TOPPADDING",    (0,0), (-1,-1), 7),
+            ("BOTTOMPADDING", (0,0), (-1,-1), 7),
+            ("ALIGN",         (1,0), (1,0),   "RIGHT"),
+        ]))
+        s.append(hdr)
+        s.append(Spacer(1, 3*mm))
+
+        # ---- Athlete name block ----
+        display = athlete_name if athlete_name else "______________________________"
+        s.append(Paragraph(display, name_style))
+        s.append(Paragraph("Athlete Name", name_label))
+
+        # ---- One table per game ----
+        for gf in games_fields:
+            game   = gf.get("game")
+            fields = gf.get("fields", [])
+            if not game or not fields:
+                continue
+
+            # Game name row (navy bar)
+            game_tbl = Table([[Paragraph(game["name"], game_hdr)]],
+                             colWidths=[page_w])
+            game_tbl.setStyle(TableStyle([
+                ("BACKGROUND",   (0,0), (-1,-1), JAG_NAVY),
+                ("LEFTPADDING",  (0,0), (-1,-1), 8),
+                ("TOPPADDING",   (0,0), (-1,-1), 5),
+                ("BOTTOMPADDING",(0,0), (-1,-1), 5),
+            ]))
+            s.append(game_tbl)
+
+            # Fields: 2-column grid — label+unit | blank value box
+            label_w = page_w * 0.55
+            value_w = page_w * 0.45
+            rows = []
+            for f in fields:
+                unit_txt = f" ({f['unit']})" if f.get("unit") else (" (seconds)" if f.get("type") == "time" else "")
+                lbl_cell = [Paragraph(f["label"], field_lbl),
+                            Paragraph(unit_txt, unit_lbl)] if unit_txt else [Paragraph(f["label"], field_lbl)]
+                rows.append([lbl_cell if len(lbl_cell) > 1 else lbl_cell[0], ""])
+
+            # Notes row
+            rows.append([Paragraph("Notes", notes_lbl), ""])
+
+            data_tbl = Table(rows, colWidths=[label_w, value_w],
+                             rowHeights=[9*mm] * len(rows))
+            style_cmds = [
+                ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
+                ("GRID",         (0,0), (-1,-1), 0.5, JAG_BORDER),
+                ("LEFTPADDING",  (0,0), (-1,-1), 6),
+                ("RIGHTPADDING", (0,0), (-1,-1), 6),
+                ("TOPPADDING",   (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING",(0,0), (-1,-1), 2),
+                ("BACKGROUND",   (0,0), (0,-1),  JAG_BG),
+            ]
+            # Alternate shading on value column
+            for i in range(len(rows)):
+                if i % 2 == 1:
+                    style_cmds.append(("BACKGROUND", (1,i), (1,i), colors.HexColor("#FAFAFA")))
+            data_tbl.setStyle(TableStyle(style_cmds))
+            s.append(data_tbl)
+            s.append(Spacer(1, 3*mm))
+
+        return s
 
     story = []
-
-    # ---- Header banner ----
-    page_w = page_size[0] - 20*mm
-    header_table = Table([[
-        Paragraph(f"{label_display}", title_style),
-        Paragraph(f"{month_str}{('  ·  ' + group_name) if group_name else ''}", sub_style),
-    ]], colWidths=[page_w * 0.5, page_w * 0.5])
-    header_table.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, -1), JAG_NAVY),
-        ("VALIGN",     (0, 0), (-1, -1), "MIDDLE"),
-        ("LEFTPADDING",  (0, 0), (-1, -1), 12),
-        ("RIGHTPADDING", (0, 0), (-1, -1), 12),
-        ("TOPPADDING",   (0, 0), (-1, -1), 8),
-        ("BOTTOMPADDING",(0, 0), (-1, -1), 8),
-        ("ALIGN", (1, 0), (1, 0), "RIGHT"),
-    ]))
-    story.append(header_table)
-    story.append(Spacer(1, 4*mm))
-
-    # ---- One table per selected game ----
-    for gf in games_fields:
-        game = gf.get("game")
-        fields = gf.get("fields", [])
-        if not game or not fields:
-            continue
-
-        story.append(Paragraph(game["name"], game_style))
-
-        # Build table: header row + one row per athlete
-        col_headers = ["Athlete Name"] + [f["label"] for f in fields]
-        num_cols = len(col_headers)
-        name_w = 50*mm
-        remaining = page_w - name_w
-        field_w = remaining / max(len(fields), 1)
-        col_widths = [name_w] + [field_w] * len(fields)
-
-        # Limit to reasonable column width
-        col_widths = [min(w, 55*mm) for w in col_widths]
-
-        header_row = [Paragraph(h, header_style) for h in col_headers]
-        data = [header_row]
-
-        row_height = 7*mm
-        for name in athletes:
-            row = [Paragraph(esc(name) if name else "", cell_style)]
-            row += [""] * len(fields)
-            data.append(row)
-
-        # Add at least 15 rows total
-        while len(data) < 16:
-            data.append([""] + [""] * len(fields))
-
-        tbl = Table(data, colWidths=col_widths, rowHeights=[8*mm] + [row_height] * (len(data) - 1))
-        style_cmds = [
-            ("BACKGROUND",   (0, 0), (-1, 0),   JAG_NAVY),
-            ("TEXTCOLOR",    (0, 0), (-1, 0),   WHITE),
-            ("FONTNAME",     (0, 0), (-1, 0),   "Helvetica-Bold"),
-            ("FONTSIZE",     (0, 0), (-1, 0),   8),
-            ("ALIGN",        (0, 0), (-1, 0),   "CENTER"),
-            ("VALIGN",       (0, 0), (-1, -1),  "MIDDLE"),
-            ("FONTNAME",     (0, 1), (-1, -1),  "Helvetica"),
-            ("FONTSIZE",     (0, 1), (-1, -1),  8),
-            ("GRID",         (0, 0), (-1, -1),  0.5, JAG_BORDER),
-            ("BACKGROUND",   (0, 1), (0, -1),   JAG_BG),
-            ("LEFTPADDING",  (0, 0), (-1, -1),  4),
-            ("RIGHTPADDING", (0, 0), (-1, -1),  4),
-        ]
-        # Alternate row shading
-        for i in range(1, len(data)):
-            if i % 2 == 0:
-                style_cmds.append(("BACKGROUND", (1, i), (-1, i), colors.HexColor("#FAFAFA")))
-        tbl.setStyle(TableStyle(style_cmds))
-        story.append(tbl)
-        story.append(Spacer(1, 4*mm))
+    # Ensure at least one sheet
+    sheets = athletes if athletes else [""]
+    for i, name in enumerate(sheets):
+        story.extend(_athlete_story(name))
+        if i < len(sheets) - 1:
+            story.append(PageBreak())
 
     doc.build(story)
     return buf.getvalue()
