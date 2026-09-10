@@ -857,9 +857,43 @@ def start_measurement_session(req, participant_id):
     try:
         participant = conn.execute("SELECT group_id FROM users WHERE id = ?", (participant_id,)).fetchone()
         participant_group_id = participant["group_id"] if participant else None
-        session_id = db.create_bare_session(conn, participant_id, date, coach["id"], group_id=participant_group_id,
-                                            session_label=session_label, session_month=session_month)
+        # Reuse existing session for this label rather than always creating a new one
+        session_id = db.find_or_create_session(conn, participant_id, date, coach["id"],
+                                               group_id=participant_group_id,
+                                               session_label=session_label, session_month=session_month)
         return Response(json.dumps({"session_id": session_id}), content_type="application/json")
+    finally:
+        conn.close()
+
+
+@router.get("/coach/participants/<int:participant_id>/measurement/phase-results")
+def measurement_phase_results(req, participant_id):
+    """Return existing results for a phase label as JSON, for pre-filling the form."""
+    import json
+    coach = require_role(req, "coach")
+    if not coach:
+        return Response('{"error":"unauthenticated"}', status=401, content_type="application/json")
+    label = req.query_get("label") or ""
+    if not label:
+        return Response("{}", content_type="application/json")
+    conn = db.get_conn()
+    try:
+        existing = db.find_session_by_label(conn, participant_id, label)
+        if not existing:
+            return Response("{}", content_type="application/json")
+        rows = conn.execute(
+            "SELECT game_key, field_key, value FROM measurement_results WHERE session_id = ?",
+            (existing["id"],)
+        ).fetchall()
+        data = {}
+        for r in rows:
+            gk, fk, v = r["game_key"], r["field_key"], r["value"]
+            if gk not in data:
+                data[gk] = {}
+            data[gk][fk] = v
+        return Response(json.dumps({"results": data, "session_id": existing["id"],
+                                    "session_month": existing.get("session_month") or ""}),
+                        content_type="application/json")
     finally:
         conn.close()
 

@@ -439,6 +439,54 @@ def measurement_games_form(participant_id):
         return sel ? sel.value : '';
       }}
 
+      // Pre-fill form when a phase label is selected
+      async function prefillFromPhase(label) {{
+        if (!label) return;
+        try {{
+          var resp = await fetch(baseUrl + '/phase-results?label=' + encodeURIComponent(label));
+          if (!resp.ok) return;
+          var data = await resp.json();
+          var results = data.results || {{}};
+          var prefilled = 0;
+          Object.keys(results).forEach(function(gameKey) {{
+            Object.keys(results[gameKey]).forEach(function(fieldKey) {{
+              var inp = document.getElementById('mg__' + gameKey + '__' + fieldKey);
+              if (inp) {{
+                inp.value = results[gameKey][fieldKey];
+                inp.style.background = '#fffbe6';  // subtle yellow tint to show pre-filled
+                prefilled++;
+              }}
+            }});
+          }});
+          // Reuse the existing session id so saves go to the right record
+          if (data.session_id) {{
+            sessionId = data.session_id;
+            var doneBtn = document.getElementById('mg-done-btn');
+            if (doneBtn) doneBtn.style.display = 'inline-block';
+          }}
+          // Pre-fill session month if form is still blank
+          if (data.session_month) {{
+            var monthInput = document.getElementById('session_month');
+            if (monthInput && !monthInput.value) monthInput.value = data.session_month;
+          }}
+          if (prefilled > 0) {{
+            var hint = document.getElementById('mg-hint');
+            if (hint) hint.textContent = prefilled + ' existing value(s) loaded — update any field and save to merge.';
+          }}
+        }} catch(e) {{}}
+      }}
+
+      var labelSel = document.getElementById('session_label');
+      if (labelSel) {{
+        labelSel.addEventListener('change', function() {{
+          // Reset session so the next ensureSession() picks up the existing one for this label
+          sessionId = null;
+          prefillFromPhase(labelSel.value);
+        }});
+        // Pre-fill on page load if a label is already selected
+        if (labelSel.value) prefillFromPhase(labelSel.value);
+      }}
+
       function markBtn(btn, state) {{
         if (state === 'saving') {{
           btn.textContent = '...';
