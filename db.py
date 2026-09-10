@@ -461,6 +461,39 @@ def delete_measurement_session(conn, session_id):
     conn.commit()
 
 
+def relabel_unlabelled_sessions(conn, group_id, session_label, session_month):
+    """Tag all unlabelled sessions for athletes in a group with a phase label and month.
+    Only touches sessions that have no session_label yet.
+    Where an athlete already has a labelled session for this label, their unlabelled
+    sessions are left alone (to avoid creating a second labelled session for the same phase).
+    Returns the number of sessions updated."""
+    date = session_month + "-01" if session_month else None
+    # Find all athletes in this group
+    athletes = conn.execute(
+        "SELECT id FROM users WHERE group_id = ? AND role = 'participant'", (group_id,)
+    ).fetchall()
+    updated = 0
+    for athlete in athletes:
+        pid = athlete["id"]
+        # Skip if they already have a session with this label
+        existing = conn.execute(
+            "SELECT id FROM measurement_sessions WHERE participant_id = ? AND session_label = ?",
+            (pid, session_label),
+        ).fetchone()
+        if existing:
+            continue
+        # Update their most recent unlabelled session
+        rows = conn.execute(
+            "UPDATE measurement_sessions SET session_label = ?, session_month = ?, date = COALESCE(?, date) "
+            "WHERE participant_id = ? AND (session_label IS NULL OR session_label = '') "
+            "ORDER BY id DESC LIMIT 1",
+            (session_label, session_month, date, pid),
+        )
+        updated += rows.rowcount
+    conn.commit()
+    return updated
+
+
 def find_session_by_label(conn, participant_id, session_label):
     """Return existing session dict for this athlete+label, or None."""
     return conn.execute(

@@ -918,7 +918,37 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder groups" style="color:var(--jag-muted);cursor:grab;font-size:16px;">&#9776;</span>' if is_admin else ""
         summary_link = (f'<a href="/coach/groups/{group["id"]}/achievement-summary" class="btn btn-sm" style="font-size:12px;background:var(--jag-green);color:var(--jag-navy);font-weight:600;border:none;">&#128200; Group Stats</a>'
                         f'<a href="/coach/groups/{group["id"]}/scores" class="btn btn-sm btn-ghost" style="font-size:12px;">&#128203; Scores Table</a>')
+        type_opts_rl = "".join(
+            f'<option value="{s["key"]}">{esc(s["label"])}</option>'
+            for s in SESSION_TYPES
+        )
+        relabel_form = f"""
+        <div id="relabel-{gkey}" style="display:none;margin-top:10px;padding:12px 14px;
+             background:#fffbe6;border:1px solid #F0A82E;border-radius:8px;font-size:13px;">
+          <strong style="display:block;margin-bottom:8px;">Tag Existing Unlabelled Sessions</strong>
+          <p style="margin:0 0 10px;color:#6E737B;font-size:12px;">
+            Assigns a phase label to each athlete's most recent unlabelled session.
+            Athletes who already have that label are skipped.
+          </p>
+          <form method="post" action="/coach/groups/{group['id']}/relabel-sessions"
+                style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+            <div>
+              <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Phase</label>
+              <select name="session_label" required style="font-size:13px;min-width:160px;">{type_opts_rl}</select>
+            </div>
+            <div>
+              <label style="display:block;font-size:12px;font-weight:600;margin-bottom:4px;">Month</label>
+              {_month_select(name="session_month")}
+            </div>
+            <button type="submit" class="btn btn-primary" style="font-size:12px;"
+                    onclick="return confirm('Tag all unlabelled sessions for this group?');">Apply</button>
+          </form>
+        </div>""" if is_admin else ""
         admin_btns = f"""<a href="/coach/groups/{group['id']}/edit" class="btn btn-ghost btn-sm" style="font-size:12px;">Edit</a>
+            <button class="btn btn-ghost btn-sm" style="font-size:12px;"
+                    onclick="var el=document.getElementById('relabel-{gkey}');el.style.display=el.style.display==='none'?'block':'none';">
+              &#127991; Tag Sessions
+            </button>
             <form method="post" action="/coach/groups/{group['id']}/delete" style="display:inline"
               onsubmit="return confirm('Delete group \\'{esc(group['name'])}\\'? Participants move to ungrouped.');">
               <button type="submit" class="btn btn-ghost btn-sm" style="font-size:12px;">Delete</button>
@@ -941,6 +971,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
               {admin_btns}
             </div>
           </div>
+          {relabel_form}
           {tiles_wrap}
         </div>"""
 

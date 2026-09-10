@@ -1575,6 +1575,25 @@ def group_delete(req, group_id):
         conn.close()
 
 
+@router.post("/coach/groups/<int:group_id>/relabel-sessions")
+def group_relabel_sessions(req, group_id):
+    """Bulk-tag all unlabelled sessions for a group with a phase label and month."""
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    session_label = req.form_get("session_label") or None
+    session_month = req.form_get("session_month") or None
+    if not session_label or not session_month:
+        return flash_redirect("/coach", "Please select both a phase and a month.")
+    conn = db.get_conn()
+    try:
+        updated = db.relabel_unlabelled_sessions(conn, group_id, session_label, session_month)
+    finally:
+        conn.close()
+    label_display = SESSION_LABEL_MAP.get(session_label, session_label)
+    return flash_redirect("/coach", f"{updated} session(s) labelled as '{label_display}'.")
+
+
 # ------------------------------------------------------------------ resources
 
 
