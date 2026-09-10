@@ -1063,6 +1063,31 @@ def reset_participant_password(req, participant_id):
         conn.close()
 
 
+@router.get("/coach/participants/<int:participant_id>/measurement/<int:session_id>/edit")
+def edit_measurement_session(req, participant_id, session_id):
+    """Render the measurement form pre-filled with an existing session's results."""
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        session = conn.execute(
+            "SELECT * FROM measurement_sessions WHERE id = ? AND participant_id = ?",
+            (session_id, participant_id),
+        ).fetchone()
+        if not session:
+            return flash_redirect(f"/coach/participants/{participant_id}", "Session not found.")
+        participant = conn.execute("SELECT * FROM users WHERE id = ?", (participant_id,)).fetchone()
+    finally:
+        conn.close()
+    s = dict(session)
+    return Response(views.edit_measurement_session_page(
+        coach, dict(participant), participant_id,
+        selected_label=s.get("session_label"),
+        selected_month=s.get("session_month"),
+    ))
+
+
 @router.post("/coach/participants/<int:participant_id>/measurement/<int:session_id>/delete")
 def delete_measurement_session(req, participant_id, session_id):
     coach = require_role(req, "coach")

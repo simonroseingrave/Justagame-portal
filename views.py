@@ -336,7 +336,7 @@ def _measurement_game_fieldset(game):
     """
 
 
-def measurement_games_form(participant_id):
+def measurement_games_form(participant_id, selected_label=None, selected_month=None):
     """The coach-facing entry form for recording a Measurement Games test
     session -- one date, with a fieldset per game grouped under each
     section. Each field has its own quick-save button; the session is
@@ -659,7 +659,7 @@ def measurement_games_form(participant_id):
       <h3>Base Adaptability Testing</h3>
       <p class="muted">Select the test phase and month, then enter values and click <strong>&#10003; Save</strong> next to each field.
       The Skipping Rope Sprint average is calculated automatically from Time 1/2/3.</p>
-      {_session_label_pickers()}
+      {_session_label_pickers(selected_label=selected_label, selected_month=selected_month)}
       {sections_html}
       {sport_ui_html}
       <div style="margin-top:16px; display:flex; gap:12px; align-items:center;">
@@ -708,13 +708,17 @@ def _measurement_session_card(session, show_delete=False, participant_id=None):
         </div>
         """)
 
-    delete_html = ""
-    if show_delete:
-        delete_html = f"""
-        <form method="post" action="/coach/participants/{participant_id}/measurement/{session['id']}/delete"
-              style="display:inline" onsubmit="return confirm('Delete this Measurement Games session?');">
-          <button type="submit" class="btn btn-ghost btn-sm">Delete</button>
-        </form>
+    action_html = ""
+    if show_delete and participant_id:
+        action_html = f"""
+        <div style="display:flex;gap:8px;align-items:center;">
+          <a href="/coach/participants/{participant_id}/measurement/{session['id']}/edit"
+             class="btn btn-ghost btn-sm">&#9998; Edit</a>
+          <form method="post" action="/coach/participants/{participant_id}/measurement/{session['id']}/delete"
+                style="display:inline" onsubmit="return confirm('Delete this Measurement Games session?');">
+            <button type="submit" class="btn btn-ghost btn-sm">Delete</button>
+          </form>
+        </div>
         """
 
     display_label = _session_display_label(session)
@@ -722,7 +726,7 @@ def _measurement_session_card(session, show_delete=False, participant_id=None):
     <div class="card mg-session-card">
       <div class="mg-session-head">
         <strong>{esc(display_label)}</strong>
-        {delete_html}
+        {action_html}
       </div>
       {''.join(game_blocks)}
     </div>
@@ -3751,6 +3755,24 @@ def confirm_replace_session_page(coach, participant, results, session_label, ses
       </form>
     </div>"""
     return layout(f"Merge Session — {participant['name']}", body, user=coach, active_nav="dashboard")
+
+
+def edit_measurement_session_page(coach, participant, participant_id, selected_label, selected_month):
+    """Standalone page for editing an existing measurement session — form is pre-filled via JS."""
+    form_html = measurement_games_form(participant_id,
+                                       selected_label=selected_label,
+                                       selected_month=selected_month)
+    back_url = f"/coach/participants/{participant_id}"
+    body = f"""
+    <div class="page-head" style="display:flex;align-items:center;gap:16px;">
+      <a href="{back_url}" class="btn btn-ghost btn-sm">&#8592; Back</a>
+      <h1 style="margin:0;">Edit Session &mdash; {esc(participant.get('name',''))}</h1>
+    </div>
+    <p class="muted">Existing values are loaded automatically. Update any field and click <strong>&#10003; Save</strong>
+       — only the fields you save will be changed.</p>
+    {form_html}
+    """
+    return layout(f"Edit Session — {participant.get('name','')}", body, user=coach, active_nav="dashboard")
 
 
 def account_page(user, profile_error=None, profile_success=None, password_error=None, password_success=None):
