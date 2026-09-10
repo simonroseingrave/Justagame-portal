@@ -979,19 +979,28 @@ def log_measurement_session(req, participant_id):
                     label_display, existing_month
                 ))
 
-        # Delete existing session for this label if replacing
+        # Merge new results into existing session for this label
         if session_label and confirm_replace:
             existing = db.find_session_by_label(conn, participant_id, session_label)
             if existing:
-                db.delete_measurement_session(conn, existing["id"])
-
-        db.create_measurement_session(conn, participant_id, date, coach["id"], results,
-                                      group_id=participant_group_id,
-                                      session_label=session_label, session_month=session_month)
+                for (game_key, field_key, value) in results:
+                    db.upsert_measurement_result(conn, existing["id"], game_key, field_key, value)
+                conn.commit()
+            else:
+                db.create_measurement_session(conn, participant_id, date, coach["id"], results,
+                                              group_id=participant_group_id,
+                                              session_label=session_label, session_month=session_month)
+        else:
+            db.create_measurement_session(conn, participant_id, date, coach["id"], results,
+                                          group_id=participant_group_id,
+                                          session_label=session_label, session_month=session_month)
     finally:
         conn.close()
     label_display = SESSION_LABEL_MAP.get(session_label, "") if session_label else ""
-    msg = f"{label_display} results saved." if label_display else "Measurement Games results saved."
+    if label_display:
+        msg = f"{label_display} results merged in." if confirm_replace else f"{label_display} results saved."
+    else:
+        msg = "Measurement Games results saved."
     return flash_redirect(f"/coach/participants/{participant_id}", msg)
 
 

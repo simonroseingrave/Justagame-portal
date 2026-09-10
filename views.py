@@ -3669,7 +3669,7 @@ def simple_message_page(title, message, user=None):
 
 def confirm_replace_session_page(coach, participant, results, session_label, session_month,
                                   label_display, existing_month):
-    """Warn the coach that a session with this label already exists, ask whether to replace."""
+    """Warn the coach that a session with this label already exists, offer to merge new results in."""
     import datetime as _dt2
     try:
         em = _dt2.datetime.strptime(existing_month, "%Y-%m")
@@ -3677,30 +3677,32 @@ def confirm_replace_session_page(coach, participant, results, session_label, ses
     except Exception:
         existing_month_str = existing_month
     # Re-encode all results as hidden fields so they survive the round-trip
-    # results is a list of (game_key, field_key, value) tuples
     hidden_results = "".join(
         f'<input type="hidden" name="mg__{gk}__{fk}" value="{v}" />'
         for gk, fk, v in results
     )
     pid = participant["id"]
     body = f"""
-    <div class="card" style="max-width:520px;">
+    <div class="card" style="max-width:540px;">
       <h2 style="margin-top:0;">&#9888; Session Already Recorded</h2>
       <p>A <strong>{esc(label_display)}</strong> session for <strong>{esc(participant['name'])}</strong>
          was already recorded in <strong>{esc(existing_month_str)}</strong>.</p>
-      <p>Do you want to <strong>replace</strong> it with the new data you just entered?</p>
+      <p>The new results you just entered will be <strong>merged in</strong> — any fields you filled in
+         will be updated, and any fields you left blank will keep their existing values.</p>
+      <p style="font-size:0.85em;color:#6E737B;">This is useful when testing spans multiple sessions —
+         just enter the new game results and confirm to add them alongside what's already there.</p>
       <form method="post" action="/coach/participants/{pid}/measurement/log">
         <input type="hidden" name="session_label" value="{esc(session_label)}" />
         <input type="hidden" name="session_month" value="{esc(session_month or '')}" />
         <input type="hidden" name="confirm_replace" value="1" />
         {hidden_results}
         <div style="display:flex;gap:10px;margin-top:20px;flex-wrap:wrap;">
-          <button type="submit" class="btn btn-primary">Yes, Replace It</button>
+          <button type="submit" class="btn btn-primary">Yes, Merge Results In</button>
           <a href="/coach/participants/{pid}" class="btn btn-ghost">Cancel — Keep Existing</a>
         </div>
       </form>
     </div>"""
-    return layout(f"Replace Session — {participant['name']}", body, user=coach, active_nav="dashboard")
+    return layout(f"Merge Session — {participant['name']}", body, user=coach, active_nav="dashboard")
 
 
 def account_page(user, profile_error=None, profile_success=None, password_error=None, password_success=None):
