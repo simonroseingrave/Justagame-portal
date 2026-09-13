@@ -646,22 +646,42 @@ def group_testing_get(req):
         athletes = []
         game = None
         existing = {}
+        completion_data = {}   # {athlete_id: set(game_keys with any result)}
 
-        if group_id and session_label and game_key:
-            game = find_measurement_game(game_key)
-            athletes = conn.execute(
+        # Load all athletes in the group whenever group + phase are selected
+        if group_id and session_label:
+            all_athletes = conn.execute(
                 "SELECT id, name FROM users WHERE group_id = ? AND role = 'participant' ORDER BY name",
                 (group_id,)
             ).fetchall()
-            # Load existing results for each athlete for this phase+game
-            for a in athletes:
-                sess = db.find_session_by_label(conn, a["id"], session_label)
-                if sess:
-                    rows = conn.execute(
-                        "SELECT field_key, value FROM measurement_results WHERE session_id = ? AND game_key = ?",
-                        (sess["id"], game_key)
-                    ).fetchall()
-                    existing[a["id"]] = {r["field_key"]: r["value"] for r in rows}
+            if all_athletes:
+                athlete_ids = [a["id"] for a in all_athletes]
+                placeholders = ",".join("?" * len(athlete_ids))
+                done_rows = conn.execute(
+                    f"SELECT ms.participant_id, mr.game_key "
+                    f"FROM measurement_sessions ms "
+                    f"JOIN measurement_results mr ON mr.session_id = ms.id "
+                    f"WHERE ms.session_label = ? AND ms.participant_id IN ({placeholders}) "
+                    f"GROUP BY ms.participant_id, mr.game_key",
+                    [session_label] + athlete_ids,
+                ).fetchall()
+                for r in done_rows:
+                    completion_data.setdefault(r["participant_id"], set()).add(r["game_key"])
+
+            # Always expose all_athletes for the name map in the completion matrix
+            athletes = list(all_athletes)
+
+            # If a specific game was also selected, load existing results per athlete
+            if game_key:
+                game = find_measurement_game(game_key)
+                for a in athletes:
+                    sess = db.find_session_by_label(conn, a["id"], session_label)
+                    if sess:
+                        rows = conn.execute(
+                            "SELECT field_key, value FROM measurement_results WHERE session_id = ? AND game_key = ?",
+                            (sess["id"], game_key)
+                        ).fetchall()
+                        existing[a["id"]] = {r["field_key"]: r["value"] for r in rows}
     finally:
         conn.close()
 
@@ -674,6 +694,7 @@ def group_testing_get(req):
         athletes=[dict(a) for a in athletes],
         game=game,
         existing=existing,
+        completion_data={k: list(v) for k, v in completion_data.items()},
     ))
 
 
@@ -820,16 +841,32 @@ def session_sheet_pdf_post(req):
     try:
         group_name = ""
         athletes = []
+        prefilled = {}   # {athlete_name: {game_key: {field_key: value}}}
         if group_id_raw.isdigit():
             gid = int(group_id_raw)
             g = conn.execute("SELECT name FROM participant_groups WHERE id = ?", (gid,)).fetchone()
             group_name = g["name"] if g else ""
             if include_names:
                 rows = conn.execute(
-                    "SELECT name FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name",
+                    "SELECT id, name FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name",
                     (gid,),
                 ).fetchall()
                 athletes = [r["name"] for r in rows]
+                # Load existing results for the selected phase so the PDF can be pre-populated
+                if session_label:
+                    for r in rows:
+                        sess = db.find_session_by_label(conn, r["id"], session_label)
+                        if sess:
+                            res_rows = conn.execute(
+                                "SELECT game_key, field_key, value FROM measurement_results "
+                                "WHERE session_id = ? AND value IS NOT NULL AND value != ''",
+                                (sess["id"],),
+                            ).fetchall()
+                            athlete_results = {}
+                            for rr in res_rows:
+                                athlete_results.setdefault(rr["game_key"], {})[rr["field_key"]] = rr["value"]
+                            if athlete_results:
+                                prefilled[r["name"]] = athlete_results
         if num_blank_rows > 0:
             athletes += [""] * num_blank_rows
     finally:
@@ -866,7 +903,8 @@ def session_sheet_pdf_post(req):
 
     try:
         pdf_bytes = views.session_sheet_pdf(
-            label_display, month_str, group_name, athletes, list(games_fields.values())
+            label_display, month_str, group_name, athletes,
+            list(games_fields.values()), prefilled=prefilled,
         )
     except Exception:
         import traceback

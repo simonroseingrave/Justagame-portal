@@ -3323,10 +3323,13 @@ def session_sheet_page(coach, groups, session_types):
     return layout("Session Recording Sheet", body, user=coach, active_nav="session_sheet")
 
 
-def session_sheet_pdf(label_display, month_str, group_name, athletes, games_fields):
+def session_sheet_pdf(label_display, month_str, group_name, athletes, games_fields,
+                      prefilled=None):
     """Generate a per-athlete portrait PDF recording sheet — one page per athlete.
     games_fields: list of {{'game': game_dict, 'fields': [field_dict, ...]}}
-    athletes: list of name strings (may include empty strings for blank sheets)
+    athletes:     list of name strings (may include empty strings for blank sheets)
+    prefilled:    optional dict {{athlete_name: {{game_key: {{field_key: value}}}}}}
+                  — existing values are printed in gold; blank fields stay empty.
     """
     import io
     from reportlab.lib.pagesizes import A4
@@ -3336,11 +3339,16 @@ def session_sheet_pdf(label_display, month_str, group_name, athletes, games_fiel
                                     Paragraph, Spacer, PageBreak)
     from reportlab.lib.styles import ParagraphStyle
 
-    JAG_NAVY  = colors.HexColor("#2D323B")
-    JAG_GOLD  = colors.HexColor("#F0A82E")
-    JAG_BG    = colors.HexColor("#F3F4F5")
-    JAG_BORDER= colors.HexColor("#DDE0E3")
-    WHITE     = colors.white
+    prefilled = prefilled or {}
+
+    JAG_NAVY   = colors.HexColor("#2D323B")
+    JAG_GOLD   = colors.HexColor("#F0A82E")
+    JAG_BG     = colors.HexColor("#F3F4F5")
+    JAG_BORDER = colors.HexColor("#DDE0E3")
+    GOLD_LIGHT = colors.HexColor("#FFF8E7")
+    GREEN_LIGHT= colors.HexColor("#D1FAE5")
+    WHITE      = colors.white
+    MUTED      = colors.HexColor("#6E737B")
 
     buf = io.BytesIO()
     doc = SimpleDocTemplate(buf, pagesize=A4,
@@ -3349,17 +3357,25 @@ def session_sheet_pdf(label_display, month_str, group_name, athletes, games_fiel
 
     page_w = A4[0] - 28*mm   # usable width
 
-    hdr_title  = ParagraphStyle("ht", fontSize=13, fontName="Helvetica-Bold", textColor=WHITE)
-    hdr_sub    = ParagraphStyle("hs", fontSize=9,  fontName="Helvetica",      textColor=JAG_GOLD)
-    name_style = ParagraphStyle("ns", fontSize=18, fontName="Helvetica-Bold", textColor=JAG_NAVY,
-                                 spaceBefore=6, spaceAfter=2)
-    name_label = ParagraphStyle("nl", fontSize=9,  fontName="Helvetica",      textColor=colors.HexColor("#6E737B"),
-                                 spaceAfter=8)
-    game_hdr   = ParagraphStyle("gh", fontSize=10, fontName="Helvetica-Bold", textColor=WHITE)
-    field_lbl  = ParagraphStyle("fl", fontSize=9,  fontName="Helvetica",      textColor=JAG_NAVY)
-    unit_lbl   = ParagraphStyle("ul", fontSize=8,  fontName="Helvetica",      textColor=colors.HexColor("#6E737B"))
+    hdr_title   = ParagraphStyle("ht",  fontSize=13, fontName="Helvetica-Bold", textColor=WHITE)
+    hdr_sub     = ParagraphStyle("hs",  fontSize=9,  fontName="Helvetica",      textColor=JAG_GOLD)
+    name_style  = ParagraphStyle("ns",  fontSize=18, fontName="Helvetica-Bold", textColor=JAG_NAVY,
+                                  spaceBefore=6, spaceAfter=2)
+    name_label  = ParagraphStyle("nl",  fontSize=9,  fontName="Helvetica",      textColor=MUTED,
+                                  spaceAfter=8)
+    game_hdr    = ParagraphStyle("gh",  fontSize=10, fontName="Helvetica-Bold", textColor=WHITE)
+    game_done   = ParagraphStyle("gd",  fontSize=8,  fontName="Helvetica-Bold", textColor=JAG_GOLD)
+    field_lbl   = ParagraphStyle("fl",  fontSize=9,  fontName="Helvetica",      textColor=JAG_NAVY)
+    unit_lbl    = ParagraphStyle("ul",  fontSize=8,  fontName="Helvetica",      textColor=MUTED)
+    val_filled  = ParagraphStyle("vf",  fontSize=11, fontName="Helvetica-Bold", textColor=JAG_NAVY,
+                                  alignment=1)  # centred
+    val_partial = ParagraphStyle("vp",  fontSize=8,  fontName="Helvetica",      textColor=MUTED,
+                                  alignment=1)
+
     def _athlete_story(athlete_name):
         s = []
+        athlete_data = prefilled.get(athlete_name, {})  # {game_key: {field_key: value}}
+
         # ---- Top header bar ----
         subtitle = f"{month_str}"
         if group_name:
@@ -3392,50 +3408,96 @@ def session_sheet_pdf(label_display, month_str, group_name, athletes, games_fiel
             if not game or not fields:
                 continue
 
-            # Game name row (navy bar)
-            game_tbl = Table([[Paragraph(game["name"], game_hdr)]],
-                             colWidths=[page_w])
-            game_tbl.setStyle(TableStyle([
-                ("BACKGROUND",   (0,0), (-1,-1), JAG_NAVY),
-                ("LEFTPADDING",  (0,0), (-1,-1), 8),
-                ("TOPPADDING",   (0,0), (-1,-1), 5),
-                ("BOTTOMPADDING",(0,0), (-1,-1), 5),
-            ]))
+            game_results = athlete_data.get(game["key"], {})
+            filled_count = sum(1 for f in fields if game_results.get(f["key"], "") != "")
+            all_done     = filled_count == len(fields)
+            any_done     = filled_count > 0
+
+            # Game name header — show "✓ Complete" badge when all fields filled
+            if all_done and athlete_name:
+                game_hdr_row = [[
+                    Paragraph(game["name"], game_hdr),
+                    Paragraph("✓  Complete", game_done),
+                ]]
+                game_tbl = Table(game_hdr_row, colWidths=[page_w * 0.75, page_w * 0.25])
+                game_tbl.setStyle(TableStyle([
+                    ("BACKGROUND",    (0,0), (-1,-1), JAG_NAVY),
+                    ("LEFTPADDING",   (0,0), (-1,-1), 8),
+                    ("RIGHTPADDING",  (0,0), (-1,-1), 8),
+                    ("TOPPADDING",    (0,0), (-1,-1), 5),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+                    ("ALIGN",         (1,0), (1,0),   "RIGHT"),
+                    ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+                ]))
+            else:
+                game_tbl = Table([[Paragraph(game["name"], game_hdr)]], colWidths=[page_w])
+                game_tbl.setStyle(TableStyle([
+                    ("BACKGROUND",    (0,0), (-1,-1), JAG_NAVY),
+                    ("LEFTPADDING",   (0,0), (-1,-1), 8),
+                    ("TOPPADDING",    (0,0), (-1,-1), 5),
+                    ("BOTTOMPADDING", (0,0), (-1,-1), 5),
+                ]))
             s.append(game_tbl)
 
-            # Fields: 2-column grid — label+unit | blank value box
+            # Fields: label col | value col
             label_w = page_w * 0.55
             value_w = page_w * 0.45
             rows = []
+            filled_flags = []   # parallel list: True if this row has a value
             for f in fields:
-                unit_txt = f" ({f['unit']})" if f.get("unit") else (" (seconds)" if f.get("type") == "time" else "")
-                lbl_cell = [Paragraph(f["label"], field_lbl),
-                            Paragraph(unit_txt, unit_lbl)] if unit_txt else [Paragraph(f["label"], field_lbl)]
-                rows.append([lbl_cell if len(lbl_cell) > 1 else lbl_cell[0], ""])
+                unit_txt = (f" ({f['unit']})" if f.get("unit")
+                            else (" (seconds)" if f.get("type") == "time" else ""))
+                lbl_para = Paragraph(f["label"], field_lbl)
+                if unit_txt:
+                    lbl_cell = [lbl_para, Paragraph(unit_txt, unit_lbl)]
+                else:
+                    lbl_cell = lbl_para
+
+                existing_val = game_results.get(f["key"], "")
+                if existing_val != "" and athlete_name:
+                    val_cell = Paragraph(str(existing_val), val_filled)
+                    filled_flags.append(True)
+                else:
+                    val_cell = ""
+                    filled_flags.append(False)
+
+                rows.append([lbl_cell, val_cell])
 
             data_tbl = Table(rows, colWidths=[label_w, value_w],
                              rowHeights=[9*mm] * len(rows))
             style_cmds = [
-                ("VALIGN",       (0,0), (-1,-1), "MIDDLE"),
-                ("GRID",         (0,0), (-1,-1), 0.5, JAG_BORDER),
-                ("LEFTPADDING",  (0,0), (-1,-1), 6),
-                ("RIGHTPADDING", (0,0), (-1,-1), 6),
-                ("TOPPADDING",   (0,0), (-1,-1), 2),
-                ("BOTTOMPADDING",(0,0), (-1,-1), 2),
-                ("BACKGROUND",   (0,0), (0,-1),  JAG_BG),
+                ("VALIGN",        (0,0), (-1,-1), "MIDDLE"),
+                ("GRID",          (0,0), (-1,-1), 0.5, JAG_BORDER),
+                ("LEFTPADDING",   (0,0), (-1,-1), 6),
+                ("RIGHTPADDING",  (0,0), (-1,-1), 6),
+                ("TOPPADDING",    (0,0), (-1,-1), 2),
+                ("BOTTOMPADDING", (0,0), (-1,-1), 2),
+                ("BACKGROUND",    (0,0), (0,-1),  JAG_BG),
             ]
-            # Alternate shading on value column
-            for i in range(len(rows)):
-                if i % 2 == 1:
+            for i, is_filled in enumerate(filled_flags):
+                if is_filled:
+                    # Gold background for pre-filled values
+                    style_cmds.append(("BACKGROUND", (1,i), (1,i), GOLD_LIGHT))
+                elif i % 2 == 1:
                     style_cmds.append(("BACKGROUND", (1,i), (1,i), colors.HexColor("#FAFAFA")))
+
             data_tbl.setStyle(TableStyle(style_cmds))
             s.append(data_tbl)
             s.append(Spacer(1, 3*mm))
 
+        # ---- Legend (only on pages with pre-filled data) ----
+        if athlete_name and athlete_data:
+            legend_style = ParagraphStyle("leg", fontSize=7, fontName="Helvetica",
+                                           textColor=MUTED, spaceBefore=4)
+            s.append(Paragraph(
+                "<font color='#F0A82E'>■</font>  Gold = already recorded   "
+                "□  White = still to complete",
+                legend_style,
+            ))
+
         return s
 
     story = []
-    # Ensure at least one sheet
     sheets = athletes if athletes else [""]
     for i, name in enumerate(sheets):
         story.extend(_athlete_story(name))
