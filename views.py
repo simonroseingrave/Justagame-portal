@@ -133,6 +133,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
                 links.append(("/coach/participants/new", "Add Participant", "new_participant"))
             links.append(("/coach/session", "Record Session", "session"))
             links.append(("/coach/group-testing", "Group Testing", "group_testing"))
+            links.append(("/coach/completion-tracker", "Completion", "completion_tracker"))
             links.append(("/coach/session-sheet", "Session Sheet", "session_sheet"))
             links.append(("/coach/resources", "Resources", "resources"))
             if user.get("is_admin"):
@@ -2621,6 +2622,186 @@ def all_progress_page(coach, groups_data, sport_filter=None):
 
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
+# Completion Tracker
+# ---------------------------------------------------------------------------
+
+def completion_tracker_page(coach, groups, selected_group_id=None, selected_label=None,
+                             selected_month=None, selected_game_keys=None,
+                             athletes=None, completion=None):
+    """Matrix: athletes × selected games — green tick if complete, link to entry if not."""
+    athletes        = athletes or []
+    completion      = completion or {}   # {athlete_id: set of game_keys with data}
+    selected_game_keys = selected_game_keys or []
+    all_games       = all_measurement_games()
+
+    group_opts = '<option value="">— Select group —</option>' + "".join(
+        f'<option value="{g["id"]}" {"selected" if g["id"] == selected_group_id else ""}>{esc(g["name"])}</option>'
+        for g in groups
+    )
+    type_opts = '<option value="">— Select phase —</option>' + "".join(
+        f'<option value="{s["key"]}" {"selected" if s["key"] == selected_label else ""}>{esc(s["label"])}</option>'
+        for s in SESSION_TYPES
+    )
+
+    # Game checkboxes
+    game_checkboxes = ""
+    for game in all_games:
+        checked = "checked" if game["key"] in selected_game_keys else ""
+        game_checkboxes += f"""
+        <label style="display:flex;align-items:center;gap:7px;font-size:13px;cursor:pointer;
+                      padding:5px 10px;border:1px solid #DDE0E3;border-radius:6px;
+                      background:{'#2D323B' if checked else '#fff'};
+                      color:{'#F0A82E' if checked else '#2D323B'};">
+          <input type="checkbox" name="games" value="{esc(game['key'])}" {checked}
+                 style="width:auto;margin:0;" />
+          {esc(game['name'])}
+        </label>"""
+
+    selector_form = f"""
+    <form method="get" action="/coach/completion-tracker">
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:16px;">
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Group</label>
+          <select name="group_id" required style="min-width:180px;">{group_opts}</select>
+        </div>
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Test Phase</label>
+          <select name="session_label" required style="min-width:180px;">{type_opts}</select>
+        </div>
+        <div>
+          <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Month</label>
+          {_month_select(name="session_month", selected=selected_month)}
+        </div>
+        <button type="submit" class="btn btn-primary" style="white-space:nowrap;">View Tracker</button>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:8px;">
+          Games to track <span style="font-weight:400;color:#6E737B;">(select all that apply)</span>
+        </label>
+        <div style="display:flex;flex-wrap:wrap;gap:8px;">{game_checkboxes}</div>
+      </div>
+    </form>"""
+
+    matrix_html = ""
+    if athletes and selected_game_keys:
+        games_to_show = [g for g in all_games if g["key"] in selected_game_keys]
+
+        # Column headers — abbreviated for space
+        col_headers = "".join(
+            f'<th title="{esc(g["name"])}" style="padding:8px 6px;font-size:11px;font-weight:700;'
+            f'text-align:center;min-width:70px;max-width:90px;white-space:nowrap;overflow:hidden;'
+            f'text-overflow:ellipsis;">{esc(g["name"])}</th>'
+            for g in games_to_show
+        )
+
+        # Summary counts per game
+        total = len(athletes)
+        game_totals = {g["key"]: sum(1 for a in athletes if g["key"] in completion.get(a["id"], set())) for g in games_to_show}
+
+        summary_cells = "".join(
+            f'<td style="text-align:center;font-size:12px;color:#6E737B;padding:4px 6px;">'
+            f'{game_totals[g["key"]]}/{total}</td>'
+            for g in games_to_show
+        )
+
+        label_display = SESSION_LABEL_MAP.get(selected_label, selected_label or "")
+        try:
+            import datetime as _dt2
+            em = _dt2.datetime.strptime(selected_month, "%Y-%m")
+            month_display = em.strftime("%B %Y")
+        except Exception:
+            month_display = selected_month or ""
+
+        # Entry URL base for "not done" cells
+        base_params = f"group_id={selected_group_id}&session_label={selected_label or ''}&session_month={selected_month or ''}"
+
+        rows_html = ""
+        for a in athletes:
+            done = completion.get(a["id"], set())
+            cells = ""
+            for g in games_to_show:
+                if g["key"] in done:
+                    cells += (
+                        f'<td style="text-align:center;padding:6px;">'
+                        f'<a href="/coach/participants/{a["id"]}" title="View results"'
+                        f'   style="display:inline-block;background:#d1fae5;color:#065f46;'
+                        f'          border-radius:50%;width:28px;height:28px;line-height:28px;'
+                        f'          font-size:15px;text-decoration:none;font-weight:700;">&#10003;</a>'
+                        f'</td>'
+                    )
+                else:
+                    entry_url = f'/coach/group-testing?{base_params}&game_key={g["key"]}'
+                    cell_title = f'Enter {esc(g["name"])} for {esc(a["name"])}'
+                    cells += (
+                        f'<td style="text-align:center;padding:6px;">'
+                        f'<a href="{entry_url}" title="{cell_title}"'
+                        f'   style="display:inline-block;background:#fee2e2;color:#991b1b;'
+                        f'          border-radius:50%;width:28px;height:28px;line-height:26px;'
+                        f'          font-size:17px;text-decoration:none;border:1px solid #fca5a5;">&#8212;</a>'
+                        f'</td>'
+                    )
+            rows_html += f'<tr style="border-bottom:1px solid #DDE0E3;"><td style="font-weight:600;padding:8px 12px;white-space:nowrap;">{esc(a["name"])}</td>{cells}</tr>'
+
+        # Overall completion %
+        total_cells = total * len(games_to_show)
+        done_cells = sum(len(completion.get(a["id"], set()) & set(g["key"] for g in games_to_show)) for a in athletes)
+        pct = round(100 * done_cells / total_cells) if total_cells else 0
+        bar_color = "#10b981" if pct == 100 else ("#F0A82E" if pct >= 50 else "#ef4444")
+
+        matrix_html = f"""
+        <div class="card" style="overflow-x:auto;margin-top:16px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:16px;">
+            <div>
+              <h3 style="margin:0 0 2px;">{esc(label_display)} &mdash; {esc(month_display)}</h3>
+              <span class="muted" style="font-size:13px;">{total} athletes &middot; {len(games_to_show)} games selected</span>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:22px;font-weight:700;color:{bar_color};">{pct}%</div>
+              <div style="font-size:12px;color:#6E737B;">overall completion</div>
+              <div style="margin-top:4px;height:6px;width:120px;background:#DDE0E3;border-radius:3px;">
+                <div style="height:100%;width:{pct}%;background:{bar_color};border-radius:3px;"></div>
+              </div>
+            </div>
+          </div>
+          <div style="font-size:12px;color:#6E737B;margin-bottom:10px;">
+            <span style="display:inline-block;width:22px;height:22px;line-height:22px;text-align:center;
+                         background:#d1fae5;color:#065f46;border-radius:50%;font-weight:700;font-size:13px;">&#10003;</span>
+            = complete &nbsp;
+            <span style="display:inline-block;width:22px;height:22px;line-height:20px;text-align:center;
+                         background:#fee2e2;color:#991b1b;border-radius:50%;font-size:15px;border:1px solid #fca5a5;">&#8212;</span>
+            = not done &mdash; click to enter results
+          </div>
+          <table style="width:100%;border-collapse:collapse;">
+            <thead>
+              <tr style="background:#2D323B;color:#fff;">
+                <th style="text-align:left;padding:8px 12px;min-width:160px;">Athlete</th>
+                {col_headers}
+              </tr>
+            </thead>
+            <tbody>
+              {rows_html}
+              <tr style="background:#f9fafb;border-top:2px solid #DDE0E3;">
+                <td style="padding:6px 12px;font-size:12px;color:#6E737B;font-weight:600;">Completed</td>
+                {summary_cells}
+              </tr>
+            </tbody>
+          </table>
+        </div>"""
+
+    elif selected_group_id and selected_label and not athletes:
+        matrix_html = '<p class="muted" style="margin-top:16px;">No athletes found in this group.</p>'
+
+    body = f"""
+    <div class="page-head"><h1>Completion Tracker</h1></div>
+    <p class="muted" style="margin-bottom:20px;">
+      Select a group, phase, and which games to track. Click a red cell to go straight to data entry for that game.
+    </p>
+    <div class="card form-card">{selector_form}</div>
+    {matrix_html}"""
+
+    return layout("Completion Tracker", body, user=coach, active_nav="completion_tracker")
+
+
 # Group Testing (enter results for a whole group game-by-game)
 # ---------------------------------------------------------------------------
 
@@ -2671,9 +2852,14 @@ def group_testing_page(coach, groups, selected_group_id=None, selected_label=Non
         fields = [f for f in game["fields"] if True]  # all enterable fields
         computed_keys = {c["key"] for c in game.get("computed", [])}
 
+        def _th_suffix(field):
+            if field["type"] == "time":
+                return '<br><small style="font-weight:400;font-size:11px;">seconds</small>'
+            u = field.get("unit", "")
+            return f'<br><small style="font-weight:400;font-size:11px;">{esc(u)}</small>' if u else ""
+
         col_headers = "".join(
-            f'<th style="min-width:120px;">{esc(f["label"])}'
-            f'{"<br><small style=\'font-weight:400;font-size:11px;\'>seconds</small>" if f["type"]=="time" else (f"<br><small style=\'font-weight:400;font-size:11px;\'>{esc(f.get(\'unit\',\'\'))}</small>" if f.get("unit") else "")}</th>'
+            f'<th style="min-width:120px;">{esc(f["label"])}{_th_suffix(f)}</th>'
             for f in fields
         )
 

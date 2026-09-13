@@ -509,6 +509,66 @@ def reports_completion(req):
     return resp
 
 
+@router.get("/coach/completion-tracker")
+def completion_tracker_get(req):
+    """Show completion matrix for a group+phase — which games each athlete has done."""
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+
+    group_id      = req.get_query("group_id")
+    session_label = req.get_query("session_label") or None
+    session_month = req.get_query("session_month") or None
+    game_keys     = req.query.get("games", [])   # multi-value: list of selected game keys
+
+    try:
+        group_id = int(group_id) if group_id else None
+    except (ValueError, TypeError):
+        group_id = None
+
+    conn = db.get_conn()
+    try:
+        groups   = conn.execute("SELECT * FROM groups ORDER BY name").fetchall()
+        athletes = []
+        completion = {}   # {athlete_id: set of game_keys}
+
+        if group_id and session_label and game_keys:
+            athletes = conn.execute(
+                "SELECT id, name FROM users WHERE group_id = ? AND role = 'participant' ORDER BY name",
+                (group_id,)
+            ).fetchall()
+
+            if athletes:
+                athlete_ids = [a["id"] for a in athletes]
+                placeholders = ",".join("?" * len(athlete_ids))
+                # One query: all results for these athletes for this phase label
+                rows = conn.execute(
+                    f"SELECT ms.participant_id, mr.game_key "
+                    f"FROM measurement_sessions ms "
+                    f"JOIN measurement_results mr ON mr.session_id = ms.id "
+                    f"WHERE ms.session_label = ? AND ms.participant_id IN ({placeholders}) "
+                    f"GROUP BY ms.participant_id, mr.game_key",
+                    [session_label] + athlete_ids
+                ).fetchall()
+                for row in rows:
+                    pid = row["participant_id"]
+                    if pid not in completion:
+                        completion[pid] = set()
+                    completion[pid].add(row["game_key"])
+    finally:
+        conn.close()
+
+    return Response(views.completion_tracker_page(
+        coach, groups,
+        selected_group_id=group_id,
+        selected_label=session_label,
+        selected_month=session_month,
+        selected_game_keys=game_keys,
+        athletes=[dict(a) for a in athletes],
+        completion=completion,
+    ))
+
+
 @router.get("/coach/group-testing")
 def group_testing_get(req):
     """Show group testing page — optional query params pre-select group/phase/game."""
@@ -517,10 +577,10 @@ def group_testing_get(req):
     if not coach:
         return redirect("/login")
 
-    group_id     = req.query_get("group_id")
-    session_label = req.query_get("session_label") or None
-    session_month = req.query_get("session_month") or None
-    game_key      = req.query_get("game_key") or None
+    group_id     = req.get_query("group_id")
+    session_label = req.get_query("session_label") or None
+    session_month = req.get_query("session_month") or None
+    game_key      = req.get_query("game_key") or None
 
     try:
         group_id = int(group_id) if group_id else None
@@ -1017,7 +1077,7 @@ def measurement_phase_results(req, participant_id):
     coach = require_role(req, "coach")
     if not coach:
         return Response('{"error":"unauthenticated"}', status=401, content_type="application/json")
-    label = req.query_get("label") or ""
+    label = req.get_query("label") or ""
     if not label:
         return Response("{}", content_type="application/json")
     conn = db.get_conn()
