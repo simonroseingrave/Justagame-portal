@@ -327,7 +327,11 @@ def _measurement_game_fieldset(game):
       <div class="mg-game-header" onclick="toggleGameCard('{game_key}')"
            style="display:flex;align-items:center;justify-content:space-between;
                   padding:10px 14px;cursor:pointer;background:#fff;user-select:none;">
-        <span style="font-size:14px;font-weight:700;color:#2D323B;">{esc(game['name'])}</span>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:14px;font-weight:700;color:#2D323B;">{esc(game['name'])}</span>
+          <span id="mg-badge-{game_key}" style="display:none;font-size:11px;font-weight:700;
+                padding:2px 9px;border-radius:999px;line-height:1.6;"></span>
+        </div>
         <span id="mg-toggle-{game_key}"
               style="font-size:11px;color:#F0A82E;font-weight:700;letter-spacing:0.05em;">&#9650; COLLAPSE</span>
       </div>
@@ -384,7 +388,18 @@ def measurement_games_form(participant_id, selected_label=None, selected_month=N
     </div>
     """
 
-    sections_html = chip_panel_html + "".join(f"""
+    # Completion status strip — populated by JS after pre-fill/save
+    completion_strip_html = """
+    <div id="mg-completion-strip" style="display:none;margin-bottom:16px;padding:12px 14px;
+         background:#fff;border:1px solid #DDE0E3;border-radius:8px;border-left:4px solid #2D323B;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:6px;">
+        <span style="font-size:12px;font-weight:700;color:#2D323B;text-transform:uppercase;letter-spacing:0.05em;">Session Progress</span>
+        <span id="mg-strip-summary" style="font-size:12px;color:#6E737B;"></span>
+      </div>
+      <div id="mg-strip-pills" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
+    </div>"""
+
+    sections_html = completion_strip_html + chip_panel_html + "".join(f"""
     <div class="mg-section" style="margin-bottom:24px;">
       <div style="border-left:4px solid #F0A82E;padding-left:10px;margin-bottom:12px;">
         <h4 style="margin:0;font-size:15px;font-weight:700;color:var(--jag-navy);">{esc(section['section'])}</h4>
@@ -482,7 +497,88 @@ def measurement_games_form(participant_id, selected_label=None, selected_month=N
             var hint = document.getElementById('mg-hint');
             if (hint) hint.textContent = prefilled + ' existing value(s) loaded — update any field and save to merge.';
           }}
+          updateGameBadges();
         }} catch(e) {{}}
+      }}
+
+      // Update per-game completion badges and the top-of-form progress strip
+      function updateGameBadges() {{
+        var cards = document.querySelectorAll('.mg-game-card');
+        var totalGames = 0;
+        var doneGames = 0;
+        var partialGames = 0;
+        var pillsEl = document.getElementById('mg-strip-pills');
+        var summaryEl = document.getElementById('mg-strip-summary');
+        var stripEl = document.getElementById('mg-completion-strip');
+        if (pillsEl) pillsEl.innerHTML = '';
+
+        cards.forEach(function(card) {{
+          var gameKey = card.dataset.gameKey;
+          if (!gameKey) return;
+          // Only count visible cards (not hidden by chip toggle)
+          if (card.style.display === 'none') return;
+          var inputs = card.querySelectorAll('input[data-game]:not([readonly])');
+          if (inputs.length === 0) return;
+          var filled = 0;
+          inputs.forEach(function(inp) {{ if (inp.value.trim() !== '') filled++; }});
+          totalGames++;
+
+          var badge = document.getElementById('mg-badge-' + gameKey);
+          var gameName = card.querySelector('.mg-game-header span[style*="font-weight:700"]');
+          var nameText = gameName ? gameName.textContent.trim() : gameKey;
+          // Abbreviate for pill
+          var abbrev = nameText.length > 14 ? nameText.substring(0, 13) + '…' : nameText;
+
+          var status, badgeStyle, pillStyle, pillIcon;
+          if (filled === inputs.length) {{
+            status = 'done';
+            badgeStyle = 'background:#d1fae5;color:#065f46;';
+            pillStyle = 'background:#d1fae5;color:#065f46;border:1px solid #6ee7b7;';
+            pillIcon = '✓ ';
+            doneGames++;
+          }} else if (filled > 0) {{
+            status = 'partial';
+            badgeStyle = 'background:#fef3c7;color:#92400e;';
+            pillStyle = 'background:#fef3c7;color:#92400e;border:1px solid #fcd34d;';
+            pillIcon = '◑ ';
+            partialGames++;
+          }} else {{
+            status = 'empty';
+            badgeStyle = 'background:#f3f4f6;color:#6b7280;';
+            pillStyle = 'background:#f3f4f6;color:#6b7280;border:1px solid #d1d5db;';
+            pillIcon = '— ';
+          }}
+
+          // Update card header badge
+          if (badge) {{
+            badge.style.display = 'inline-block';
+            badge.style.cssText += badgeStyle;
+            badge.textContent = status === 'done' ? '✓ Done'
+                              : status === 'partial' ? '◑ Partial'
+                              : '— Not started';
+          }}
+
+          // Add pill to strip
+          if (pillsEl) {{
+            var pill = document.createElement('span');
+            pill.style.cssText = 'font-size:11px;font-weight:600;padding:3px 10px;border-radius:999px;cursor:pointer;' + pillStyle;
+            pill.textContent = pillIcon + abbrev;
+            pill.title = nameText + ' — ' + (status === 'done' ? 'Complete' : status === 'partial' ? 'Partial' : 'Not started');
+            pill.addEventListener('click', function() {{
+              card.scrollIntoView({{behavior:'smooth', block:'start'}});
+            }});
+            pillsEl.appendChild(pill);
+          }}
+        }});
+
+        // Show strip only once a phase is selected and we have status info
+        if (stripEl && totalGames > 0) {{
+          stripEl.style.display = 'block';
+          if (summaryEl) {{
+            summaryEl.textContent = doneGames + '/' + totalGames + ' complete'
+              + (partialGames > 0 ? ', ' + partialGames + ' partial' : '');
+          }}
+        }}
       }}
 
       var labelSel = document.getElementById('session_label');
@@ -630,6 +726,7 @@ def measurement_games_form(participant_id, selected_label=None, selected_month=N
           btn.style.color = '#2D323B';
           btn.style.borderColor = '#F0A82E';
           if (statusEl) statusEl.textContent = saved + ' field' + (saved !== 1 ? 's' : '') + ' saved.';
+          updateGameBadges();
           setTimeout(function() {{
             btn.textContent = '✓ Save Game';
             btn.style.background = '';
@@ -2840,10 +2937,11 @@ def completion_tracker_page(coach, groups, selected_group_id=None, selected_labe
 
 def group_testing_page(coach, groups, selected_group_id=None, selected_label=None,
                        selected_month=None, selected_game_key=None,
-                       athletes=None, game=None, existing=None):
+                       athletes=None, game=None, existing=None, completion_data=None):
     """Game-by-game group data entry: athletes as rows, fields as columns, one Save All."""
     athletes = athletes or []
-    existing = existing or {}   # {athlete_id: {field_key: value}}
+    existing = existing or {}          # {athlete_id: {field_key: value}}
+    completion_data = completion_data or {}  # {athlete_id: [game_keys]}
 
     group_opts = '<option value="">— Select group —</option>' + "".join(
         f'<option value="{g["id"]}" {"selected" if g["id"] == selected_group_id else ""}>{esc(g["name"])}</option>'
@@ -2988,10 +3086,133 @@ def group_testing_page(coach, groups, selected_group_id=None, selected_label=Non
     elif selected_group_id and selected_label and selected_game_key and not athletes:
         table_html = '<div class="card"><p class="muted">No athletes found in this group.</p></div>'
 
+    # ── Compact completion matrix ─────────────────────────────────────────────
+    matrix_html = ""
+    if completion_data and selected_group_id and selected_label:
+        all_games = all_measurement_games()
+        # Build base URL for clicking a game cell to load that game
+        base_params = (
+            f"group_id={esc(str(selected_group_id))}"
+            f"&session_label={esc(selected_label or '')}"
+            f"&session_month={esc(selected_month or '')}"
+        )
+        # Gather all athlete IDs present in completion_data
+        matrix_athlete_ids = list(completion_data.keys())
+        # Build athlete name lookup from the athletes list (already loaded)
+        # But completion_data keys are ints; athletes list may be empty if game not yet selected.
+        # We need names — pull from athletes or from the outer scope.
+        # athletes may be empty list if no game selected; re-use sorted keys with names from athletes OR
+        # we pass a small name map. For now, build from whatever athletes list is available.
+        athlete_name_map = {a["id"]: a["name"] for a in athletes} if athletes else {}
+        # If athletes not loaded (no game selected), we still have completion_data keys.
+        # We'll just show athlete IDs if names aren't available — but actually app always
+        # passes athletes=[] when no game; we need names from somewhere.
+        # Solution: app.py already loads all_athletes before the game-specific step;
+        # completion_data keys are the same athlete IDs. We pass athlete name via a
+        # dedicated list embedded in the matrix using all_athletes from app route.
+        # For view-side: we reconstruct from whatever we have. If athletes list is empty,
+        # fall through gracefully without names — but the app was updated so athletes IS
+        # populated whenever completion_data is non-empty (we always load all_athletes).
+        # Actually re-reading app.py: athletes = list(all_athletes) only when game_key is set.
+        # When game_key is None, athletes stays [].
+        # Fix: use athletes list if available, otherwise skip names (show "—").
+        # Actually the matrix won't have athlete names in that case.
+        # Better fix already in app.py: pass athletes list from all_athletes regardless of game.
+        # We'll handle it here: iterate completion_data keys sorted, use name_map or id.
+
+        # Compute per-game done counts
+        game_done_counts = {}
+        for gk_set in completion_data.values():
+            for gk in gk_set:
+                game_done_counts[gk] = game_done_counts.get(gk, 0) + 1
+
+        total_athletes_in_matrix = len(completion_data)
+        total_games = len(all_games)
+        done_cells = sum(len(v) for v in completion_data.values())
+        total_cells = total_athletes_in_matrix * total_games
+        overall_pct = int(round(100 * done_cells / total_cells)) if total_cells else 0
+        bar_fill_pct = overall_pct
+
+        # Header row — game abbreviations
+        game_headers = ""
+        for g in all_games:
+            abbrev = g["name"][:12] + ("…" if len(g["name"]) > 12 else "")
+            is_active = g["key"] == selected_game_key
+            active_style = "background:#F0A82E;color:#2D323B;" if is_active else ""
+            game_url = f"/coach/group-testing?{base_params}&game_key={esc(g['key'])}"
+            game_headers += (
+                f'<th style="min-width:52px;max-width:64px;font-size:11px;font-weight:600;'
+                f'text-align:center;padding:6px 4px;white-space:normal;word-break:break-word;'
+                f'cursor:pointer;{active_style}" title="{esc(g["name"])}">'
+                f'<a href="{game_url}" style="color:inherit;text-decoration:none;">{esc(abbrev)}</a>'
+                f'</th>'
+            )
+
+        # Athlete rows
+        athlete_rows = ""
+        for aid, done_set in sorted(completion_data.items(), key=lambda x: athlete_name_map.get(x[0], "")):
+            aname = athlete_name_map.get(aid, f"#{aid}")
+            cells = ""
+            for g in all_games:
+                done = g["key"] in done_set
+                game_url = f"/coach/group-testing?{base_params}&game_key={esc(g['key'])}"
+                is_active = g["key"] == selected_game_key
+                if done:
+                    cell_style = "background:#d1fae5;color:#065f46;font-weight:700;text-align:center;font-size:13px;"
+                    cell_content = "✓"
+                else:
+                    cell_style = "background:#fee2e2;color:#9b1c1c;text-align:center;font-size:13px;"
+                    cell_content = f'<a href="{game_url}" style="color:#9b1c1c;text-decoration:none;font-weight:600;">—</a>'
+                if is_active:
+                    cell_style += "outline:2px solid #F0A82E;outline-offset:-2px;"
+                cells += f'<td style="{cell_style}">{cell_content}</td>'
+            athlete_rows += (
+                f'<tr style="border-bottom:1px solid #f0f0f0;">'
+                f'<td style="font-size:13px;font-weight:600;white-space:nowrap;padding:5px 10px;'
+                f'position:sticky;left:0;background:#fff;z-index:1;">{esc(aname)}</td>'
+                f'{cells}'
+                f'</tr>'
+            )
+
+        # Summary row — done/total per game
+        summary_cells = '<td style="font-size:11px;color:#6E737B;font-weight:600;padding:5px 10px;position:sticky;left:0;background:#f9fafb;">Done</td>'
+        for g in all_games:
+            n = game_done_counts.get(g["key"], 0)
+            pct = int(round(100 * n / total_athletes_in_matrix)) if total_athletes_in_matrix else 0
+            color = "#065f46" if pct == 100 else ("#92400e" if pct == 0 else "#1e40af")
+            summary_cells += f'<td style="text-align:center;font-size:11px;font-weight:700;color:{color};background:#f9fafb;">{n}/{total_athletes_in_matrix}</td>'
+
+        matrix_html = f"""
+        <div class="card" style="margin-bottom:20px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+            <div>
+              <span style="font-size:13px;font-weight:700;color:#2D323B;">Completion — {esc(SESSION_LABEL_MAP.get(selected_label, selected_label or ''))}</span>
+              <span style="font-size:12px;color:#6E737B;margin-left:10px;">{done_cells}/{total_cells} fields &nbsp;·&nbsp; {overall_pct}% overall</span>
+            </div>
+            <div style="font-size:11px;color:#6E737B;">Click a game header or — to switch to that game</div>
+          </div>
+          <div style="background:#e5e7eb;border-radius:4px;height:5px;margin-bottom:14px;">
+            <div style="height:5px;background:#F0A82E;border-radius:4px;width:{bar_fill_pct}%;transition:width 0.4s;"></div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+              <thead>
+                <tr style="background:#2D323B;color:#fff;">
+                  <th style="text-align:left;padding:6px 10px;font-size:13px;min-width:130px;position:sticky;left:0;background:#2D323B;z-index:2;">Athlete</th>
+                  {game_headers}
+                </tr>
+              </thead>
+              <tbody>{athlete_rows}</tbody>
+              <tfoot><tr>{summary_cells}</tr></tfoot>
+            </table>
+          </div>
+        </div>"""
+
     body = f"""
     <div class="page-head"><h1>Group Testing</h1></div>
     <p class="muted" style="margin-bottom:20px;">Select a group, phase, and game to enter results for all athletes at once.</p>
     <div class="card form-card">{selector_form}</div>
+    {matrix_html}
     {table_html}
     <style>
       table td, table th {{ padding: 8px 10px; }}
