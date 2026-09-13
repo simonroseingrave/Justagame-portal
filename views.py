@@ -1322,23 +1322,56 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
             phase_html += f'<div style="font-size:12px;color:var(--jag-muted);margin-top:2px;">{phase_line2}</div>'
         untested = stats.get("untested", 0)
         untested_color = "color:#9b1c1c;" if untested > 0 else "color:var(--jag-navy);"
+
+        # Avg sprint time
+        avg_sprint = stats.get("avg_sprint")
+        avg_sprint_str = f"{avg_sprint:.2f}s" if avg_sprint is not None else "—"
+
+        # Avg balance catch
+        avg_balance = stats.get("avg_balance")
+        avg_balance_str = f"{avg_balance:.1f}" if avg_balance is not None else "—"
+
+        # Phase completion mini bar
+        comp_n = stats.get("phase_completion_n", 0)
+        comp_total = stats.get("phase_completion_total", 0)
+        if comp_total > 0:
+            comp_pct = int(round(100 * comp_n / comp_total))
+            comp_bar_fill = f'<div style="height:6px;background:var(--jag-gold);border-radius:3px;width:{comp_pct}%;transition:width 0.4s;"></div>'
+            comp_bar = f'<div style="background:#e5e7eb;border-radius:3px;height:6px;margin-top:6px;">{comp_bar_fill}</div>'
+            comp_label_str = f"{comp_n}/{comp_total}"
+            comp_pct_str = f"{comp_pct}%"
+        else:
+            comp_label_str = "—"
+            comp_pct_str = ""
+            comp_bar = ""
+
+        comp_html = (
+            f'<div style="font-size:22px;font-weight:800;color:var(--jag-navy);line-height:1;">{comp_pct_str}</div>'
+            f'<div style="font-size:11px;color:var(--jag-muted);margin-top:2px;">{comp_label_str} athletes</div>'
+            f'{comp_bar}'
+        )
+
         stat_cards_html = f"""
         <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:24px;">
           <div class="card stat-card">
             <div class="stat-number">{stats['total_athletes']}</div>
-            <div class="stat-label">Athletes</div>
-          </div>
-          <div class="card stat-card">
-            <div class="stat-number">{stats['total_sessions']}</div>
-            <div class="stat-label">Total Sessions</div>
-          </div>
-          <div class="card stat-card">
-            <div class="stat-number">{stats['sessions_this_month']}</div>
-            <div class="stat-label">Sessions This Month</div>
+            <div class="stat-label">Total Athletes</div>
           </div>
           <div class="card stat-card">
             {phase_html}
             <div class="stat-label" style="margin-top:6px;">Latest Phase</div>
+          </div>
+          <div class="card stat-card">
+            {comp_html}
+            <div class="stat-label" style="margin-top:6px;">Phase Completion</div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-number">{avg_sprint_str}</div>
+            <div class="stat-label">Avg Sprint Time</div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-number">{avg_balance_str}</div>
+            <div class="stat-label">Avg Balance Catch</div>
           </div>
           <div class="card stat-card">
             <div class="stat-number" style="{untested_color}">{untested}</div>

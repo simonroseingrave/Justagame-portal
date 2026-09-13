@@ -249,37 +249,90 @@ def coach_dashboard(req):
         org_map = {o["id"]: o for o in orgs}
 
         # Dashboard stat cards
-        month_start = datetime.datetime.now().replace(day=1, hour=0, minute=0, second=0, microsecond=0).strftime("%Y-%m-%d")
-        sessions_this_month = (conn.execute(
-            "SELECT COUNT(*) as n FROM measurement_sessions WHERE date >= ?", (month_start,)
-        ).fetchone() or {}).get("n", 0)
-        latest_phase_row = conn.execute(
-            "SELECT session_label, session_month FROM measurement_sessions "
-            "WHERE session_label IS NOT NULL AND session_label != '' "
-            "ORDER BY date DESC, id DESC LIMIT 1"
-        ).fetchone()
+        # Collect all athlete IDs visible to this coach (org-scoped)
+        all_athlete_ids = [p["id"] for _, ps in group_summaries for p in ps] + \
+                          [p["id"] for p in ungrouped_summaries]
+
+        # Latest phase across these athletes
+        latest_phase_raw = None
         latest_phase = None
-        if latest_phase_row:
-            lbl = SESSION_LABEL_MAP.get(latest_phase_row["session_label"], latest_phase_row["session_label"])
-            sm = latest_phase_row["session_month"] or ""
-            if sm:
-                try:
-                    import datetime as _dt
-                    d = _dt.datetime.strptime(sm, "%Y-%m")
-                    sm = d.strftime("%b %Y")
-                except Exception:
-                    pass
-            latest_phase = f"{lbl}\n{sm}" if sm else lbl
+        if all_athlete_ids:
+            placeholders_a = ",".join("?" * len(all_athlete_ids))
+            latest_phase_row = conn.execute(
+                f"SELECT session_label, session_month FROM measurement_sessions "
+                f"WHERE session_label IS NOT NULL AND session_label != '' "
+                f"AND participant_id IN ({placeholders_a}) "
+                f"ORDER BY date DESC, id DESC LIMIT 1",
+                all_athlete_ids,
+            ).fetchone()
+            if latest_phase_row:
+                latest_phase_raw = latest_phase_row["session_label"]
+                lbl = SESSION_LABEL_MAP.get(latest_phase_raw, latest_phase_raw)
+                sm = latest_phase_row["session_month"] or ""
+                if sm:
+                    try:
+                        import datetime as _dt
+                        d = _dt.datetime.strptime(sm, "%Y-%m")
+                        sm = d.strftime("%b %Y")
+                    except Exception:
+                        pass
+                latest_phase = f"{lbl}\n{sm}" if sm else lbl
+
         untested = sum(1 for _, ps in group_summaries for p in ps if p["test_count"] == 0) + \
                    sum(1 for p in ungrouped_summaries if p["test_count"] == 0)
         total_athletes = sum(len(ps) for _, ps in group_summaries) + len(ungrouped_summaries)
-        total_sessions = sum(p["test_count"] for _, ps in group_summaries for p in ps) + sum(p["test_count"] for p in ungrouped_summaries)
+
+        # Org-scoped averages for latest phase
+        avg_sprint = None
+        avg_balance = None
+        phase_completion_n = 0
+        phase_completion_total = total_athletes
+
+        if all_athlete_ids and latest_phase_raw:
+            placeholders_a = ",".join("?" * len(all_athlete_ids))
+
+            # Avg sprint time: skipping_rope_sprint / average (computed field)
+            sprint_row = conn.execute(
+                f"SELECT AVG(CAST(mr.value AS REAL)) as avg "
+                f"FROM measurement_results mr "
+                f"JOIN measurement_sessions ms ON ms.id = mr.session_id "
+                f"WHERE ms.session_label = ? AND ms.participant_id IN ({placeholders_a}) "
+                f"AND mr.game_key = 'skipping_rope_sprint' AND mr.field_key = 'average' "
+                f"AND mr.value IS NOT NULL AND mr.value != ''",
+                [latest_phase_raw] + all_athlete_ids,
+            ).fetchone()
+            avg_sprint = sprint_row["avg"] if sprint_row and sprint_row["avg"] is not None else None
+
+            # Avg balance catch: large_ball_wall_bounce
+            balance_row = conn.execute(
+                f"SELECT AVG(CAST(mr.value AS REAL)) as avg "
+                f"FROM measurement_results mr "
+                f"JOIN measurement_sessions ms ON ms.id = mr.session_id "
+                f"WHERE ms.session_label = ? AND ms.participant_id IN ({placeholders_a}) "
+                f"AND mr.game_key = 'balance_ball_catching' AND mr.field_key = 'large_ball_wall_bounce' "
+                f"AND mr.value IS NOT NULL AND mr.value != ''",
+                [latest_phase_raw] + all_athlete_ids,
+            ).fetchone()
+            avg_balance = balance_row["avg"] if balance_row and balance_row["avg"] is not None else None
+
+            # Phase completion: distinct athletes with at least 1 result for the latest phase
+            comp_row = conn.execute(
+                f"SELECT COUNT(DISTINCT ms.participant_id) as n "
+                f"FROM measurement_sessions ms "
+                f"JOIN measurement_results mr ON mr.session_id = ms.id "
+                f"WHERE ms.session_label = ? AND ms.participant_id IN ({placeholders_a})",
+                [latest_phase_raw] + all_athlete_ids,
+            ).fetchone()
+            phase_completion_n = (comp_row["n"] if comp_row else 0) or 0
+
         dashboard_stats = {
             "total_athletes": total_athletes,
-            "total_sessions": total_sessions,
-            "sessions_this_month": sessions_this_month,
             "latest_phase": latest_phase,
             "untested": untested,
+            "avg_sprint": avg_sprint,
+            "avg_balance": avg_balance,
+            "phase_completion_n": phase_completion_n,
+            "phase_completion_total": phase_completion_total,
         }
         return Response(views.coach_dashboard_for(coach, group_summaries, ungrouped_summaries, message=message, org_map=org_map, stats=dashboard_stats))
     finally:
