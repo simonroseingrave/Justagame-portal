@@ -528,7 +528,7 @@ def completion_tracker_get(req):
 
     conn = db.get_conn()
     try:
-        groups   = conn.execute("SELECT * FROM groups ORDER BY name").fetchall()
+        groups   = conn.execute("SELECT * FROM participant_groups ORDER BY name").fetchall()
         athletes = []
         completion = {}   # {athlete_id: set of game_keys}
 
@@ -589,7 +589,7 @@ def group_testing_get(req):
 
     conn = db.get_conn()
     try:
-        groups = conn.execute("SELECT * FROM groups ORDER BY name").fetchall()
+        groups = conn.execute("SELECT * FROM participant_groups ORDER BY name").fetchall()
         athletes = []
         game = None
         existing = {}
