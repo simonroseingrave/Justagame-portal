@@ -141,6 +141,72 @@ def get_conn():
     return conn
 
 
+def migrate_diamond_group_fields(conn):
+    """One-time migration: collapse the old per-athlete-count fields for Diamond
+    Gates and Diamond Dribble into two simplified buckets — small_group (3-5
+    athletes) and large_group (6-8 athletes).
+
+    For each session that has old-style field keys, the highest value within
+    each bucket is used (since only one count is usually recorded per session,
+    this is typically a straight copy).  Old field_key rows are deleted after
+    the new ones are written.  Safe to re-run: sessions already on the new
+    schema have neither old keys to migrate nor existing new keys to clobber.
+    """
+    MAPPINGS = [
+        # (game_key, [old field_keys], new field_key)
+        ("diamond_games",   ["athletes_3", "athletes_4", "athletes_5"], "small_group"),
+        ("diamond_games",   ["athletes_6", "athletes_7", "athletes_8"], "large_group"),
+        ("diamond_dribble", ["athletes_4", "athletes_5"],               "small_group"),
+        ("diamond_dribble", ["athletes_6"],                             "large_group"),
+    ]
+
+    for game_key, old_keys, new_key in MAPPINGS:
+        placeholders = ",".join("?" * len(old_keys))
+        rows = conn.execute(
+            f"SELECT session_id, field_key, value FROM measurement_results "
+            f"WHERE game_key = ? AND field_key IN ({placeholders}) "
+            f"AND value IS NOT NULL AND value != ''",
+            [game_key] + old_keys,
+        ).fetchall()
+
+        if not rows:
+            continue  # nothing to migrate for this mapping
+
+        # Find the best (max numeric) value per session within this bucket
+        session_best = {}
+        for row in rows:
+            sid = row["session_id"]
+            try:
+                val = float(row["value"])
+            except (TypeError, ValueError):
+                continue
+            if sid not in session_best or val > session_best[sid][0]:
+                session_best[sid] = (val, row["value"])  # keep original string
+
+        # Write to new field_key (only if not already present)
+        for sid, (_, raw_val) in session_best.items():
+            existing = conn.execute(
+                "SELECT id FROM measurement_results "
+                "WHERE session_id = ? AND game_key = ? AND field_key = ?",
+                (sid, game_key, new_key),
+            ).fetchone()
+            if not existing:
+                conn.execute(
+                    "INSERT INTO measurement_results (session_id, game_key, field_key, value) "
+                    "VALUES (?, ?, ?, ?)",
+                    (sid, game_key, new_key, raw_val),
+                )
+
+        # Delete old field_key records now that new ones are written
+        conn.execute(
+            f"DELETE FROM measurement_results "
+            f"WHERE game_key = ? AND field_key IN ({placeholders})",
+            [game_key] + old_keys,
+        )
+
+    conn.commit()
+
+
 def init_db():
     os.makedirs(DATA_DIR, exist_ok=True)
     # Self-heal if a previous run was interrupted mid-write and left a
@@ -187,6 +253,9 @@ def init_db():
     # Retroactively assign athlete numbers to any participants added before
     # this feature was introduced.
     assign_missing_athlete_numbers(conn)
+    # Migrate Diamond Gates / Diamond Dribble from per-athlete-count fields to
+    # small_group / large_group (idempotent: skips sessions already migrated).
+    migrate_diamond_group_fields(conn)
     conn.close()
 
 

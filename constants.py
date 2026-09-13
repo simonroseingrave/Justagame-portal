@@ -97,21 +97,16 @@ MEASUREMENT_GAMES = [
                 "key": "diamond_games",
                 "name": "Diamond Gates - 1 minute",
                 "fields": [
-                    {"key": "athletes_3", "label": "3 Athletes", "type": "number", "unit": "Number of Gates"},
-                    {"key": "athletes_4", "label": "4 Athletes", "type": "number", "unit": "Number of Gates"},
-                    {"key": "athletes_5", "label": "5 Athletes", "type": "number", "unit": "Number of Gates"},
-                    {"key": "athletes_6", "label": "6 Athletes", "type": "number", "unit": "Number of Gates"},
-                    {"key": "athletes_7", "label": "7 Athletes", "type": "number", "unit": "Number of Gates"},
-                    {"key": "athletes_8", "label": "8 Athletes", "type": "number", "unit": "Number of Gates"},
+                    {"key": "small_group", "label": "Small Group (3–5 athletes)", "type": "number", "unit": "Number of Gates"},
+                    {"key": "large_group", "label": "Large Group (6–8 athletes)", "type": "number", "unit": "Number of Gates"},
                 ],
             },
             {
                 "key": "diamond_dribble",
                 "name": "Diamond Dribble - 1 minute",
                 "fields": [
-                    {"key": "athletes_4", "label": "4 Athletes", "type": "number", "unit": "Number of Gates"},
-                    {"key": "athletes_5", "label": "5 Athletes", "type": "number", "unit": "Number of Gates"},
-                    {"key": "athletes_6", "label": "6 Athletes", "type": "number", "unit": "Number of Gates"},
+                    {"key": "small_group", "label": "Small Group (3–5 athletes)", "type": "number", "unit": "Number of Gates"},
+                    {"key": "large_group", "label": "Large Group (6–8 athletes)", "type": "number", "unit": "Number of Gates"},
                 ],
             },
             {
