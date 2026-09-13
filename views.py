@@ -132,6 +132,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             if user.get("is_admin"):
                 links.append(("/coach/participants/new", "Add Participant", "new_participant"))
             links.append(("/coach/session", "Record Session", "session"))
+            links.append(("/coach/group-testing", "Group Testing", "group_testing"))
             links.append(("/coach/session-sheet", "Session Sheet", "session_sheet"))
             links.append(("/coach/resources", "Resources", "resources"))
             if user.get("is_admin"):
@@ -331,6 +332,13 @@ def _measurement_game_fieldset(game):
       </div>
       <div id="{body_id}" style="padding:12px 14px 14px;background:#fafafa;border-top:1px solid #DDE0E3;">
         <div class="mg-field-grid">{fields_html}{computed_html}</div>
+        <div style="margin-top:10px;text-align:right;">
+          <button type="button" class="btn btn-primary btn-sm mg-save-game-btn"
+                  data-game="{esc(game_key)}"
+                  style="font-size:13px;padding:6px 18px;">&#10003; Save Game</button>
+          <span class="mg-game-status" id="mg-status-{game_key}"
+                style="font-size:12px;color:#6E737B;margin-left:10px;"></span>
+        </div>
       </div>
     </div>
     """
@@ -574,6 +582,69 @@ def measurement_games_form(participant_id, selected_label=None, selected_month=N
           if (!value) {{ alert('Please enter a value first.'); return; }}
           saveField(gameKey, fieldKey, value, btn);
         }});
+      }});
+
+      // Save Game button — saves all non-empty, non-computed fields for a game at once
+      async function saveGame(gameKey, btn) {{
+        var statusEl = document.getElementById('mg-status-' + gameKey);
+        var inputs = document.querySelectorAll(
+          'input[data-game="' + gameKey + '"]:not([readonly])');
+        var toSave = [];
+        inputs.forEach(function(inp) {{
+          var v = inp.value.trim();
+          if (v !== '') toSave.push({{fieldKey: inp.dataset.field, value: v, inp: inp}});
+        }});
+        if (toSave.length === 0) {{
+          if (statusEl) statusEl.textContent = 'Nothing to save — enter at least one value.';
+          return;
+        }}
+        btn.disabled = true;
+        btn.textContent = 'Saving…';
+        if (statusEl) statusEl.textContent = '';
+        try {{
+          var sid = await ensureSession();
+          var saved = 0;
+          for (var i = 0; i < toSave.length; i++) {{
+            var item = toSave[i];
+            var resp = await fetch(baseUrl + '/' + sid + '/save-field', {{
+              method: 'POST',
+              headers: {{'Content-Type': 'application/x-www-form-urlencoded'}},
+              body: 'game_key=' + encodeURIComponent(gameKey) +
+                    '&field_key=' + encodeURIComponent(item.fieldKey) +
+                    '&value=' + encodeURIComponent(item.value),
+            }});
+            var data = await resp.json();
+            if (data.ok) {{
+              item.inp.style.background = '#f0fff4';
+              // Update computed fields
+              Object.keys(data.computed || {{}}).forEach(function(ck) {{
+                var el = document.getElementById('mg__' + gameKey + '__' + ck);
+                if (el) el.value = data.computed[ck];
+              }});
+              saved++;
+            }}
+          }}
+          btn.textContent = '✓ Saved';
+          btn.style.background = '#F0A82E';
+          btn.style.color = '#2D323B';
+          btn.style.borderColor = '#F0A82E';
+          if (statusEl) statusEl.textContent = saved + ' field' + (saved !== 1 ? 's' : '') + ' saved.';
+          setTimeout(function() {{
+            btn.textContent = '✓ Save Game';
+            btn.style.background = '';
+            btn.style.color = '';
+            btn.style.borderColor = '';
+            btn.disabled = false;
+          }}, 2500);
+        }} catch(e) {{
+          btn.textContent = '! Error';
+          btn.disabled = false;
+          if (statusEl) statusEl.textContent = 'Save failed — try again.';
+        }}
+      }}
+
+      document.querySelectorAll('.mg-save-game-btn').forEach(function(btn) {{
+        btn.addEventListener('click', function() {{ saveGame(btn.dataset.game, btn); }});
       }});
 
       // Allow pressing Enter in a field to trigger its save button
@@ -2550,6 +2621,169 @@ def all_progress_page(coach, groups_data, sport_filter=None):
 
 # ---------------------------------------------------------------------------
 # ---------------------------------------------------------------------------
+# Group Testing (enter results for a whole group game-by-game)
+# ---------------------------------------------------------------------------
+
+def group_testing_page(coach, groups, selected_group_id=None, selected_label=None,
+                       selected_month=None, selected_game_key=None,
+                       athletes=None, game=None, existing=None):
+    """Game-by-game group data entry: athletes as rows, fields as columns, one Save All."""
+    athletes = athletes or []
+    existing = existing or {}   # {athlete_id: {field_key: value}}
+
+    group_opts = '<option value="">— Select group —</option>' + "".join(
+        f'<option value="{g["id"]}" {"selected" if g["id"] == selected_group_id else ""}>{esc(g["name"])}</option>'
+        for g in groups
+    )
+    type_opts = '<option value="">— Select phase —</option>' + "".join(
+        f'<option value="{s["key"]}" {"selected" if s["key"] == selected_label else ""}>{esc(s["label"])}</option>'
+        for s in SESSION_TYPES
+    )
+    game_opts = '<option value="">— Select game —</option>' + "".join(
+        f'<option value="{g["key"]}" {"selected" if g["key"] == selected_game_key else ""}>{esc(g["name"])}</option>'
+        for g in all_measurement_games()
+    )
+
+    selector_form = f"""
+    <form method="get" action="/coach/group-testing"
+          style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;margin-bottom:24px;">
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Group</label>
+        <select name="group_id" required style="min-width:180px;">{group_opts}</select>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Test Phase</label>
+        <select name="session_label" required style="min-width:180px;">{type_opts}</select>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Month</label>
+        {_month_select(name="session_month", selected=selected_month)}
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Game</label>
+        <select name="game_key" required style="min-width:200px;">{game_opts}</select>
+      </div>
+      <button type="submit" class="btn btn-primary" style="white-space:nowrap;">Load Athletes</button>
+    </form>"""
+
+    table_html = ""
+    if game and athletes:
+        fields = [f for f in game["fields"] if True]  # all enterable fields
+        computed_keys = {c["key"] for c in game.get("computed", [])}
+
+        col_headers = "".join(
+            f'<th style="min-width:120px;">{esc(f["label"])}'
+            f'{"<br><small style=\'font-weight:400;font-size:11px;\'>seconds</small>" if f["type"]=="time" else (f"<br><small style=\'font-weight:400;font-size:11px;\'>{esc(f.get(\'unit\',\'\'))}</small>" if f.get("unit") else "")}</th>'
+            for f in fields
+        )
+
+        rows_html = ""
+        for a in athletes:
+            aid = a["id"]
+            existing_vals = existing.get(aid, {})
+            cells = ""
+            for f in fields:
+                val = existing_vals.get(f["key"], "")
+                step = "0.01" if f["type"] == "time" else "1"
+                bg = "background:#fffbe6;" if val != "" else ""
+                cells += (
+                    f'<td><input type="number" step="{step}" min="0" '
+                    f'name="athlete_{aid}__{f["key"]}" value="{esc(str(val)) if val != "" else ""}" '
+                    f'style="width:100%;{bg}" /></td>'
+                )
+            rows_html += f'<tr><td style="font-weight:600;white-space:nowrap;">{esc(a["name"])}</td>{cells}</tr>'
+
+        label_display = SESSION_LABEL_MAP.get(selected_label, selected_label or "")
+        try:
+            import datetime as _dt2
+            em = _dt2.datetime.strptime(selected_month, "%Y-%m")
+            month_display = em.strftime("%B %Y")
+        except Exception:
+            month_display = selected_month or ""
+
+        table_html = f"""
+        <div class="card" style="overflow-x:auto;">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+            <div>
+              <h3 style="margin:0 0 2px;">{esc(game['name'])}</h3>
+              <span class="muted" style="font-size:13px;">{esc(label_display)} &middot; {esc(month_display)}</span>
+            </div>
+            <div style="font-size:13px;color:#6E737B;">
+              Existing values shown in yellow &mdash; update or leave to keep.
+            </div>
+          </div>
+          <form method="post" action="/coach/group-testing/save">
+            <input type="hidden" name="session_label" value="{esc(selected_label or '')}" />
+            <input type="hidden" name="session_month" value="{esc(selected_month or '')}" />
+            <input type="hidden" name="game_key" value="{esc(selected_game_key or '')}" />
+            <table style="width:100%;border-collapse:collapse;">
+              <thead>
+                <tr style="background:#2D323B;color:#fff;">
+                  <th style="text-align:left;padding:8px 12px;min-width:150px;">Athlete</th>
+                  {col_headers}
+                </tr>
+              </thead>
+              <tbody>
+                {"".join(f'<tr style="border-bottom:1px solid #DDE0E3;">{r}</tr>' for r in rows_html.replace("</tr>","").split("<tr>")[1:])}
+              </tbody>
+            </table>
+            <div style="margin-top:16px;display:flex;gap:12px;align-items:center;">
+              <button type="submit" class="btn btn-primary">&#10003; Save All Results</button>
+              <span style="font-size:13px;color:#6E737B;">Only fields with a value entered will be saved.</span>
+            </div>
+          </form>
+        </div>"""
+
+        # Fix: rebuild rows cleanly
+        table_html = f"""
+        <div class="card" style="overflow-x:auto;">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:16px;">
+            <div>
+              <h3 style="margin:0 0 2px;">{esc(game['name'])}</h3>
+              <span class="muted" style="font-size:13px;">{esc(label_display)} &middot; {esc(month_display)}</span>
+            </div>
+            <span style="font-size:13px;color:#6E737B;">Yellow = existing value</span>
+          </div>
+          <form method="post" action="/coach/group-testing/save">
+            <input type="hidden" name="session_label" value="{esc(selected_label or '')}" />
+            <input type="hidden" name="session_month" value="{esc(selected_month or '')}" />
+            <input type="hidden" name="game_key" value="{esc(selected_game_key or '')}" />
+            <table style="width:100%;border-collapse:collapse;">
+              <thead>
+                <tr style="background:#2D323B;color:#fff;">
+                  <th style="text-align:left;padding:8px 12px;min-width:160px;font-weight:600;">Athlete</th>
+                  {col_headers}
+                </tr>
+              </thead>
+              <tbody>{rows_html}</tbody>
+            </table>
+            <div style="margin-top:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+              <button type="submit" class="btn btn-primary" style="font-size:15px;padding:10px 28px;">
+                &#10003; Save All Results
+              </button>
+              <span style="font-size:13px;color:#6E737B;">Blank fields are skipped — only filled values are saved.</span>
+            </div>
+          </form>
+        </div>"""
+
+    elif selected_group_id and selected_label and selected_game_key and not athletes:
+        table_html = '<div class="card"><p class="muted">No athletes found in this group.</p></div>'
+
+    body = f"""
+    <div class="page-head"><h1>Group Testing</h1></div>
+    <p class="muted" style="margin-bottom:20px;">Select a group, phase, and game to enter results for all athletes at once.</p>
+    <div class="card form-card">{selector_form}</div>
+    {table_html}
+    <style>
+      table td, table th {{ padding: 8px 10px; }}
+      table tbody tr:nth-child(even) {{ background: #f9fafb; }}
+      table input[type=number] {{ border:1px solid #DDE0E3;border-radius:5px;padding:5px 8px;font-size:14px; }}
+      table input[type=number]:focus {{ border-color:#2D323B;outline:none; }}
+    </style>"""
+
+    return layout("Group Testing", body, user=coach, active_nav="group_testing")
+
+
 # Session Sheet (blank printable PDF for field recording)
 # ---------------------------------------------------------------------------
 

@@ -509,6 +509,150 @@ def reports_completion(req):
     return resp
 
 
+@router.get("/coach/group-testing")
+def group_testing_get(req):
+    """Show group testing page — optional query params pre-select group/phase/game."""
+    from constants import find_measurement_game
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+
+    group_id     = req.query_get("group_id")
+    session_label = req.query_get("session_label") or None
+    session_month = req.query_get("session_month") or None
+    game_key      = req.query_get("game_key") or None
+
+    try:
+        group_id = int(group_id) if group_id else None
+    except (ValueError, TypeError):
+        group_id = None
+
+    conn = db.get_conn()
+    try:
+        groups = conn.execute("SELECT * FROM groups ORDER BY name").fetchall()
+        athletes = []
+        game = None
+        existing = {}
+
+        if group_id and session_label and game_key:
+            game = find_measurement_game(game_key)
+            athletes = conn.execute(
+                "SELECT id, name FROM users WHERE group_id = ? AND role = 'participant' ORDER BY name",
+                (group_id,)
+            ).fetchall()
+            # Load existing results for each athlete for this phase+game
+            for a in athletes:
+                sess = db.find_session_by_label(conn, a["id"], session_label)
+                if sess:
+                    rows = conn.execute(
+                        "SELECT field_key, value FROM measurement_results WHERE session_id = ? AND game_key = ?",
+                        (sess["id"], game_key)
+                    ).fetchall()
+                    existing[a["id"]] = {r["field_key"]: r["value"] for r in rows}
+    finally:
+        conn.close()
+
+    return Response(views.group_testing_page(
+        coach, groups,
+        selected_group_id=group_id,
+        selected_label=session_label,
+        selected_month=session_month,
+        selected_game_key=game_key,
+        athletes=[dict(a) for a in athletes],
+        game=game,
+        existing=existing,
+    ))
+
+
+@router.post("/coach/group-testing/save")
+def group_testing_save(req):
+    """Save results for all athletes in a group for a given game+phase."""
+    from constants import find_measurement_game
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+
+    session_label = req.form_get("session_label") or None
+    session_month = req.form_get("session_month") or None
+    game_key      = req.form_get("game_key") or None
+    date = (session_month + "-01") if session_month else db.today()
+
+    if not session_label or not game_key:
+        return flash_redirect("/coach/group-testing", "Missing phase or game.")
+
+    game = find_measurement_game(game_key)
+    if not game:
+        return flash_redirect("/coach/group-testing", "Unknown game.")
+
+    # Collect athlete ids from submitted field names: athlete_{id}__{field_key}
+    athlete_fields = {}
+    for key, value in req.form.items():
+        if not key.startswith("athlete_"):
+            continue
+        rest = key[len("athlete_"):]
+        if "__" not in rest:
+            continue
+        aid_str, field_key = rest.split("__", 1)
+        try:
+            aid = int(aid_str)
+        except ValueError:
+            continue
+        val = value.strip() if value else ""
+        if not val:
+            continue
+        try:
+            val = float(val)
+        except ValueError:
+            continue
+        if aid not in athlete_fields:
+            athlete_fields[aid] = {}
+        athlete_fields[aid][field_key] = val
+
+    if not athlete_fields:
+        return flash_redirect(f"/coach/group-testing?session_label={session_label}&session_month={session_month or ''}&game_key={game_key}", "No values entered.")
+
+    conn = db.get_conn()
+    try:
+        saved_athletes = 0
+        for aid, fields in athlete_fields.items():
+            athlete = conn.execute("SELECT group_id FROM users WHERE id = ?", (aid,)).fetchone()
+            if not athlete:
+                continue
+            session_id = db.find_or_create_session(
+                conn, aid, date, coach["id"],
+                group_id=athlete["group_id"],
+                session_label=session_label,
+                session_month=session_month,
+            )
+            for field_key, value in fields.items():
+                db.upsert_measurement_result(conn, session_id, game_key, field_key, value)
+
+            # Recalculate computed fields for this game
+            rows = conn.execute(
+                "SELECT field_key, value FROM measurement_results WHERE session_id = ? AND game_key = ?",
+                (session_id, game_key)
+            ).fetchall()
+            current = {r["field_key"]: r["value"] for r in rows}
+            for comp in game.get("computed", []):
+                inputs = [current.get(k) for k in comp["of"]]
+                if all(v is not None for v in inputs):
+                    result = round(
+                        sum(inputs) if comp.get("formula") == "sum_of" else sum(inputs) / len(inputs), 2
+                    )
+                    db.upsert_measurement_result(conn, session_id, game_key, comp["key"], result)
+
+            saved_athletes += 1
+        conn.commit()
+    finally:
+        conn.close()
+
+    label_display = SESSION_LABEL_MAP.get(session_label, session_label)
+    return flash_redirect(
+        f"/coach/group-testing?session_label={session_label}&session_month={session_month or ''}&game_key={game_key}",
+        f"{game['name']} results saved for {saved_athletes} athlete(s) — {label_display}."
+    )
+
+
 @router.get("/coach/session-sheet")
 def session_sheet_get(req):
     """Blank recording sheet: coach picks games/fields, downloads a printable PDF."""
