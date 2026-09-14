@@ -274,8 +274,8 @@ def migrate_roles(conn):
     import re as _re
 
     old_count = conn.execute(
-        "SELECT COUNT(*) FROM users WHERE role IN ('coach', 'admin')"
-    ).fetchone()[0]
+        "SELECT COUNT(*) AS cnt FROM users WHERE role IN ('coach', 'admin')"
+    ).fetchone()["cnt"]
     if old_count == 0:
         return  # Already migrated (or fresh install with new schema)
 
@@ -284,7 +284,7 @@ def migrate_roles(conn):
         "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
     ).fetchone()
     if schema_row:
-        old_sql = schema_row[0]
+        old_sql = schema_row["sql"]
         new_sql = _re.sub(
             r"CHECK\s*\(\s*role\s+IN\s*\([^)]+\)\s*\)",
             "CHECK(role IN ('practitioner','org_admin','system_admin','participant'))",
@@ -292,7 +292,7 @@ def migrate_roles(conn):
             flags=_re.IGNORECASE,
         )
         if new_sql != old_sql:
-            schema_ver = conn.execute("PRAGMA schema_version").fetchone()[0]
+            schema_ver = conn.execute("PRAGMA schema_version").fetchone()["schema_version"]
             conn.execute("PRAGMA writable_schema = ON")
             conn.execute(
                 "UPDATE sqlite_master SET sql = ? "
