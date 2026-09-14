@@ -5428,26 +5428,47 @@ def coach_list_page(user, coaches, groups=None, coach_group_map=None, organisati
                 f'<option value="{o["id"]}"{" selected" if o["id"] == c.get("organisation_id") else ""}>{esc(o["name"])}</option>'
                 for o in organisations
             )
+            org_form = (
+                f'<form method="post" action="/coach/coaches/{c["id"]}/assign-org"'
+                f' style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">'
+                f'<select name="organisation_id"'
+                f' style="font-size:12px;padding:3px 6px;border:1px solid var(--jag-border);border-radius:4px;flex:1;min-width:120px;">'
+                f'{org_opts}</select>'
+                f'<button type="submit" class="btn btn-ghost btn-sm">Set Org</button>'
+                f'</form>'
+            ) if organisations else ""
             action_html = f"""
-            <form method="post" action="/coach/coaches/{c['id']}/reset-password" style="display:inline"
-                  onsubmit="return confirm('Reset {esc(c['name'])}&#39;s password?');">
-              <button type="submit" class="btn btn-ghost btn-sm">Reset Password</button>
-            </form>
-            <form method="post" action="/coach/coaches/{c['id']}/toggle-admin" style="display:inline"
-                  onsubmit="return confirm('{admin_toggle_label} for {esc(c['name'])}?');">
-              <button type="submit" class="btn btn-ghost btn-sm">{admin_toggle_label}</button>
-            </form>
-            <form method="post" action="/coach/coaches/{c['id']}/toggle" style="display:inline">
-              <button type="submit" class="btn btn-ghost btn-sm">{toggle_label}</button>
-            </form>
-            <form method="post" action="/coach/coaches/{c['id']}/assign-group" style="display:inline-block; vertical-align:middle; margin-left:4px;">
-              <div style="border:1px solid var(--jag-border); border-radius:6px; padding:6px 10px; background:#fff; margin-bottom:4px;">{checkboxes}</div>
-              <button type="submit" class="btn btn-ghost btn-sm">Set Groups</button>
-            </form>
-            {f'''<form method="post" action="/coach/coaches/{c['id']}/assign-org" style="display:inline-block; vertical-align:middle; margin-left:4px;">
-              <select name="organisation_id" style="font-size:12px; padding:3px 6px; border:1px solid var(--jag-border); border-radius:4px;">{org_opts}</select>
-              <button type="submit" class="btn btn-ghost btn-sm">Set Org</button>
-            </form>''' if organisations else ''}"""
+            <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start;min-width:180px;">
+              <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <form method="post" action="/coach/coaches/{c['id']}/reset-password" style="display:contents"
+                      onsubmit="return confirm('Reset {esc(c['name'])}&#39;s password?');">
+                  <button type="submit" class="btn btn-ghost btn-sm">Reset Password</button>
+                </form>
+                <form method="post" action="/coach/coaches/{c['id']}/toggle-admin" style="display:contents"
+                      onsubmit="return confirm('{admin_toggle_label} for {esc(c['name'])}?');">
+                  <button type="submit" class="btn btn-ghost btn-sm">{admin_toggle_label}</button>
+                </form>
+                <form method="post" action="/coach/coaches/{c['id']}/toggle" style="display:contents">
+                  <button type="submit" class="btn btn-ghost btn-sm">{toggle_label}</button>
+                </form>
+              </div>
+              {org_form}
+              <details style="width:100%;">
+                <summary style="font-size:12px;font-weight:600;color:var(--jag-muted);cursor:pointer;
+                                list-style:none;display:flex;align-items:center;gap:4px;user-select:none;">
+                  <span>&#9654;</span> Assign Groups
+                </summary>
+                <form method="post" action="/coach/coaches/{c['id']}/assign-group"
+                      style="margin-top:6px;">
+                  <div style="border:1px solid var(--jag-border);border-radius:6px;
+                               padding:6px 10px;background:#FAFAFA;margin-bottom:6px;
+                               max-height:140px;overflow-y:auto;">
+                    {checkboxes}
+                  </div>
+                  <button type="submit" class="btn btn-ghost btn-sm">Save Groups</button>
+                </form>
+              </details>
+            </div>"""
         rows.append(f"""<tr class="coach-row" data-org="{c_org_attr}" data-admin="{c_admin_attr}" data-active="{c_active_attr}">
           <td>{org_pill}{esc(c['name'])}{admin_badge}</td>
           <td>{esc(c['email'])}{group_badge}</td>
