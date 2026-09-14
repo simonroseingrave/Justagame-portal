@@ -562,75 +562,15 @@ def reports_completion(req):
     return resp
 
 
-@router.get("/coach/completion-tracker")
-def completion_tracker_get(req):
-    """Show completion matrix for a group+phase — which games each athlete has done."""
-    coach = require_role(req, "coach")
-    if not coach:
-        return redirect("/login")
-
-    group_id      = req.get_query("group_id")
-    session_label = req.get_query("session_label") or None
-    session_month = req.get_query("session_month") or None
-    game_keys     = req.query.get("games", [])   # multi-value: list of selected game keys
-
-    try:
-        group_id = int(group_id) if group_id else None
-    except (ValueError, TypeError):
-        group_id = None
-
-    conn = db.get_conn()
-    try:
-        groups   = conn.execute("SELECT * FROM participant_groups ORDER BY name").fetchall()
-        athletes = []
-        completion = {}   # {athlete_id: set of game_keys}
-
-        if group_id and session_label and game_keys:
-            athletes = conn.execute(
-                "SELECT id, name FROM users WHERE group_id = ? AND role = 'participant' ORDER BY name",
-                (group_id,)
-            ).fetchall()
-
-            if athletes:
-                athlete_ids = [a["id"] for a in athletes]
-                placeholders = ",".join("?" * len(athlete_ids))
-                # One query: all results for these athletes for this phase label
-                rows = conn.execute(
-                    f"SELECT ms.participant_id, mr.game_key "
-                    f"FROM measurement_sessions ms "
-                    f"JOIN measurement_results mr ON mr.session_id = ms.id "
-                    f"WHERE ms.session_label = ? AND ms.participant_id IN ({placeholders}) "
-                    f"GROUP BY ms.participant_id, mr.game_key",
-                    [session_label] + athlete_ids
-                ).fetchall()
-                for row in rows:
-                    pid = row["participant_id"]
-                    if pid not in completion:
-                        completion[pid] = set()
-                    completion[pid].add(row["game_key"])
-    finally:
-        conn.close()
-
-    return Response(views.completion_tracker_page(
-        coach, groups,
-        selected_group_id=group_id,
-        selected_label=session_label,
-        selected_month=session_month,
-        selected_game_keys=game_keys,
-        athletes=[dict(a) for a in athletes],
-        completion=completion,
-    ))
-
-
-@router.get("/coach/group-testing")
-def group_testing_get(req):
-    """Show group testing page — optional query params pre-select group/phase/game."""
+@router.get("/coach/group-hub")
+def group_hub_get(req):
+    """Group Hub — completion matrix + results entry + session sheet PDF in one place."""
     from constants import find_measurement_game
     coach = require_role(req, "coach")
     if not coach:
         return redirect("/login")
 
-    group_id     = req.get_query("group_id")
+    group_id      = req.get_query("group_id")
     session_label = req.get_query("session_label") or None
     session_month = req.get_query("session_month") or None
     game_key      = req.get_query("game_key") or None
@@ -642,20 +582,19 @@ def group_testing_get(req):
 
     conn = db.get_conn()
     try:
-        groups = conn.execute("SELECT * FROM participant_groups ORDER BY name").fetchall()
+        groups   = conn.execute("SELECT * FROM participant_groups ORDER BY name").fetchall()
         athletes = []
-        game = None
+        game     = None
         existing = {}
-        completion_data = {}   # {athlete_id: set(game_keys with any result)}
+        completion_data = {}  # {athlete_id: set(game_keys)}
 
-        # Load all athletes in the group whenever group + phase are selected
         if group_id and session_label:
             all_athletes = conn.execute(
                 "SELECT id, name FROM users WHERE group_id = ? AND role = 'participant' ORDER BY name",
                 (group_id,)
             ).fetchall()
             if all_athletes:
-                athlete_ids = [a["id"] for a in all_athletes]
+                athlete_ids  = [a["id"] for a in all_athletes]
                 placeholders = ",".join("?" * len(athlete_ids))
                 done_rows = conn.execute(
                     f"SELECT ms.participant_id, mr.game_key "
@@ -668,25 +607,24 @@ def group_testing_get(req):
                 for r in done_rows:
                     completion_data.setdefault(r["participant_id"], set()).add(r["game_key"])
 
-            # Always expose all_athletes for the name map in the completion matrix
             athletes = list(all_athletes)
 
-            # If a specific game was also selected, load existing results per athlete
             if game_key:
                 game = find_measurement_game(game_key)
                 for a in athletes:
                     sess = db.find_session_by_label(conn, a["id"], session_label)
                     if sess:
                         rows = conn.execute(
-                            "SELECT field_key, value FROM measurement_results WHERE session_id = ? AND game_key = ?",
+                            "SELECT field_key, value FROM measurement_results "
+                            "WHERE session_id = ? AND game_key = ?",
                             (sess["id"], game_key)
                         ).fetchall()
                         existing[a["id"]] = {r["field_key"]: r["value"] for r in rows}
     finally:
         conn.close()
 
-    return Response(views.group_testing_page(
-        coach, groups,
+    return Response(views.group_hub_page(
+        coach, [dict(g) for g in groups],
         selected_group_id=group_id,
         selected_label=session_label,
         selected_month=session_month,
@@ -696,6 +634,26 @@ def group_testing_get(req):
         existing=existing,
         completion_data={k: list(v) for k, v in completion_data.items()},
     ))
+
+
+@router.get("/coach/completion-tracker")
+def completion_tracker_get(req):
+    """Redirect to Group Hub (completion tracker merged there)."""
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    qs = req.environ.get("QUERY_STRING", "")
+    return redirect("/coach/group-hub" + (("?" + qs) if qs else ""))
+
+
+@router.get("/coach/group-testing")
+def group_testing_get(req):
+    """Redirect to Group Hub (group testing merged there)."""
+    coach = require_role(req, "coach")
+    if not coach:
+        return redirect("/login")
+    qs = req.environ.get("QUERY_STRING", "")
+    return redirect("/coach/group-hub" + (("?" + qs) if qs else ""))
 
 
 @router.post("/coach/group-testing/save")
@@ -781,37 +739,23 @@ def group_testing_save(req):
         conn.close()
 
     label_display = SESSION_LABEL_MAP.get(session_label, session_label)
-    return flash_redirect(
-        f"/coach/group-testing?session_label={session_label}&session_month={session_month or ''}&game_key={game_key}",
-        f"{game['name']} results saved for {saved_athletes} athlete(s) — {label_display}."
-    )
+    redirect_to = req.form_get("redirect_to") or None
+    # Only allow relative redirects to our own pages
+    if redirect_to and redirect_to.startswith("/coach/"):
+        dest = redirect_to
+    else:
+        dest = f"/coach/group-hub?session_label={session_label}&session_month={session_month or ''}&game_key={game_key}"
+    return flash_redirect(dest, f"{game['name']} results saved for {saved_athletes} athlete(s) — {label_display}.")
 
 
 @router.get("/coach/session-sheet")
 def session_sheet_get(req):
-    """Blank recording sheet: coach picks games/fields, downloads a printable PDF."""
+    """Redirect to Group Hub (session sheet merged there)."""
     coach = require_role(req, "coach")
     if not coach:
         return redirect("/login")
-    conn = db.get_conn()
-    try:
-        if coach.get("is_admin"):
-            groups = conn.execute(
-                "SELECT id, name FROM participant_groups ORDER BY sort_order, name"
-            ).fetchall()
-        else:
-            coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
-            if coach_group_ids:
-                placeholders = ",".join("?" * len(coach_group_ids))
-                groups = conn.execute(
-                    f"SELECT id, name FROM participant_groups WHERE id IN ({placeholders}) ORDER BY sort_order, name",
-                    coach_group_ids,
-                ).fetchall()
-            else:
-                groups = []
-    finally:
-        conn.close()
-    return Response(views.session_sheet_page(coach, [dict(g) for g in groups], SESSION_TYPES))
+    qs = req.environ.get("QUERY_STRING", "")
+    return redirect("/coach/group-hub" + (("?" + qs) if qs else ""))
 
 
 @router.post("/coach/session-sheet/pdf")

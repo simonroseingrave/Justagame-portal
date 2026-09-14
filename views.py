@@ -132,9 +132,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             if user.get("is_admin"):
                 links.append(("/coach/participants/new", "Add Participant", "new_participant"))
             links.append(("/coach/session", "Record Session", "session"))
-            links.append(("/coach/group-testing", "Group Testing", "group_testing"))
-            links.append(("/coach/completion-tracker", "Completion", "completion_tracker"))
-            links.append(("/coach/session-sheet", "Session Sheet", "session_sheet"))
+            links.append(("/coach/group-hub", "Group Hub", "group_hub"))
             links.append(("/coach/resources", "Resources", "resources"))
             if user.get("is_admin"):
                 links.append(("/coach/coaches", "Coaches", "coaches"))
@@ -3320,7 +3318,442 @@ def session_sheet_page(coach, groups, session_types):
     }}
     </script>
     """
-    return layout("Session Recording Sheet", body, user=coach, active_nav="session_sheet")
+    return layout("Session Recording Sheet", body, user=coach, active_nav="group_hub")
+
+
+# ──────────────────────────────────────────────────────────────────────────────
+# GROUP HUB — combined completion matrix + group entry + session sheet PDF
+# ──────────────────────────────────────────────────────────────────────────────
+
+def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
+                   selected_month=None, selected_game_key=None,
+                   athletes=None, game=None, existing=None, completion_data=None):
+    """Single page combining:
+      1. Selector form (group + phase + month + optional game)
+      2. Completion matrix (shown when group+phase selected)
+      3. Game entry table (shown when game also selected)
+      4. Session Sheet PDF download panel (collapsible)
+    """
+    athletes        = athletes or []
+    existing        = existing or {}
+    completion_data = completion_data or {}
+
+    # ── Selector form ─────────────────────────────────────────────────────────
+    group_opts = '<option value="">— Select group —</option>' + "".join(
+        f'<option value="{g["id"]}" {"selected" if g["id"] == selected_group_id else ""}>{esc(g["name"])}</option>'
+        for g in groups
+    )
+    type_opts = '<option value="">— Select phase —</option>' + "".join(
+        f'<option value="{s["key"]}" {"selected" if s["key"] == selected_label else ""}>{esc(s["label"])}</option>'
+        for s in SESSION_TYPES
+    )
+    game_opts = '<option value="">— Select game (optional) —</option>' + "".join(
+        f'<option value="{g["key"]}" {"selected" if g["key"] == selected_game_key else ""}>{esc(g["name"])}</option>'
+        for g in all_measurement_games()
+    )
+    selector_form = f"""
+    <form method="get" action="/coach/group-hub"
+          style="display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end;">
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Group</label>
+        <select name="group_id" required style="min-width:175px;">{group_opts}</select>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Test Phase</label>
+        <select name="session_label" required style="min-width:175px;">{type_opts}</select>
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">Month</label>
+        {_month_select(name="session_month", selected=selected_month)}
+      </div>
+      <div>
+        <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;">
+          Game <span style="font-weight:400;color:#6E737B;">(to enter results)</span>
+        </label>
+        <select name="game_key" style="min-width:200px;">{game_opts}</select>
+      </div>
+      <button type="submit" class="btn btn-primary" style="white-space:nowrap;">Load</button>
+    </form>"""
+
+    # ── Completion matrix ─────────────────────────────────────────────────────
+    matrix_html = ""
+    if completion_data and selected_group_id and selected_label:
+        all_games  = all_measurement_games()
+        base_params = (
+            f"group_id={esc(str(selected_group_id))}"
+            f"&session_label={esc(selected_label or '')}"
+            f"&session_month={esc(selected_month or '')}"
+        )
+        athlete_name_map = {a["id"]: a["name"] for a in athletes}
+
+        game_done_counts = {}
+        for gk_set in completion_data.values():
+            for gk in gk_set:
+                game_done_counts[gk] = game_done_counts.get(gk, 0) + 1
+
+        total_athl  = len(completion_data)
+        total_cells = total_athl * len(all_games)
+        done_cells  = sum(len(v) for v in completion_data.values())
+        overall_pct = int(round(100 * done_cells / total_cells)) if total_cells else 0
+
+        game_headers = ""
+        for g in all_games:
+            abbrev     = g["name"][:12] + ("…" if len(g["name"]) > 12 else "")
+            is_active  = g["key"] == selected_game_key
+            hdr_style  = "background:#F0A82E;color:#2D323B;" if is_active else ""
+            game_url   = f"/coach/group-hub?{base_params}&game_key={esc(g['key'])}"
+            game_headers += (
+                f'<th style="min-width:52px;max-width:64px;font-size:11px;font-weight:600;'
+                f'text-align:center;padding:6px 4px;white-space:normal;word-break:break-word;'
+                f'cursor:pointer;{hdr_style}" title="{esc(g["name"])}">'
+                f'<a href="{game_url}" style="color:inherit;text-decoration:none;">{esc(abbrev)}</a></th>'
+            )
+
+        athlete_rows = ""
+        for aid, done_set in sorted(completion_data.items(),
+                                    key=lambda x: athlete_name_map.get(x[0], "")):
+            aname = athlete_name_map.get(aid, f"#{aid}")
+            cells = ""
+            for g in all_games:
+                done      = g["key"] in done_set
+                game_url  = f"/coach/group-hub?{base_params}&game_key={esc(g['key'])}"
+                is_active = g["key"] == selected_game_key
+                outline   = "outline:2px solid #F0A82E;outline-offset:-2px;" if is_active else ""
+                if done:
+                    cells += f'<td style="background:#d1fae5;color:#065f46;font-weight:700;text-align:center;font-size:13px;{outline}">✓</td>'
+                else:
+                    cells += (
+                        f'<td style="background:#fee2e2;color:#9b1c1c;text-align:center;font-size:13px;{outline}">'
+                        f'<a href="{game_url}" style="color:#9b1c1c;text-decoration:none;font-weight:600;">—</a></td>'
+                    )
+            profile_url = f"/coach/participants/{aid}"
+            athlete_rows += (
+                f'<tr style="border-bottom:1px solid #f0f0f0;">'
+                f'<td style="font-size:13px;font-weight:600;white-space:nowrap;padding:5px 10px;'
+                f'position:sticky;left:0;background:#fff;z-index:1;">'
+                f'<a href="{profile_url}" style="color:inherit;text-decoration:none;">{esc(aname)}</a></td>'
+                f'{cells}</tr>'
+            )
+
+        summary_cells = (
+            '<td style="font-size:11px;color:#6E737B;font-weight:600;padding:5px 10px;'
+            'position:sticky;left:0;background:#f9fafb;">Done</td>'
+        )
+        for g in all_games:
+            n     = game_done_counts.get(g["key"], 0)
+            pct_g = int(round(100 * n / total_athl)) if total_athl else 0
+            col   = "#065f46" if pct_g == 100 else ("#92400e" if pct_g == 0 else "#1e40af")
+            summary_cells += (
+                f'<td style="text-align:center;font-size:11px;font-weight:700;color:{col};'
+                f'background:#f9fafb;">{n}/{total_athl}</td>'
+            )
+
+        label_display_m = esc(SESSION_LABEL_MAP.get(selected_label, selected_label or ""))
+        matrix_html = f"""
+        <div class="card" style="margin-bottom:0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;
+                      flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+            <span style="font-size:13px;font-weight:700;color:#2D323B;">
+              Completion — {label_display_m}
+            </span>
+            <span style="font-size:12px;color:#6E737B;">
+              {done_cells}/{total_cells} &nbsp;·&nbsp; {overall_pct}% &nbsp;·&nbsp;
+              Click a game header or — to load that game below
+            </span>
+          </div>
+          <div style="background:#e5e7eb;border-radius:4px;height:5px;margin-bottom:14px;">
+            <div style="height:5px;background:#F0A82E;border-radius:4px;width:{overall_pct}%;
+                        transition:width 0.4s;"></div>
+          </div>
+          <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+              <thead>
+                <tr style="background:#2D323B;color:#fff;">
+                  <th style="text-align:left;padding:6px 10px;font-size:13px;min-width:130px;
+                             position:sticky;left:0;background:#2D323B;z-index:2;">Athlete</th>
+                  {game_headers}
+                </tr>
+              </thead>
+              <tbody>{athlete_rows}</tbody>
+              <tfoot><tr>{summary_cells}</tr></tfoot>
+            </table>
+          </div>
+        </div>"""
+
+    # ── Game entry table ──────────────────────────────────────────────────────
+    entry_html = ""
+    if game and athletes:
+        fields = [f for f in game["fields"]]
+
+        def _th_sfx(field):
+            if field["type"] == "time":
+                return '<br><small style="font-weight:400;font-size:11px;">seconds</small>'
+            u = field.get("unit", "")
+            return f'<br><small style="font-weight:400;font-size:11px;">{esc(u)}</small>' if u else ""
+
+        col_headers = "".join(
+            f'<th style="min-width:120px;">{esc(f["label"])}{_th_sfx(f)}</th>'
+            for f in fields
+        )
+        rows_html = ""
+        for a in athletes:
+            aid  = a["id"]
+            vals = existing.get(aid, {})
+            cells = ""
+            for f in fields:
+                val  = vals.get(f["key"], "")
+                step = "0.01" if f["type"] == "time" else "1"
+                bg   = "background:#fffbe6;" if val != "" else ""
+                cells += (
+                    f'<td><input type="number" step="{step}" min="0" '
+                    f'name="athlete_{aid}__{f["key"]}" value="{esc(str(val)) if val != "" else ""}" '
+                    f'style="width:100%;{bg}" /></td>'
+                )
+            rows_html += (
+                f'<tr style="border-bottom:1px solid #DDE0E3;">'
+                f'<td style="font-weight:600;white-space:nowrap;">{esc(a["name"])}</td>{cells}</tr>'
+            )
+
+        lbl_disp = SESSION_LABEL_MAP.get(selected_label, selected_label or "")
+        try:
+            import datetime as _dt2
+            em = _dt2.datetime.strptime(selected_month, "%Y-%m")
+            month_disp = em.strftime("%B %Y")
+        except Exception:
+            month_disp = selected_month or ""
+
+        entry_html = f"""
+        <div class="card" style="overflow-x:auto;margin-bottom:0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;
+                      flex-wrap:wrap;gap:10px;margin-bottom:14px;">
+            <div>
+              <h3 style="margin:0 0 2px;">{esc(game['name'])}</h3>
+              <span class="muted" style="font-size:13px;">
+                {esc(lbl_disp)} &middot; {esc(month_disp)} &nbsp;·&nbsp;
+                <span style="color:#92400e;">Yellow = existing value</span>
+              </span>
+            </div>
+          </div>
+          <form method="post" action="/coach/group-testing/save">
+            <input type="hidden" name="session_label"  value="{esc(selected_label or '')}" />
+            <input type="hidden" name="session_month"  value="{esc(selected_month or '')}" />
+            <input type="hidden" name="game_key"       value="{esc(selected_game_key or '')}" />
+            <input type="hidden" name="redirect_to"    value="/coach/group-hub?group_id={esc(str(selected_group_id or ''))}&session_label={esc(selected_label or '')}&session_month={esc(selected_month or '')}&game_key={esc(selected_game_key or '')}" />
+            <table style="width:100%;border-collapse:collapse;">
+              <thead>
+                <tr style="background:#2D323B;color:#fff;">
+                  <th style="text-align:left;padding:8px 12px;min-width:160px;">Athlete</th>
+                  {col_headers}
+                </tr>
+              </thead>
+              <tbody>{rows_html}</tbody>
+            </table>
+            <div style="margin-top:16px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+              <button type="submit" class="btn btn-primary" style="font-size:15px;padding:10px 28px;">
+                &#10003; Save All Results
+              </button>
+              <span style="font-size:13px;color:#6E737B;">Blank fields are skipped.</span>
+            </div>
+          </form>
+        </div>"""
+
+    elif selected_group_id and selected_label and selected_game_key and not athletes:
+        entry_html = '<div class="card"><p class="muted">No athletes found in this group.</p></div>'
+
+    # ── Session Sheet PDF panel ───────────────────────────────────────────────
+    sheet_html = ""
+    if selected_group_id and selected_label:
+        # Embed completion data as JSON for "select only missing" JS
+        import json as _json
+        comp_json = _json.dumps({str(k): list(v) for k, v in completion_data.items()})
+
+        game_blocks = ""
+        for section in MEASUREMENT_GAMES:
+            for g in section["games"]:
+                gk = g["key"]
+                # Work out if this game is fully done for all athletes
+                n_done = sum(1 for vs in completion_data.values() if gk in vs)
+                n_tot  = len(completion_data)
+                badge  = ""
+                if n_tot > 0:
+                    if n_done == n_tot:
+                        badge = f'<span style="font-size:11px;color:#065f46;background:#d1fae5;padding:1px 7px;border-radius:999px;font-weight:600;margin-left:6px;">✓ All done</span>'
+                    elif n_done > 0:
+                        badge = f'<span style="font-size:11px;color:#92400e;background:#fef3c7;padding:1px 7px;border-radius:999px;font-weight:600;margin-left:6px;">{n_done}/{n_tot}</span>'
+                    else:
+                        badge = f'<span style="font-size:11px;color:#9b1c1c;background:#fee2e2;padding:1px 7px;border-radius:999px;font-weight:600;margin-left:6px;">None done</span>'
+
+                field_html_parts = []
+                for f in g["fields"]:
+                    unit = f.get("unit", "")
+                    unit_span = (
+                        '<span style="font-size:11px;color:#6E737B;margin-left:4px;">(' + esc(unit) + ')</span>'
+                        if unit else ""
+                    )
+                    field_html_parts.append(
+                        f'<label style="display:flex;align-items:center;gap:6px;font-size:13px;'
+                        f'font-weight:400;margin:4px 0 4px 22px;cursor:pointer;">'
+                        f'<input type="checkbox" name="fields" value="{esc(gk)}||{esc(f["key"])}" '
+                        f'class="sheet-field-cb sheet-cb-{esc(gk)}" checked style="width:auto;margin:0;" />'
+                        f'{esc(f["label"])}{unit_span}'
+                        f'</label>'
+                    )
+                fields_html = "".join(field_html_parts)
+                game_blocks += f"""
+                <div style="margin-bottom:8px;">
+                  <label style="display:flex;align-items:center;gap:6px;font-size:14px;
+                                font-weight:700;cursor:pointer;">
+                    <input type="checkbox" class="sheet-game-cb" data-game="{esc(gk)}"
+                           checked style="width:auto;margin:0;"
+                           onchange="toggleSheetGame(this)" />
+                    {esc(g['name'])}{badge}
+                  </label>
+                  <div class="sheet-fields-{esc(gk)}">{fields_html}</div>
+                </div>"""
+
+        sheet_html = f"""
+        <div class="card" style="margin-bottom:0;">
+          <div style="display:flex;align-items:center;justify-content:space-between;
+                      flex-wrap:wrap;gap:10px;cursor:pointer;user-select:none;"
+               onclick="toggleSheetPanel()">
+            <span style="font-size:14px;font-weight:700;color:#2D323B;">
+              &#128196; Download Session Sheet PDF
+            </span>
+            <span id="sheet-toggle-icon" style="font-size:11px;color:#F0A82E;font-weight:700;">
+              &#9660; EXPAND
+            </span>
+          </div>
+          <div id="sheet-panel" style="display:none;margin-top:16px;">
+            <form method="post" action="/coach/session-sheet/pdf" target="_blank">
+              <input type="hidden" name="group_id"       value="{esc(str(selected_group_id or ''))}" />
+              <input type="hidden" name="session_label"  value="{esc(selected_label or '')}" />
+              <input type="hidden" name="session_month"  value="{esc(selected_month or '')}" />
+              <input type="hidden" name="include_names"  value="1" />
+              <div style="display:flex;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+                <button type="button" onclick="sheetSelectAll()"
+                        style="font-size:12px;padding:4px 12px;border-radius:999px;
+                               border:1px solid #DDE0E3;background:#fff;cursor:pointer;font-weight:600;">
+                  All games
+                </button>
+                <button type="button" onclick="sheetSelectMissing()"
+                        style="font-size:12px;padding:4px 12px;border-radius:999px;
+                               border:1px solid #F0A82E;background:#FFF8E7;cursor:pointer;
+                               font-weight:600;color:#92400e;">
+                  Only missing
+                </button>
+                <button type="button" onclick="sheetSelectNone()"
+                        style="font-size:12px;padding:4px 12px;border-radius:999px;
+                               border:1px solid #DDE0E3;background:#fff;cursor:pointer;font-weight:600;">
+                  None
+                </button>
+              </div>
+              <div style="columns:2;column-gap:24px;margin-bottom:16px;">{game_blocks}</div>
+              <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+                          padding-top:12px;border-top:1px solid #DDE0E3;">
+                <div style="display:flex;align-items:center;gap:8px;">
+                  <label style="font-size:13px;font-weight:600;">Blank rows to add:</label>
+                  <input type="number" name="blank_rows" value="0" min="0" max="20"
+                         style="width:60px;padding:4px 8px;border:1px solid #DDE0E3;border-radius:5px;" />
+                </div>
+                <button type="submit" class="btn btn-primary" style="font-size:14px;padding:9px 24px;">
+                  &#8681; Download PDF
+                </button>
+                <span style="font-size:12px;color:#6E737B;">Opens in a new tab.</span>
+              </div>
+            </form>
+          </div>
+        </div>
+        <script>
+        var _compData = {comp_json};
+        function toggleSheetPanel() {{
+          var p = document.getElementById('sheet-panel');
+          var icon = document.getElementById('sheet-toggle-icon');
+          var open = p.style.display !== 'none';
+          p.style.display = open ? 'none' : 'block';
+          icon.innerHTML = open ? '&#9660; EXPAND' : '&#9650; COLLAPSE';
+        }}
+        function toggleSheetGame(cb) {{
+          var gk = cb.dataset.game;
+          document.querySelectorAll('.sheet-cb-' + gk).forEach(function(el) {{
+            el.checked = cb.checked;
+          }});
+        }}
+        function sheetSelectAll() {{
+          document.querySelectorAll('.sheet-game-cb,.sheet-field-cb').forEach(function(el) {{
+            el.checked = true;
+          }});
+          document.querySelectorAll('[class^="sheet-fields-"]').forEach(function(el) {{
+            el.style.display = '';
+          }});
+        }}
+        function sheetSelectNone() {{
+          document.querySelectorAll('.sheet-game-cb,.sheet-field-cb').forEach(function(el) {{
+            el.checked = false;
+          }});
+        }}
+        function sheetSelectMissing() {{
+          // Uncheck games where every athlete already has results
+          var totalAthletes = Object.keys(_compData).length;
+          document.querySelectorAll('.sheet-game-cb').forEach(function(cb) {{
+            var gk = cb.dataset.game;
+            var doneCount = 0;
+            Object.values(_compData).forEach(function(doneGames) {{
+              if (doneGames.indexOf(gk) !== -1) doneCount++;
+            }});
+            var allDone = (totalAthletes > 0 && doneCount === totalAthletes);
+            cb.checked = !allDone;
+            document.querySelectorAll('.sheet-cb-' + gk).forEach(function(el) {{
+              el.checked = !allDone;
+            }});
+          }});
+        }}
+        // Auto-open the sheet panel if no game is selected (nothing else to show)
+        {'toggleSheetPanel();' if not selected_game_key and completion_data else ''}
+        </script>"""
+
+    # ── Assemble sections ─────────────────────────────────────────────────────
+    sections = []
+    if matrix_html:
+        sections.append(("Completion Overview", matrix_html))
+    if entry_html:
+        sections.append(("Enter Results", entry_html))
+    if sheet_html:
+        sections.append(("Session Sheet", sheet_html))
+
+    content_html = ""
+    for section_label_txt, section_body in sections:
+        content_html += f"""
+        <div style="margin-bottom:20px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+            <span style="width:4px;height:20px;background:#F0A82E;border-radius:2px;
+                         display:inline-block;flex-shrink:0;"></span>
+            <span style="font-size:12px;font-weight:700;color:#6E737B;
+                         text-transform:uppercase;letter-spacing:0.06em;">{esc(section_label_txt)}</span>
+          </div>
+          {section_body}
+        </div>"""
+
+    if not content_html:
+        content_html = '<p class="muted" style="margin-top:24px;">Select a group and phase above to get started.</p>'
+
+    body = f"""
+    <div class="page-head">
+      <div>
+        <h1>Group Hub</h1>
+        <p class="muted">Completion overview · results entry · session sheet — all in one place.</p>
+      </div>
+    </div>
+    <div class="card form-card" style="margin-bottom:20px;">{selector_form}</div>
+    {content_html}
+    <style>
+      table td, table th {{ padding:8px 10px; }}
+      table tbody tr:nth-child(even) {{ background:#f9fafb; }}
+      table input[type=number] {{ border:1px solid #DDE0E3;border-radius:5px;
+                                  padding:5px 8px;font-size:14px; }}
+      table input[type=number]:focus {{ border-color:#2D323B;outline:none; }}
+    </style>"""
+
+    return layout("Group Hub", body, user=coach, active_nav="group_hub")
 
 
 def session_sheet_pdf(label_display, month_str, group_name, athletes, games_fields,
