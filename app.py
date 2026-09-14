@@ -582,7 +582,12 @@ def group_hub_get(req):
 
     conn = db.get_conn()
     try:
-        groups   = conn.execute("SELECT * FROM participant_groups ORDER BY name").fetchall()
+        groups = conn.execute(
+            "SELECT pg.*, o.name AS org_name "
+            "FROM participant_groups pg "
+            "LEFT JOIN organisations o ON o.id = pg.organisation_id "
+            "ORDER BY o.name NULLS LAST, pg.sort_order, pg.name"
+        ).fetchall()
         athletes = []
         game     = None
         existing = {}

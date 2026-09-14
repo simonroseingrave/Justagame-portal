@@ -3339,10 +3339,19 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
     completion_data = completion_data or {}
 
     # ── Selector form ─────────────────────────────────────────────────────────
-    group_opts = '<option value="">— Select group —</option>' + "".join(
-        f'<option value="{g["id"]}" {"selected" if g["id"] == selected_group_id else ""}>{esc(g["name"])}</option>'
-        for g in groups
-    )
+    # Group the group options by organisation using <optgroup>
+    from collections import OrderedDict as _OD
+    _org_buckets = _OD()  # org_name -> [group, ...]
+    for _g in groups:
+        _on = _g.get("org_name") or "No Organisation"
+        _org_buckets.setdefault(_on, []).append(_g)
+    group_opts = '<option value="">— Select group —</option>'
+    for _on, _glist in _org_buckets.items():
+        group_opts += f'<optgroup label="{esc(_on)}">'
+        for _g in _glist:
+            _sel = "selected" if _g["id"] == selected_group_id else ""
+            group_opts += f'<option value="{_g["id"]}" {_sel}>{esc(_g["name"])}</option>'
+        group_opts += "</optgroup>"
     type_opts = '<option value="">— Select phase —</option>' + "".join(
         f'<option value="{s["key"]}" {"selected" if s["key"] == selected_label else ""}>{esc(s["label"])}</option>'
         for s in SESSION_TYPES
