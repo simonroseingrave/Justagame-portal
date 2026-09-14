@@ -263,13 +263,56 @@ def init_db():
 
 
 def migrate_roles(conn):
-    """Rename legacy 'coach' role values to 'practitioner' / 'system_admin'.
-    Idempotent — safe to run on every startup."""
+    """Rename legacy 'coach' / 'admin' role values to 'practitioner' / 'system_admin'.
+    Idempotent — safe to run on every startup.
+
+    The old DB schema has CHECK(role IN ('coach','admin','participant')) which
+    blocks an UPDATE to the new role names.  SQLite has no ALTER TABLE … DROP
+    CONSTRAINT, so we patch sqlite_master directly and bump schema_version to
+    flush the in-connection schema cache before running the UPDATEs.
+    """
+    import re as _re
+
+    old_count = conn.execute(
+        "SELECT COUNT(*) FROM users WHERE role IN ('coach', 'admin')"
+    ).fetchone()[0]
+    if old_count == 0:
+        return  # Already migrated (or fresh install with new schema)
+
+    # Patch the CHECK constraint in sqlite_master so the UPDATE is allowed
+    schema_row = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE type='table' AND name='users'"
+    ).fetchone()
+    if schema_row:
+        old_sql = schema_row[0]
+        new_sql = _re.sub(
+            r"CHECK\s*\(\s*role\s+IN\s*\([^)]+\)\s*\)",
+            "CHECK(role IN ('practitioner','org_admin','system_admin','participant'))",
+            old_sql,
+            flags=_re.IGNORECASE,
+        )
+        if new_sql != old_sql:
+            schema_ver = conn.execute("PRAGMA schema_version").fetchone()[0]
+            conn.execute("PRAGMA writable_schema = ON")
+            conn.execute(
+                "UPDATE sqlite_master SET sql = ? "
+                "WHERE type = 'table' AND name = 'users'",
+                (new_sql,),
+            )
+            # Bumping schema_version forces SQLite to reload the schema
+            # from sqlite_master on the next statement, so our UPDATE below
+            # will see the relaxed CHECK constraint.
+            conn.execute(f"PRAGMA schema_version = {schema_ver + 1}")
+            conn.execute("PRAGMA writable_schema = OFF")
+            conn.commit()
+
+    # Now migrate: is_admin=1 → system_admin, everyone else → practitioner
     conn.execute(
-        "UPDATE users SET role = 'system_admin' WHERE role = 'coach' AND is_admin = 1"
+        "UPDATE users SET role = 'system_admin' "
+        "WHERE role IN ('coach', 'admin') AND is_admin = 1"
     )
     conn.execute(
-        "UPDATE users SET role = 'practitioner' WHERE role = 'coach'"
+        "UPDATE users SET role = 'practitioner' WHERE role IN ('coach', 'admin')"
     )
     conn.commit()
 
