@@ -127,7 +127,7 @@ def _session_display_label(session):
 def layout(title, body, user=None, flash=None, active_nav=None):
     nav = ""
     if user:
-        if user["role"] == "coach":
+        if user["role"] in ("practitioner", "org_admin", "system_admin"):
             links = [("/coach", "Dashboard", "dashboard")]
             if user.get("is_admin"):
                 links.append(("/coach/participants/new", "Add Participant", "new_participant"))
@@ -135,7 +135,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             links.append(("/coach/group-hub", "Group Hub", "group_hub"))
             links.append(("/coach/resources", "Resources", "resources"))
             if user.get("is_admin"):
-                links.append(("/coach/coaches", "Coaches", "coaches"))
+                links.append(("/coach/coaches", "Practitioners", "coaches"))
                 links.append(("/coach/organisations", "Organisations", "organisations"))
             links.append(("/coach/reports", "Statistics & Reports", "progress"))
         else:
@@ -232,7 +232,7 @@ def login_page(error=None, prefill_login=""):
       <div class="card login-card">
         <img src="/static/img/logo.png" alt="Just A Game" class="login-logo" />
         <h1>{APP_NAME}</h1>
-        <p class="muted">Log in to view your progress, or manage athletes as a coach.</p>
+        <p class="muted">Log in to view your progress, or manage athletes as a practitioner.</p>
         {error_html}
         <form method="post" action="/login">
           <label for="login">Email or username</label>
@@ -260,7 +260,7 @@ def forgot_password_page():
         <img src="/static/img/logo.png" alt="Just A Game" class="login-logo" />
         <h1>Forgot your password?</h1>
         <p class="muted">
-          This app doesn't send reset emails — instead, your coach can issue
+          This app doesn't send reset emails — instead, your practitioner can issue
           you a new password directly. Get in touch with them (or with Just
           A Game) and ask for a password reset; they'll send you a new
           temporary password to log in with.
@@ -1481,7 +1481,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     <div style="max-width:1320px;">
     <div class="page-head">
       <div>
-        <h1>Coach Dashboard</h1>
+        <h1>Practitioner Dashboard</h1>
         <p class="muted">{subtitle}</p>
       </div>
     </div>
@@ -1497,7 +1497,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     {filter_js}
     {collapse_js}
     """
-    return layout("Coach Dashboard", body, user=user, active_nav="dashboard")
+    return layout("Practitioner Dashboard", body, user=user, active_nav="dashboard")
 
 
 def new_participant_form(user, error=None, groups=None):
@@ -4930,7 +4930,7 @@ def simple_message_page(title, message, user=None):
 
 def confirm_replace_session_page(coach, participant, results, session_label, session_month,
                                   label_display, existing_month):
-    """Warn the coach that a session with this label already exists, offer to merge new results in."""
+    """Warn the practitioner that a session with this label already exists, offer to merge new results in."""
     import datetime as _dt2
     try:
         em = _dt2.datetime.strptime(existing_month, "%Y-%m")
@@ -5043,7 +5043,7 @@ def coach_list_page(user, coaches, groups=None, coach_group_map=None, organisati
         is_self = c["id"] == user["id"]
         status = "Active" if c["active"] else "Inactive"
         status_class = "tag-active" if c["active"] else "tag-inactive"
-        admin_badge = ' <span class="tag tag-active" style="font-size:11px;">Admin</span>' if c["is_admin"] else ""
+        admin_badge = ' <span class="tag tag-active" style="font-size:11px;">System Admin</span>' if c["is_admin"] else ""
         assigned_ids = coach_group_map.get(c["id"], [])
         assigned_names = [esc(group_map[gid]) for gid in assigned_ids if gid in group_map]
         group_badge = (" &middot; " + ", ".join(f'<span class="tag">{n}</span>' for n in assigned_names)) if assigned_names else ""
@@ -5059,7 +5059,7 @@ def coach_list_page(user, coaches, groups=None, coach_group_map=None, organisati
             action_html = '<span class="muted">(you)</span>'
         else:
             toggle_label = "Deactivate" if c["active"] else "Reactivate"
-            admin_toggle_label = "Remove Admin" if c["is_admin"] else "Make Admin"
+            admin_toggle_label = "Remove System Admin" if c["is_admin"] else "Make System Admin"
             checkboxes = "".join(
                 f'<label style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:normal;margin:2px 0;">'
                 f'<input type="checkbox" name="group_id" value="{g["id"]}"'
@@ -5108,7 +5108,7 @@ def coach_list_page(user, coaches, groups=None, coach_group_map=None, organisati
     <div style="display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-bottom:16px;">
       <span style="font-size:12px;font-weight:600;color:var(--jag-muted);text-transform:uppercase;letter-spacing:.05em;">Filter:</span>
       <button class="coach-filter-btn btn btn-sm active-filter" data-filter="all" style="border-radius:999px;background:var(--jag-navy);color:#fff;border-color:var(--jag-navy);">All</button>
-      <button class="coach-filter-btn btn btn-ghost btn-sm" data-filter="admin" style="border-radius:999px;">Admins only</button>
+      <button class="coach-filter-btn btn btn-ghost btn-sm" data-filter="system_admin" style="border-radius:999px;">System Admins only</button>
       <button class="coach-filter-btn btn btn-ghost btn-sm" data-filter="active" style="border-radius:999px;">Active</button>
       <button class="coach-filter-btn btn btn-ghost btn-sm" data-filter="inactive" style="border-radius:999px;">Inactive</button>
       {(f'<span style="width:1px;height:18px;background:var(--jag-border);display:inline-block;margin:0 2px;"></span>' + org_btns) if org_btns else ""}
@@ -5128,7 +5128,7 @@ def coach_list_page(user, coaches, groups=None, coach_group_map=None, organisati
         var shown = 0;
         rows.forEach(function(r){
           var show = true;
-          if(active === 'admin') show = r.dataset.admin === '1';
+          if(active === 'system_admin') show = r.dataset.admin === '1';
           else if(active === 'active') show = r.dataset.active === '1';
           else if(active === 'inactive') show = r.dataset.active === '0';
           else if(active === 'org') show = r.dataset.org === activeOrg;
@@ -5164,8 +5164,8 @@ def coach_list_page(user, coaches, groups=None, coach_group_map=None, organisati
 
     body = f"""
     <div class="page-head">
-      <h1>Coaches</h1>
-      <a class="btn btn-primary" href="/coach/coaches/new">Add Coach</a>
+      <h1>Practitioners</h1>
+      <a class="btn btn-primary" href="/coach/coaches/new">Add Practitioner</a>
     </div>
     {message_html}
     {filter_bar}
@@ -5177,7 +5177,7 @@ def coach_list_page(user, coaches, groups=None, coach_group_map=None, organisati
     </div>
     {filter_js}
     """
-    return layout("Coaches", body, user=user, active_nav="coaches")
+    return layout("Practitioners", body, user=user, active_nav="coaches")
 
 
 def new_coach_form(user, error=None, organisations=None):
@@ -5195,7 +5195,7 @@ def new_coach_form(user, error=None, organisations=None):
         <label for="organisation_id">Organisation</label>
         <p style="font-size:12px;color:var(--jag-muted);">No organisations yet — <a href="/coach/organisations">create one first</a> to scope this coach.</p>"""
     body = f"""
-    <div class="page-head"><h1>Add Coach</h1></div>
+    <div class="page-head"><h1>Add Practitioner</h1></div>
     {error_html}
     <div class="card form-card">
       <form method="post" action="/coach/coaches/new">
@@ -5210,7 +5210,7 @@ def new_coach_form(user, error=None, organisations=None):
       </form>
     </div>
     """
-    return layout("Add Coach", body, user=user, active_nav="coaches")
+    return layout("Add Practitioner", body, user=user, active_nav="coaches")
 
 
 def organisations_page(user, orgs_data, message=None):
@@ -5256,7 +5256,7 @@ def organisations_page(user, orgs_data, message=None):
     {message_html}
     <div class="card" style="margin-bottom:24px;">
       <table class="table">
-        <thead><tr><th>Name</th><th style="text-align:center;">Groups</th><th style="text-align:center;">Coaches</th><th></th></tr></thead>
+        <thead><tr><th>Name</th><th style="text-align:center;">Groups</th><th style="text-align:center;">Practitioners</th><th></th></tr></thead>
         <tbody>{rows_html}</tbody>
       </table>
     </div>

@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS users (
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    role TEXT NOT NULL CHECK(role IN ('coach','participant')),
+    role TEXT NOT NULL CHECK(role IN ('practitioner','org_admin','system_admin','participant')),
     is_admin INTEGER NOT NULL DEFAULT 0,
     sport TEXT,
     programme TEXT,
@@ -256,7 +256,22 @@ def init_db():
     # Migrate Diamond Gates / Diamond Dribble from per-athlete-count fields to
     # small_group / large_group (idempotent: skips sessions already migrated).
     migrate_diamond_group_fields(conn)
+    # Migrate role values: 'coach' with is_admin=1 → 'system_admin',
+    # 'coach' with is_admin=0 → 'practitioner' (idempotent).
+    migrate_roles(conn)
     conn.close()
+
+
+def migrate_roles(conn):
+    """Rename legacy 'coach' role values to 'practitioner' / 'system_admin'.
+    Idempotent — safe to run on every startup."""
+    conn.execute(
+        "UPDATE users SET role = 'system_admin' WHERE role = 'coach' AND is_admin = 1"
+    )
+    conn.execute(
+        "UPDATE users SET role = 'practitioner' WHERE role = 'coach'"
+    )
+    conn.commit()
 
 
 def next_athlete_number(conn):
@@ -364,9 +379,9 @@ def delete_organisation(conn, org_id):
     conn.commit()
 
 
-def set_coach_organisation(conn, coach_id, org_id):
+def set_coach_organisation(conn, coach_id, org_id):  # kept for backward compat; coach_id = practitioner id
     conn.execute(
-        "UPDATE users SET organisation_id = ? WHERE id = ? AND role = 'coach'",
+        "UPDATE users SET organisation_id = ? WHERE id = ? AND role IN ('practitioner','org_admin','system_admin')",
         (org_id or None, coach_id),
     )
     conn.commit()
@@ -405,8 +420,8 @@ def seed_demo_data():
         # --- Coach / admin account -------------------------------------
         coach_id = conn.execute(
             "INSERT INTO users (name, email, password_hash, role, is_admin, sport, programme, created_at) "
-            "VALUES (?, ?, ?, 'coach', 1, NULL, NULL, ?)",
-            ("Coach Admin", "coach@justagame.co.nz", hash_password("CoachDemo123!"), now()),
+            "VALUES (?, ?, ?, 'system_admin', 1, NULL, NULL, ?)",
+            ("System Admin", "admin@justagame.co.nz", hash_password("CoachDemo123!"), now()),
         ).lastrowid
 
         # --- Demo participants ------------------------------------------
@@ -638,13 +653,26 @@ def update_profile(conn, user_id, name, email, username=None):
 
 
 def list_coaches(conn):
+    """Return all staff accounts (practitioner, org_admin, system_admin)."""
     return conn.execute(
-        "SELECT * FROM users WHERE role = 'coach' ORDER BY name"
+        "SELECT * FROM users WHERE role IN ('practitioner','org_admin','system_admin') ORDER BY name"
     ).fetchall()
 
 
+def set_role(conn, user_id, role):
+    """Set a staff user's role. role must be one of practitioner/org_admin/system_admin."""
+    valid = {"practitioner", "org_admin", "system_admin"}
+    if role not in valid:
+        raise ValueError(f"Invalid role: {role!r}. Must be one of {valid}")
+    conn.execute("UPDATE users SET role = ? WHERE id = ?", (role, user_id))
+    conn.commit()
+
+
 def set_admin_status(conn, user_id, is_admin):
-    conn.execute("UPDATE users SET is_admin = ? WHERE id = ?", (1 if is_admin else 0, user_id))
+    """Legacy helper — promotes to system_admin or demotes to practitioner."""
+    new_role = "system_admin" if is_admin else "practitioner"
+    conn.execute("UPDATE users SET role = ?, is_admin = ? WHERE id = ?",
+                 (new_role, 1 if is_admin else 0, user_id))
     conn.commit()
 
 
