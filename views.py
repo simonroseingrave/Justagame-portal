@@ -138,8 +138,10 @@ def layout(title, body, user=None, flash=None, active_nav=None):
                 links.append(("/coach/coaches", "Practitioners", "coaches"))
                 links.append(("/coach/organisations", "Organisations", "organisations"))
             links.append(("/coach/reports", "Statistics & Reports", "progress"))
+            links.append(("/help", "Help", "help"))
         else:
-            links = [("/dashboard", "My Dashboard", "dashboard")]
+            links = [("/dashboard", "My Dashboard", "dashboard"),
+                     ("/help", "Help", "help")]
         nav_items = "".join(
             f'<a class="nav-link{" active" if active_nav == key else ""}" href="{href}">{label}</a>'
             for href, label, key in links
@@ -4921,6 +4923,362 @@ def group_session_page(coach, participants, groups=None, session_types=None):
     </script>
     """
     return layout("Record Session", body, user=coach, active_nav="session")
+
+
+def help_page(user):
+    """Role-aware help page. Shows sections appropriate to the user's role."""
+    role = user["role"] if user else "participant"
+    is_staff = role in ("practitioner", "org_admin", "system_admin")
+    is_org_admin = role in ("org_admin", "system_admin")
+    is_sys_admin = role == "system_admin"
+
+    NAVY  = "#2D323B"
+    GOLD  = "#F0A82E"
+
+    role_labels = {
+        "practitioner": "Practitioner",
+        "org_admin":    "Organisation Admin",
+        "system_admin": "System Admin",
+        "participant":  "Athlete",
+    }
+    role_label = role_labels.get(role, "User")
+
+    def section(icon, title, content_html, open_by_default=False):
+        open_attr = " open" if open_by_default else ""
+        return f"""
+        <details class="help-section"{open_attr}>
+          <summary class="help-section-summary">
+            <span class="help-icon">{icon}</span>
+            <span class="help-title">{title}</span>
+            <span class="help-chevron">&#9660;</span>
+          </summary>
+          <div class="help-body">{content_html}</div>
+        </details>"""
+
+    def steps(items):
+        rows = "".join(
+            f'<li class="help-step"><span class="help-step-num">{i+1}</span><span>{item}</span></li>'
+            for i, item in enumerate(items)
+        )
+        return f'<ol class="help-steps">{rows}</ol>'
+
+    def tip(text):
+        return f'<div class="help-tip"><span>&#128161;</span> {text}</div>'
+
+    def note(text):
+        return f'<div class="help-note"><span>&#9432;</span> {text}</div>'
+
+    # ── Section content ────────────────────────────────────────────────────────
+
+    s_login = section("&#128274;", "Logging In", (
+        steps([
+            "Open the portal in your browser (or from your phone's home screen).",
+            "Enter your <strong>email address</strong> and <strong>password</strong>.",
+            "Tap <strong>Log in</strong>.",
+        ])
+        + tip("If you've forgotten your password, click <em>Forgot your password?</em> on the login page.")
+        + tip("Save the portal to your phone's home screen for one-tap access — see <em>Using the Portal on Your Phone</em> below.")
+    ), open_by_default=True)
+
+    s_password = section("&#128273;", "Changing Your Password", (
+        steps([
+            "Click <strong>My Account</strong> in the top-right corner.",
+            "Scroll to the <em>Change Password</em> section.",
+            "Enter your current password, then your new password twice.",
+            "Click <strong>Change Password</strong> to save.",
+        ])
+        + tip("Choose a password that is at least 8 characters and easy for you to remember.")
+    ))
+
+    s_phone = section("&#128241;", "Using the Portal on Your Phone", (
+        "<p>The portal works as a web app — you can add it to your home screen for quick access without opening a browser each time.</p>"
+        + "<p><strong>iPhone / iPad (Safari only):</strong></p>"
+        + steps([
+            "Open the portal in <strong>Safari</strong>.",
+            "Tap the <strong>Share</strong> button (the square with an arrow pointing up).",
+            'Scroll down and tap <strong>"Add to Home Screen"</strong>.',
+            'Tap <strong>Add</strong> in the top-right corner.',
+        ])
+        + "<p><strong>Android (Chrome only):</strong></p>"
+        + steps([
+            "Open the portal in <strong>Chrome</strong>.",
+            "Tap the three-dot menu (&#8942;) in the top-right.",
+            'Tap <strong>"Add to Home screen"</strong>.',
+            'Tap <strong>Add</strong> to confirm.',
+        ])
+        + tip("A full setup guide PDF is available from your practitioner if you need one.")
+    ))
+
+    s_dashboard = section("&#128200;", "Your Dashboard", (
+        "<p>Your dashboard shows your most recent results, level progress, and personal bests across all measurement games.</p>"
+        "<ul class='help-list'>"
+        "<li><strong>Level badge</strong> — your current adaptability level, based on your improvement across games.</li>"
+        "<li><strong>Game cards</strong> — your latest score and personal best for each game.</li>"
+        "<li><strong>Progress history</strong> — tap a game name to see your full result history over time.</li>"
+        "</ul>"
+        + note("Scores are entered by your practitioner after each session. Check back after a session to see your updated results.")
+    ))
+
+    sections_html = s_login + s_password + s_phone + s_dashboard
+
+    if is_staff:
+        s_add_athlete = section("&#128101;", "Adding an Athlete", (
+            steps([
+                "Click <strong>Add Participant</strong> in the navigation bar.",
+                "Fill in the athlete's name and (optionally) email, sport, and group.",
+                "Click <strong>Add Participant</strong> to save.",
+            ])
+            + tip("If you enter an email address, the athlete will automatically receive a welcome email with their login details.")
+            + tip("Athlete numbers are assigned automatically — you can change them on the athlete's profile page.")
+        ))
+
+        s_record = section("&#127942;", "Recording a Session", (
+            "<p>Use <strong>Record Session</strong> in the nav to record a one-off session for a single athlete.</p>"
+            + steps([
+                "Select the athlete from the dropdown.",
+                "Choose the session type and month.",
+                "Select which games were played using the chip panel.",
+                "Enter the scores and click <strong>Save Session</strong>.",
+            ])
+            + tip("The system will warn you if a session already exists for that athlete in that month — you can choose to merge or replace.")
+        ))
+
+        s_group_hub = section("&#128203;", "Group Hub", (
+            "<p>The <strong>Group Hub</strong> is your central workspace for group-based data entry and reporting. "
+            "Select a group from the dropdown, then use the three panels:</p>"
+            "<ul class='help-list'>"
+            "<li><strong>Completion Matrix</strong> — shows which athletes have completed which games, colour-coded by session month. "
+            "Click a game header to jump straight to that game's entry table.</li>"
+            "<li><strong>Game Entry</strong> — enter or update results for the whole group at once for a selected game. "
+            "Choose the game and month, fill in the table, and click <strong>Save All Results</strong>.</li>"
+            "<li><strong>Session Recording Sheet</strong> — generate a printable PDF recording sheet for a session. "
+            "Select athletes, session type, and month, then click <strong>Download PDF</strong>.</li>"
+            "</ul>"
+            + tip("Use the Completion Matrix to spot gaps — grey cells mean no data yet for that athlete/game combination.")
+        ))
+
+        s_resources = section("&#128218;", "Resources", (
+            "<p>The <strong>Resources</strong> section holds shared files, links, and guides for your organisation.</p>"
+            "<ul class='help-list'>"
+            "<li>Resources are organised into folders.</li>"
+            "<li>Each resource can have tags to help with searching and filtering.</li>"
+            "<li>Click a resource tile to open it (external links open in a new tab).</li>"
+            "</ul>"
+            + note("Only practitioners and admins can add or edit resources. Contact your System Admin if you need something added.")
+        ))
+
+        s_reports = section("&#128202;", "Statistics &amp; Reports", (
+            "<p>Access detailed analytics from <strong>Statistics &amp; Reports</strong> in the nav.</p>"
+            "<ul class='help-list'>"
+            "<li><strong>Group Progress</strong> — improvement trends for every athlete in a group, by game.</li>"
+            "<li><strong>Achievement Summary</strong> — personal bests and level distribution across the group.</li>"
+            "<li><strong>Scores Table</strong> — a flat table of all scores, exportable to PDF.</li>"
+            "<li><strong>All Groups</strong> — cross-group overview (accessible from the main Reports landing page).</li>"
+            "</ul>"
+            + tip("Use the sport filter at the top of the Reports page to narrow down which groups are shown.")
+        ))
+
+        sections_html += s_add_athlete + s_record + s_group_hub + s_resources + s_reports
+
+    if is_org_admin:
+        s_practitioners = section("&#128101;", "Managing Practitioners", (
+            "<p>As an Organisation Admin, you can view and manage practitioners in your organisation.</p>"
+            + steps([
+                "Go to <strong>Practitioners</strong> in the navigation.",
+                "To add a new practitioner, click <strong>Add Practitioner</strong> and fill in their details.",
+                "To reset a practitioner's password, click <strong>Reset Password</strong> on their row.",
+                "To assign a practitioner to your organisation, use the <strong>Organisation</strong> dropdown on their entry.",
+            ])
+            + tip("When you create a practitioner account with an email address, they will receive a welcome email automatically.")
+        ))
+
+        s_org_admin = section("&#127970;", "Your Organisation", (
+            "<p>Your Organisation Admin access lets you view all groups and athletes within your organisation, "
+            "download reports, and review completion data across all practitioners you manage.</p>"
+            "<ul class='help-list'>"
+            "<li>Use the <strong>Group Hub</strong> to view any group in your organisation.</li>"
+            "<li>Use <strong>Statistics &amp; Reports</strong> to access cross-group analytics.</li>"
+            "<li>Contact your System Admin to update your organisation's name or logo.</li>"
+            "</ul>"
+        ))
+
+        sections_html += s_practitioners + s_org_admin
+
+    if is_sys_admin:
+        s_orgs = section("&#127968;", "Managing Organisations", (
+            "<p>As System Admin, you can create and manage organisations.</p>"
+            + steps([
+                "Go to <strong>Organisations</strong> in the navigation.",
+                "Click <strong>Add Organisation</strong> to create a new one.",
+                "Enter the name and optionally a logo URL.",
+                "Use the Practitioners page to assign practitioners to organisations.",
+            ])
+            + tip("Organisations help scope data visibility — practitioners and athletes can only see data within their own organisation.")
+        ))
+
+        s_sys = section("&#9881;", "System Administration", (
+            "<p>As System Admin you have unrestricted access to all data in the portal.</p>"
+            "<ul class='help-list'>"
+            "<li><strong>Practitioners page</strong> — add, edit, reset passwords, and set roles for any staff account.</li>"
+            "<li><strong>Organisations page</strong> — create and edit organisations.</li>"
+            "<li><strong>Resources</strong> — add and manage resources visible to all users.</li>"
+            "<li><strong>CSV Import/Export</strong> — bulk import athletes (Practitioners list → Import CSV button).</li>"
+            "</ul>"
+            + note("Role changes take effect immediately. Be careful when demoting accounts — they will lose access to staff features straight away.")
+        ))
+
+        sections_html += s_orgs + s_sys
+
+    body = f"""
+    <style>
+      .help-role-badge {{
+        display: inline-block;
+        background: {GOLD};
+        color: {NAVY};
+        font-weight: 700;
+        font-size: 13px;
+        padding: 3px 12px;
+        border-radius: 20px;
+        margin-bottom: 18px;
+        letter-spacing: 0.03em;
+      }}
+      .help-intro {{
+        color: #4B5563;
+        margin-bottom: 28px;
+        font-size: 15px;
+      }}
+      .help-section {{
+        border: 1px solid #DDE0E3;
+        border-radius: 10px;
+        margin-bottom: 12px;
+        background: #fff;
+        overflow: hidden;
+      }}
+      .help-section[open] {{
+        box-shadow: 0 2px 8px rgba(0,0,0,.06);
+      }}
+      .help-section-summary {{
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 15px 18px;
+        cursor: pointer;
+        list-style: none;
+        user-select: none;
+        background: #fff;
+      }}
+      .help-section-summary::-webkit-details-marker {{ display: none; }}
+      .help-section[open] .help-section-summary {{
+        background: {NAVY};
+        color: #fff;
+      }}
+      .help-section[open] .help-title {{
+        color: #fff;
+      }}
+      .help-section[open] .help-chevron {{
+        transform: rotate(180deg);
+        color: {GOLD};
+      }}
+      .help-icon {{
+        font-size: 20px;
+        flex-shrink: 0;
+      }}
+      .help-title {{
+        font-weight: 700;
+        font-size: 16px;
+        color: {NAVY};
+        flex: 1;
+      }}
+      .help-chevron {{
+        font-size: 12px;
+        color: #9CA3AF;
+        transition: transform 0.2s;
+        flex-shrink: 0;
+      }}
+      .help-body {{
+        padding: 20px 22px 22px;
+        border-top: 1px solid #DDE0E3;
+        font-size: 15px;
+        color: #374151;
+        line-height: 1.7;
+      }}
+      .help-body p {{ margin: 0 0 14px; }}
+      .help-steps {{
+        list-style: none;
+        padding: 0;
+        margin: 12px 0 16px;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }}
+      .help-step {{
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+      }}
+      .help-step-num {{
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 26px;
+        height: 26px;
+        min-width: 26px;
+        background: {GOLD};
+        color: {NAVY};
+        font-weight: 800;
+        font-size: 13px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        margin-top: 1px;
+      }}
+      .help-list {{
+        margin: 10px 0 14px 18px;
+        padding: 0;
+      }}
+      .help-list li {{ margin-bottom: 7px; }}
+      .help-tip {{
+        background: #FFFBEB;
+        border-left: 3px solid {GOLD};
+        padding: 10px 14px;
+        border-radius: 0 6px 6px 0;
+        margin: 12px 0;
+        font-size: 14px;
+        color: #92400E;
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+      }}
+      .help-note {{
+        background: #EFF6FF;
+        border-left: 3px solid #3B82F6;
+        padding: 10px 14px;
+        border-radius: 0 6px 6px 0;
+        margin: 12px 0;
+        font-size: 14px;
+        color: #1E40AF;
+        display: flex;
+        gap: 8px;
+        align-items: flex-start;
+      }}
+    </style>
+
+    <h1 style="margin-bottom:6px;">Help &amp; Guide</h1>
+    <div class="help-role-badge">Viewing as: {esc(role_label)}</div>
+    <p class="help-intro">
+      Find answers to common questions below. Sections are shown based on your access level.
+      Click a section heading to expand it.
+    </p>
+
+    {sections_html}
+
+    <div style="margin-top:32px;padding:20px 22px;background:#F3F4F5;border-radius:10px;font-size:14px;color:#6E737B;">
+      <strong style="color:{NAVY};">Need more help?</strong>
+      Contact your practitioner or system administrator, or email
+      <a href="mailto:info@justagame.co.nz">info@justagame.co.nz</a>.
+    </div>
+    """
+
+    return layout("Help & Guide", body, user=user, active_nav="help")
 
 
 def simple_message_page(title, message, user=None):

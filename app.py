@@ -1387,6 +1387,17 @@ def delete_measurement_session(req, participant_id, session_id):
     return flash_redirect(f"/coach/participants/{participant_id}", "Measurement Games session deleted.")
 
 
+# ----------------------------------------------------------------- help page
+
+
+@router.get("/help")
+def help_get(req):
+    user = get_current_user(req)
+    if not user:
+        return redirect("/login")
+    return Response(views.help_page(user))
+
+
 # --------------------------------------------------------------- account / auth
 
 
