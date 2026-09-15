@@ -78,19 +78,24 @@ MEASUREMENT_GAMES = [
                 "key": "balance_ball_catching",
                 "name": "Balance Catching - 1 minute",
                 "fields": [
-                    {"key": "one_foot_balance_catch",      "label": "One Foot Balance Catch - Small or Large Ball (athlete choice)",      "type": "number"},
-                    {"key": "opposite_foot_balance_catch", "label": "Opposite Foot Balance Catch - Small or Large Ball (athlete choice)", "type": "number"},
-                    {"key": "small_ball_wall_bounce",      "label": "Small Ball - Wall Bounce",                                    "type": "number"},
-                    {"key": "large_ball_wall_bounce",      "label": "Large Ball - Wall Bounce",                                    "type": "number"},
-                    {"key": "small_ball_dominant",         "label": "Small Ball - Dominant Hand (Wall Bounce)",                    "type": "number"},
-                    {"key": "small_ball_non_dominant",     "label": "Small Ball - Non-Dominant (Wall Bounce)",                     "type": "number"},
+                    {"key": "one_foot_balance_catch",      "label": "One Foot Balance Catch (athlete's choice of ball)",      "type": "number"},
+                    {"key": "opposite_foot_balance_catch", "label": "Opposite Foot Balance Catch (athlete's choice of ball)", "type": "number"},
+                    {"key": "large_ball_wall_bounce",      "label": "Large Ball - Wall Bounce",                               "type": "number"},
+                    {"key": "small_ball_wall_bounce",      "label": "Small Ball - Wall Bounce",                               "type": "number"},
                 ],
             },
             {
                 "key": "leap_catching_throwing",
-                "name": "Grid Leap (20 attempts)",
+                "name": "Grid Leap — 50cm Cones (20 attempts)",
                 "fields": [
-                    {"key": "points", "label": "Points", "type": "points", "unit": "out of 14"},
+                    {"key": "points", "label": "Points", "type": "points", "unit": "out of 20"},
+                ],
+            },
+            {
+                "key": "split_step",
+                "name": "Split Step",
+                "fields": [
+                    {"key": "catches", "label": "Volleyed Catches (1 minute)", "type": "points"},
                 ],
             },
             {
@@ -134,8 +139,7 @@ MEASUREMENT_GAMES = [
                 "key": "throw_down",
                 "name": "Throw Down",
                 "fields": [
-                    {"key": "10m_front_balance",  "label": "10m Front On — Balance Equipment", "type": "points"},
-                    {"key": "10m_side_balance",   "label": "10m Side On — Balance Equipment",  "type": "points"},
+                    {"key": "10m_front_balance", "label": "10m Front On — Balance Equipment", "type": "points"},
                 ],
             },
         ],
