@@ -12,6 +12,8 @@ from constants import (
     MEASUREMENT_GAMES,
     SPORT_SPECIFIC_GAMES,
     all_measurement_games,
+    games_for_max_level,
+    max_game_level,
     SESSION_TYPES,
     SESSION_LABEL_MAP,
 )
@@ -1878,6 +1880,43 @@ def _progress_for_participant(p_name, p_id, sessions):
     return out
 
 
+def _level_filter_bar(max_level, base_url, extra_params=""):
+    """Render a level-filter pill bar for report pages.
+
+    max_level: int or None (None = All Levels)
+    base_url:  URL without query params, e.g. '/coach/groups/5/progress'
+    extra_params: any other query params to preserve, e.g. '&sport=Cricket'
+    """
+    top = max_game_level()
+    sep = "?" if "?" not in base_url else "&"
+
+    def pill(label, level_val, active):
+        href = base_url + (f"{sep}level={level_val}" if level_val is not None else "") + extra_params
+        if active:
+            style = ("display:inline-block;padding:4px 14px;border-radius:999px;font-size:13px;"
+                     "font-weight:700;background:#2D323B;color:#fff;text-decoration:none;")
+        else:
+            style = ("display:inline-block;padding:4px 14px;border-radius:999px;font-size:13px;"
+                     "font-weight:600;background:#fff;color:#2D323B;border:1px solid #DDE0E3;"
+                     "text-decoration:none;")
+        return f'<a href="{href}" style="{style}">{label}</a>'
+
+    pills = pill("All Levels", None, max_level is None)
+    for lvl in range(1, top + 1):
+        label = f"Level {lvl}" + (" only" if top > 1 else "")
+        pills += " " + pill(label, lvl, max_level == lvl)
+
+    return (
+        f'<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;'
+        f'margin-bottom:20px;padding:10px 14px;background:#F3F4F5;'
+        f'border-radius:8px;border:1px solid #DDE0E3;">'
+        f'<span style="font-size:12px;font-weight:600;color:#6E737B;'
+        f'text-transform:uppercase;letter-spacing:.05em;margin-right:4px;">View:</span>'
+        f'{pills}'
+        f'</div>'
+    )
+
+
 def _fmt_val(val, ftype):
     if val is None:
         return "—"
@@ -1907,12 +1946,15 @@ def _delta_cell(first_val, latest_val, ftype):
     return f'<td style="color:{colour}; font-weight:700;">{arrow}{raw}</td>'
 
 
-def group_progress_page(coach, group, participants_sessions):
+def group_progress_page(coach, group, participants_sessions, max_level=None):
     """Progress summary for a group: each measurement, each participant, first→latest.
     participants_sessions: list of (participant_dict, sessions_list)
+    max_level: int or None — filters games to those up to this level (None = all)
     """
     active = [(p, s) for p, s in participants_sessions if s]
     gname = esc(group["name"]) if group else "Ungrouped"
+    group_id = group["id"] if group else None
+    base_url = f'/coach/groups/{group_id}/progress' if group_id else '/coach'
 
     if not active:
         body = f"""
@@ -1921,9 +1963,12 @@ def group_progress_page(coach, group, participants_sessions):
         <div class="card"><p class="muted">No test sessions recorded for this group yet.</p></div>"""
         return layout(f"{group['name']} Progress", body, user=coach, active_nav="progress")
 
+    level_bar = _level_filter_bar(max_level, base_url)
+    game_sections = games_for_max_level(max_level)
+
     # Build one table per game
     sections_html = ""
-    for section in MEASUREMENT_GAMES:
+    for section in game_sections:
         game_cards = ""
         for game in section["games"]:
             all_fields = game["fields"] + game.get("computed", [])
@@ -1985,17 +2030,21 @@ def group_progress_page(coach, group, participants_sessions):
       </div>
       <a class="btn btn-ghost" href="/coach">&larr; Back</a>
     </div>
+    {level_bar}
     {sections_html}"""
     return layout(f"{group['name'] if group else 'Group'} Progress", body, user=coach, active_nav="progress")
 
 
-def group_achievement_summary_page(coach, group, participants_sessions):
-    """One-page collective summary: average % improvement per field across all group members."""
+def group_achievement_summary_page(coach, group, participants_sessions, max_level=None):
+    """One-page collective summary: average % improvement per field across all group members.
+    max_level: int or None — filters game breakdown to those up to this level (None = all)
+    """
     # Only athletes with at least 2 sessions contribute to the averages
     active = [(p, s) for p, s in participants_sessions if len(s) >= 2]
     all_with_sessions = [(p, s) for p, s in participants_sessions if s]
     gname = esc(group["name"]) if group else "Group"
     group_id = group["id"] if group else None
+    base_url = f'/coach/groups/{group_id}/achievement-summary' if group_id else '/coach'
 
     if not active:
         # Show waiting state but still list athletes with single sessions
@@ -2118,8 +2167,9 @@ def group_achievement_summary_page(coach, group, participants_sessions):
     </div>"""
 
     # ---- Per-game measurement breakdown ----
+    level_bar = _level_filter_bar(max_level, base_url)
     sections_html = ""
-    for section in MEASUREMENT_GAMES:
+    for section in games_for_max_level(max_level):
         game_cards = ""
         for game in section["games"]:
             all_fields = game["fields"] + game.get("computed", [])
@@ -2213,6 +2263,7 @@ def group_achievement_summary_page(coach, group, participants_sessions):
         <a class="btn btn-ghost" href="/coach">&larr; Dashboard</a>
       </div>
     </div>
+    {level_bar}
     {hero_card}
     {athlete_grid}
     <div style="border-left:4px solid var(--jag-green);padding-left:12px;margin-bottom:20px;">
@@ -2223,12 +2274,15 @@ def group_achievement_summary_page(coach, group, participants_sessions):
     return layout(f"{group['name']} Achievement Summary", body, user=coach, active_nav="progress")
 
 
-def group_scores_table_page(coach, group, participants_sessions):
-    """Flat table: rows = athletes, columns = every measurement field (latest session values)."""
+def group_scores_table_page(coach, group, participants_sessions, max_level=None):
+    """Flat table: rows = athletes, columns = every measurement field (latest session values).
+    max_level: int or None — filters columns to games up to this level (None = all)
+    """
     active = [(p, s) for p, s in participants_sessions if s]
     gname = esc(group["name"]) if group else "Group"
     group_id = group["id"] if group else None
     summary_url = f'/coach/groups/{group_id}/achievement-summary' if group_id else '/coach'
+    base_url = f'/coach/groups/{group_id}/scores' if group_id else '/coach'
 
     if not active:
         body = f"""
@@ -2239,11 +2293,12 @@ def group_scores_table_page(coach, group, participants_sessions):
         <div class="card"><p class="muted">No test sessions recorded for this group yet.</p></div>"""
         return layout(f"{group['name']} Scores Table", body, user=coach, active_nav="progress")
 
-    # Build the full column list from all games (base + sport-specific for athletes' sports)
+    # Build the full column list from games at the selected level
     # Use base MEASUREMENT_GAMES only (sport-specific vary per athlete — keep it simple)
     # Column spec: list of (section_name, game_name, game_key, field_label, field_key, field_type)
+    level_bar = _level_filter_bar(max_level, base_url)
     cols = []
-    for section in MEASUREMENT_GAMES:
+    for section in games_for_max_level(max_level):
         for game in section["games"]:
             for field in game["fields"] + game.get("computed", []):
                 cols.append({
@@ -2370,6 +2425,7 @@ def group_scores_table_page(coach, group, participants_sessions):
         <a class="btn btn-ghost" href="/coach">&larr; Dashboard</a>
       </div>
     </div>
+    <div class="no-print">{level_bar}</div>
     <div class="card" style="overflow-x:auto;padding:0;">
       <table class="table" style="width:100%;min-width:600px;border-collapse:collapse;">
         <thead style="background:var(--jag-bg);">
@@ -2576,10 +2632,11 @@ def _round_table(athletes_sessions, game):
     </div>"""
 
 
-def all_progress_page(coach, groups_data, sport_filter=None):
+def all_progress_page(coach, groups_data, sport_filter=None, max_level=None):
     """Overview page: programme stats, group cards, round-based measurement tables.
     Accessible to all coaches (admins see all groups; non-admins see their groups only).
     sport_filter: optional sport string to filter athlete averages.
+    max_level: int or None — filters game tables to those up to this level (None = all)
     """
     is_admin = coach.get("is_admin")
 
@@ -2685,7 +2742,7 @@ def all_progress_page(coach, groups_data, sport_filter=None):
 
         filter_note = f' &mdash; {esc(sport_filter)} athletes only' if sport_filter else ""
         tables_html = ""
-        for section in MEASUREMENT_GAMES:
+        for section in games_for_max_level(max_level):
             sec_tables = "".join(_round_table(filtered, game) for game in section["games"])
             if sec_tables:
                 tables_html += f'<h3 style="font-size:14px;color:var(--jag-muted);text-transform:uppercase;letter-spacing:0.05em;margin:20px 0 10px;">{esc(section["section"])}</h3>{sec_tables}'
@@ -2721,7 +2778,7 @@ def all_progress_page(coach, groups_data, sport_filter=None):
         if all_filtered:
             filter_note = f' &mdash; {esc(sport_filter)} athletes only' if sport_filter else ""
             overall_tables = ""
-            for section in MEASUREMENT_GAMES:
+            for section in games_for_max_level(max_level):
                 sec_tables = "".join(_round_table(all_filtered, game) for game in section["games"])
                 if sec_tables:
                     overall_tables += f'<h3 style="font-size:14px;color:var(--jag-muted);text-transform:uppercase;letter-spacing:0.05em;margin:20px 0 10px;">{esc(section["section"])}</h3>{sec_tables}'

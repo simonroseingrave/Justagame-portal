@@ -929,7 +929,9 @@ def all_progress(req):
                 ps_data = [(dict(p), db.measurement_sessions_for(conn, p["id"], group_id=gid)) for p in participants]
                 groups_data.append((dict(group), ps_data))
         sport_filter = req.query.get("sport", [""])[0].strip() or None
-        return Response(views.all_progress_page(coach, groups_data, sport_filter=sport_filter))
+        level_str = req.query.get("level", [""])[0].strip()
+        max_level = int(level_str) if level_str.isdigit() else None
+        return Response(views.all_progress_page(coach, groups_data, sport_filter=sport_filter, max_level=max_level))
     finally:
         conn.close()
 
@@ -954,7 +956,9 @@ def group_progress(req, group_id):
             (group_id,),
         ).fetchall()
         participants_sessions = [(dict(p), db.measurement_sessions_for(conn, p["id"], group_id=group_id)) for p in participants]
-        return Response(views.group_progress_page(coach, dict(group), participants_sessions))
+        level_str = req.query.get("level", [""])[0].strip()
+        max_level = int(level_str) if level_str.isdigit() else None
+        return Response(views.group_progress_page(coach, dict(group), participants_sessions, max_level=max_level))
     finally:
         conn.close()
 
@@ -978,7 +982,9 @@ def group_achievement_summary(req, group_id):
             (group_id,),
         ).fetchall()
         participants_sessions = [(dict(p), db.measurement_sessions_for(conn, p["id"], group_id=group_id)) for p in participants]
-        return Response(views.group_achievement_summary_page(coach, dict(group), participants_sessions))
+        level_str = req.query.get("level", [""])[0].strip()
+        max_level = int(level_str) if level_str.isdigit() else None
+        return Response(views.group_achievement_summary_page(coach, dict(group), participants_sessions, max_level=max_level))
     finally:
         conn.close()
 
@@ -1002,7 +1008,9 @@ def group_scores_table(req, group_id):
             (group_id,),
         ).fetchall()
         participants_sessions = [(dict(p), db.measurement_sessions_for(conn, p["id"], group_id=group_id)) for p in participants]
-        return Response(views.group_scores_table_page(coach, dict(group), participants_sessions))
+        level_str = req.query.get("level", [""])[0].strip()
+        max_level = int(level_str) if level_str.isdigit() else None
+        return Response(views.group_scores_table_page(coach, dict(group), participants_sessions, max_level=max_level))
     finally:
         conn.close()
 

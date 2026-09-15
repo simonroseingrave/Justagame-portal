@@ -59,6 +59,7 @@ MEASUREMENT_GAMES = [
             {
                 "key": "skipping_rope_sprint",
                 "name": "Skipping Rope Sprint (25 metres)",
+                "level": 1,
                 "fields": [
                     {"key": "time_1", "label": "Time 1", "type": "time"},
                     {"key": "time_2", "label": "Time 2", "type": "time"},
@@ -77,6 +78,7 @@ MEASUREMENT_GAMES = [
             {
                 "key": "balance_ball_catching",
                 "name": "Balance Catching - 1 minute",
+                "level": 1,
                 "fields": [
                     {"key": "one_foot_balance_catch",      "label": "One Foot Balance Catch (athlete's choice of ball)",      "type": "number"},
                     {"key": "opposite_foot_balance_catch", "label": "Opposite Foot Balance Catch (athlete's choice of ball)", "type": "number"},
@@ -87,6 +89,7 @@ MEASUREMENT_GAMES = [
             {
                 "key": "leap_catching_throwing",
                 "name": "Grid Leap — 50cm Cones (20 attempts)",
+                "level": 1,
                 "fields": [
                     {"key": "points", "label": "Points", "type": "points", "unit": "out of 20"},
                 ],
@@ -94,6 +97,7 @@ MEASUREMENT_GAMES = [
             {
                 "key": "split_step",
                 "name": "Split Step",
+                "level": 1,
                 "fields": [
                     {"key": "catches", "label": "Volleyed Catches (1 minute)", "type": "points"},
                 ],
@@ -101,6 +105,7 @@ MEASUREMENT_GAMES = [
             {
                 "key": "diamond_games",
                 "name": "Diamond Gates - 1 minute",
+                "level": 1,
                 "fields": [
                     {"key": "small_group", "label": "Small Group (3–5 athletes)", "type": "number", "unit": "Number of Gates"},
                     {"key": "large_group", "label": "Large Group (6–8 athletes)", "type": "number", "unit": "Number of Gates"},
@@ -109,6 +114,7 @@ MEASUREMENT_GAMES = [
             {
                 "key": "diamond_dribble",
                 "name": "Diamond Dribble - 1 minute",
+                "level": 1,
                 "fields": [
                     {"key": "small_group", "label": "Small Group (3–5 athletes)", "type": "number", "unit": "Number of Gates"},
                     {"key": "large_group", "label": "Large Group (6–8 athletes)", "type": "number", "unit": "Number of Gates"},
@@ -117,14 +123,16 @@ MEASUREMENT_GAMES = [
             {
                 "key": "diamond_gym",
                 "name": "Step Up",
+                "level": 1,
                 "fields": [
-                    {"key": "step_bench",       "label": "Large Ball", "type": "number", "unit": "Number of Gates"},
-                    {"key": "step_bench_small",  "label": "Small Ball", "type": "number", "unit": "Number of Gates"},
+                    {"key": "step_bench",      "label": "Large Ball", "type": "number", "unit": "Number of Gates"},
+                    {"key": "step_bench_small", "label": "Small Ball", "type": "number", "unit": "Number of Gates"},
                 ],
             },
             {
                 "key": "step_over",
                 "name": "Step Over",
+                "level": 2,
                 "fields": [
                     {"key": "low_hurdle",       "label": "Large Ball", "type": "number", "unit": "Number of Gates"},
                     {"key": "low_hurdle_small",  "label": "Small Ball", "type": "number", "unit": "Number of Gates"},
@@ -138,6 +146,7 @@ MEASUREMENT_GAMES = [
             {
                 "key": "throw_down",
                 "name": "Throw Down",
+                "level": 1,
                 "fields": [
                     {"key": "10m_front_balance", "label": "10m Front On — Balance Equipment", "type": "points"},
                 ],
@@ -150,6 +159,7 @@ MEASUREMENT_GAMES = [
             {
                 "key": "throw_up",
                 "name": "Throw Up",
+                "level": 1,
                 "fields": [
                     {"key": "attempt_1", "label": "Attempt 1", "type": "points"},
                     {"key": "attempt_2", "label": "Attempt 2", "type": "points"},
@@ -170,6 +180,7 @@ MEASUREMENT_GAMES = [
             {
                 "key": "lob_scotch",
                 "name": "Lob Scotch",
+                "level": 1,
                 "fields": [
                     {"key": "squares_scored", "label": "Squares Scored", "type": "number"},
                 ],
@@ -185,6 +196,25 @@ def all_measurement_games():
     for section in MEASUREMENT_GAMES:
         games.extend(section["games"])
     return games
+
+
+def max_game_level():
+    """Highest level number assigned to any measurement game."""
+    return max(g.get("level", 1) for g in all_measurement_games())
+
+
+def games_for_max_level(max_level=None):
+    """Return MEASUREMENT_GAMES sections filtered to games up to max_level.
+    If max_level is None, all games are returned (no filtering).
+    """
+    if max_level is None:
+        return MEASUREMENT_GAMES
+    result = []
+    for section in MEASUREMENT_GAMES:
+        filtered_games = [g for g in section["games"] if g.get("level", 1) <= max_level]
+        if filtered_games:
+            result.append({"section": section["section"], "games": filtered_games})
+    return result
 
 
 def find_measurement_game(key):
