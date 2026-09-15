@@ -106,6 +106,7 @@ MEASUREMENT_GAMES = [
                 "key": "diamond_games",
                 "name": "Diamond Gates - 1 minute",
                 "level": 1,
+                "either_or": True,
                 "fields": [
                     {"key": "small_group", "label": "Small Group (3–5 athletes)", "type": "number", "unit": "Number of Gates"},
                     {"key": "large_group", "label": "Large Group (6–8 athletes)", "type": "number", "unit": "Number of Gates"},
@@ -115,6 +116,7 @@ MEASUREMENT_GAMES = [
                 "key": "diamond_dribble",
                 "name": "Diamond Dribble - 1 minute",
                 "level": 1,
+                "either_or": True,
                 "fields": [
                     {"key": "small_group", "label": "Small Group (3–5 athletes)", "type": "number", "unit": "Number of Gates"},
                     {"key": "large_group", "label": "Large Group (6–8 athletes)", "type": "number", "unit": "Number of Gates"},

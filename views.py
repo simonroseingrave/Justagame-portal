@@ -317,7 +317,26 @@ def _measurement_game_fieldset(game):
     game_key = game["key"]
     card_id = f"mg-card-{game_key}"
     body_id = f"mg-body-{game_key}"
-    fields_html = "".join(_measurement_field_input(game_key, f) for f in game["fields"])
+    either_or = game.get("either_or", False)
+
+    if either_or and len(game["fields"]) == 2:
+        # Render with a clear OR divider between the two field options
+        f0, f1 = game["fields"]
+        or_divider = (
+            '<div style="display:flex;align-items:center;gap:8px;margin:4px 0;">'
+            '<div style="flex:1;height:1px;background:#DDE0E3;"></div>'
+            '<span style="font-size:11px;font-weight:700;color:#6E737B;letter-spacing:.08em;">OR</span>'
+            '<div style="flex:1;height:1px;background:#DDE0E3;"></div>'
+            '</div>'
+        )
+        either_note = (
+            '<p style="margin:0 0 8px;font-size:12px;color:#6E737B;font-style:italic;">'
+            'Record one option only &mdash; whichever applies to this session.</p>'
+        )
+        fields_html = either_note + _measurement_field_input(game_key, f0) + or_divider + _measurement_field_input(game_key, f1)
+    else:
+        fields_html = "".join(_measurement_field_input(game_key, f) for f in game["fields"])
+
     computed_html = "".join(
         _measurement_field_input(game_key, cf, is_computed=True)
         for cf in game.get("computed", [])
@@ -3552,6 +3571,7 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
     entry_html = ""
     if game and athletes:
         fields = [f for f in game["fields"]]
+        either_or_game = game.get("either_or", False)
 
         def _th_sfx(field):
             if field["type"] == "time":
@@ -3559,16 +3579,26 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
             u = field.get("unit", "")
             return f'<br><small style="font-weight:400;font-size:11px;">{esc(u)}</small>' if u else ""
 
-        col_headers = "".join(
-            f'<th style="min-width:120px;">{esc(f["label"])}{_th_sfx(f)}</th>'
-            for f in fields
-        )
+        if either_or_game and len(fields) == 2:
+            or_th = '<th style="min-width:40px;text-align:center;padding:4px;color:#F0A82E;font-size:12px;font-weight:700;">OR</th>'
+            col_headers = (
+                f'<th style="min-width:120px;">{esc(fields[0]["label"])}{_th_sfx(fields[0])}</th>'
+                + or_th +
+                f'<th style="min-width:120px;">{esc(fields[1]["label"])}{_th_sfx(fields[1])}</th>'
+            )
+        else:
+            col_headers = "".join(
+                f'<th style="min-width:120px;">{esc(f["label"])}{_th_sfx(f)}</th>'
+                for f in fields
+            )
         rows_html = ""
         for a in athletes:
             aid  = a["id"]
             vals = existing.get(aid, {})
             cells = ""
-            for f in fields:
+            for i, f in enumerate(fields):
+                if either_or_game and i == 1:
+                    cells += '<td style="text-align:center;color:#6E737B;font-size:11px;font-weight:700;padding:0 4px;">OR</td>'
                 val  = vals.get(f["key"], "")
                 step = "0.01" if f["type"] == "time" else "1"
                 bg   = "background:#fffbe6;" if val != "" else ""
@@ -3599,6 +3629,7 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
               <span class="muted" style="font-size:13px;">
                 {esc(lbl_disp)} &middot; {esc(month_disp)} &nbsp;·&nbsp;
                 <span style="color:#92400e;">Yellow = existing value</span>
+                {"&nbsp;·&nbsp;<span style='color:#2D323B;font-weight:600;'>Record Small OR Large group — not both</span>" if either_or_game else ""}
               </span>
             </div>
           </div>
