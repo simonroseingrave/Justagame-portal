@@ -154,27 +154,6 @@ MEASUREMENT_GAMES = [
         ],
     },
     {
-        "section": "Throw Up",
-        "games": [
-            {
-                "key": "throw_up",
-                "name": "Throw Up",
-                "level": 1,
-                "fields": [
-                    {"key": "attempt_1", "label": "Attempt 1", "type": "points"},
-                    {"key": "attempt_2", "label": "Attempt 2", "type": "points"},
-                    {"key": "attempt_3", "label": "Attempt 3", "type": "points"},
-                    {"key": "attempt_4", "label": "Attempt 4", "type": "points"},
-                    {"key": "attempt_5", "label": "Attempt 5", "type": "points"},
-                ],
-                "computed": [
-                    {"key": "total", "label": "Total", "type": "points",
-                     "formula": "sum_of", "of": ["attempt_1", "attempt_2", "attempt_3", "attempt_4", "attempt_5"]},
-                ],
-            },
-        ],
-    },
-    {
         "section": "Lob Scotch",
         "games": [
             {
