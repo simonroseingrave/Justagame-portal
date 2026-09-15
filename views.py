@@ -357,9 +357,9 @@ def measurement_games_form(participant_id, selected_label=None, selected_month=N
     section. Each field has its own quick-save button; the session is
     created lazily on the first save. A bulk-submit fallback is also
     available via the full form."""
-    # Build game chip list and sections HTML together
+    # Build game chip list and sections HTML together (Level 1 only for recording)
     all_games_for_chips = []
-    for section in MEASUREMENT_GAMES:
+    for section in games_for_max_level(1):
         for g in section["games"]:
             all_games_for_chips.append(g)
 
@@ -408,7 +408,7 @@ def measurement_games_form(participant_id, selected_label=None, selected_month=N
       </div>
       {''.join(_measurement_game_fieldset(g) for g in section['games'])}
     </div>
-    """ for section in MEASUREMENT_GAMES)
+    """ for section in games_for_max_level(1))
 
     # Build hidden sport-specific sections (revealed by JS when checkbox ticked)
     sport_sections_html = ""
@@ -3293,9 +3293,9 @@ def session_sheet_page(coach, groups, session_types):
         f'<option value="{s["key"]}">{esc(s["label"])}</option>' for s in session_types
     )
 
-    # Build game checkboxes with nested field checkboxes
+    # Build game checkboxes with nested field checkboxes (Level 1 only)
     game_blocks = ""
-    for section in MEASUREMENT_GAMES:
+    for section in games_for_max_level(1):
         games_html = ""
         for game in section["games"]:
             fields_html = "".join(
@@ -3636,7 +3636,7 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
         comp_json = _json.dumps({str(k): list(v) for k, v in completion_data.items()})
 
         game_blocks = ""
-        for section in MEASUREMENT_GAMES:
+        for section in games_for_max_level(1):
             for g in section["games"]:
                 gk = g["key"]
                 # Work out if this game is fully done for all athletes
@@ -4107,13 +4107,13 @@ def reports_landing_page(coach, groups, orgs=None, sports=None):
 
 def completion_report_page(coach, group, athletes_data):
     """Printable test completion sheet — one row per athlete, one column per game."""
-    from constants import MEASUREMENT_GAMES
+    from constants import games_for_max_level
     today = _dt.date.today().strftime("%d %B %Y")
     group_name = group.get("name", "Group")
 
-    # Build game list: (key, short_name, total_non_computed_fields)
+    # Build game list: (key, short_name, total_non_computed_fields) — Level 1 only
     games_info = []
-    for section in MEASUREMENT_GAMES:
+    for section in games_for_max_level(1):
         for game in section["games"]:
             total = len(game.get("fields", []))
             # Abbreviate long names for column headers
@@ -4248,7 +4248,7 @@ def completion_report_pdf(group, athletes_data):
     from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
     from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
     from reportlab.lib.enums import TA_CENTER, TA_LEFT
-    from constants import MEASUREMENT_GAMES
+    from constants import games_for_max_level
 
     JAG_NAVY  = colors.HexColor("#2D323B")
     JAG_GOLD  = colors.HexColor("#F0A82E")
@@ -4275,9 +4275,9 @@ def completion_report_pdf(group, athletes_data):
     today = _dt.date.today().strftime("%d %B %Y")
     group_name = group.get("name", "Group")
 
-    # Build game info list
+    # Build game info list (Level 1 only)
     games_info = []
-    for section in MEASUREMENT_GAMES:
+    for section in games_for_max_level(1):
         for game in section["games"]:
             total = len(game.get("fields", []))
             games_info.append((game["key"], game["name"], total))
