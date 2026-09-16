@@ -1528,9 +1528,8 @@ def admin_sessions_merge(req):
     coach = require_system_admin(req)
     if not coach:
         return redirect("/login")
-    body = parse_body(req)
-    group_id_str   = body.get("group_id",   [""])[0].strip()
-    target_month   = body.get("target_month", [""])[0].strip() or None
+    group_id_str = req.form_get("group_id").strip()
+    target_month = req.form_get("target_month").strip() or None
     group_id = int(group_id_str) if group_id_str.isdigit() else None
     if not group_id:
         return redirect("/coach/admin/sessions")
@@ -1551,9 +1550,8 @@ def admin_sessions_delete(req):
     coach = require_system_admin(req)
     if not coach:
         return redirect("/login")
-    body = parse_body(req)
-    session_id_str = body.get("session_id", [""])[0].strip()
-    group_id_str   = body.get("group_id",   [""])[0].strip()
+    session_id_str = req.form_get("session_id").strip()
+    group_id_str   = req.form_get("group_id").strip()
     session_id = int(session_id_str) if session_id_str.isdigit() else None
     group_id   = int(group_id_str)   if group_id_str.isdigit()   else None
     if session_id:
