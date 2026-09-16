@@ -998,6 +998,25 @@ def progress_stats_pdf(req):
             subtitle = "Achievement Statistics — All Groups"
             filename = "stats_all_groups.pdf"
 
+        elif scope == "programme":
+            # All athletes pooled into one section — no group/org breakdown
+            if role in {"org_admin", "system_admin"}:
+                group_rows, ungrouped = db.list_participants_by_group(conn)
+                all_participants = [p for _, parts in group_rows for p in parts] + list(ungrouped)
+            else:
+                coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
+                all_participants = []
+                for gid in coach_group_ids:
+                    parts = conn.execute(
+                        "SELECT * FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name", (gid,)
+                    ).fetchall()
+                    all_participants.extend(parts)
+            ps_data = [(dict(p), db.measurement_sessions_for(conn, p["id"])) for p in all_participants]
+            groups_sections = [("Programme Overview", ps_data)]
+            title    = "Programme Overview"
+            subtitle = "Overall Achievement Statistics — All Athletes Combined"
+            filename = "stats_programme_overall.pdf"
+
         elif scope == "orgs" and role == "system_admin":
             # One section per organisation, groups nested inside
             orgs = conn.execute(

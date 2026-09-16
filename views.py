@@ -2816,7 +2816,9 @@ def all_progress_page(coach, groups_data, sport_filter=None, max_level=None):
     role = coach.get("role", "")
     btn_style = 'style="background:#F0A82E;color:#2D323B;font-weight:700;border:none;padding:8px 16px;border-radius:6px;font-size:13px;text-decoration:none;display:inline-block;"'
     pdf_btns = ""
-    # All staff can download an "all my groups" overall PDF
+    # Simple overall: all athletes pooled, no breakdown — available to all staff
+    pdf_btns += f'<a href="/coach/progress/pdf?scope=programme" {btn_style}>&#128196; Overall Programme PDF</a>'
+    # All groups broken out as separate sections
     pdf_btns += f'<a href="/coach/progress/pdf?scope=overall" {btn_style}>&#128196; All Groups PDF</a>'
     if role == "system_admin":
         pdf_btns += f'<a href="/coach/progress/pdf?scope=orgs" {btn_style}>&#128196; By Organisation PDF</a>'
