@@ -1511,12 +1511,22 @@ def admin_sessions_get(req):
                 (dict(p), db.measurement_sessions_for(conn, p["id"], group_id=group_id))
                 for p in participants
             ]
+        # Always load ungrouped athletes so the panel is always visible
+        ungrouped_rows = conn.execute(
+            "SELECT u.*, "
+            "(SELECT COUNT(*) FROM measurement_sessions ms WHERE ms.participant_id = u.id) AS _session_count "
+            "FROM users u WHERE u.role = 'participant' AND (u.group_id IS NULL OR u.group_id = 0) "
+            "ORDER BY u.name"
+        ).fetchall()
+        ungrouped = [dict(r) for r in ungrouped_rows]
+
         flash = req.query.get("flash", [""])[0] or None
         return Response(views.admin_sessions_page(
             coach, [dict(g) for g in groups],
             selected_group_id=group_id,
             athlete_sessions=athlete_sessions,
             flash=flash,
+            ungrouped=ungrouped,
         ))
     finally:
         conn.close()
@@ -1542,6 +1552,42 @@ def admin_sessions_merge(req):
         conn.close()
     msg = f"Merged+{athletes_merged}+athlete(s),+removed+{sessions_removed}+extra+session(s).+All+labelled+Baseline."
     return redirect(f"/coach/admin/sessions?group_id={group_id}&flash={msg}")
+
+
+@router.post("/coach/admin/athletes/delete")
+def admin_athlete_delete(req):
+    """System-admin: permanently delete a single participant and all their data."""
+    coach = require_system_admin(req)
+    if not coach:
+        return redirect("/login")
+    participant_id_str = req.form_get("participant_id").strip()
+    participant_id = int(participant_id_str) if participant_id_str.isdigit() else None
+    if participant_id:
+        conn = db.get_conn()
+        try:
+            db.delete_participant(conn, participant_id)
+        finally:
+            conn.close()
+    return redirect("/coach/admin/sessions?flash=Athlete+deleted.")
+
+
+@router.post("/coach/admin/athletes/delete-ungrouped")
+def admin_athletes_delete_ungrouped(req):
+    """System-admin: permanently delete all ungrouped participants."""
+    coach = require_system_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        ungrouped = conn.execute(
+            "SELECT id FROM users WHERE role = 'participant' AND (group_id IS NULL OR group_id = 0)"
+        ).fetchall()
+        count = len(ungrouped)
+        for row in ungrouped:
+            db.delete_participant(conn, row["id"])
+    finally:
+        conn.close()
+    return redirect(f"/coach/admin/sessions?flash={count}+ungrouped+athlete(s)+permanently+deleted.")
 
 
 @router.post("/coach/admin/sessions/delete")

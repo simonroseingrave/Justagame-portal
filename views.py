@@ -5617,7 +5617,7 @@ def simple_message_page(title, message, user=None):
     return layout(title, body, user=user)
 
 
-def admin_sessions_page(admin, groups, selected_group_id=None, athlete_sessions=None, flash=None):
+def admin_sessions_page(admin, groups, selected_group_id=None, athlete_sessions=None, flash=None, ungrouped=None):
     """System-admin tool: view and delete measurement sessions per group.
     athlete_sessions: list of (athlete_dict, sessions_list) for the selected group.
     """
@@ -5689,6 +5689,60 @@ def admin_sessions_page(admin, groups, selected_group_id=None, athlete_sessions=
               </table>
             </div>"""
 
+    # Ungrouped athletes panel
+    ungrouped_html = ""
+    if ungrouped is not None:
+        if not ungrouped:
+            ungrouped_html = '<div class="card"><p class="muted">No ungrouped athletes found.</p></div>'
+        else:
+            ug_rows = ""
+            for a in ungrouped:
+                n_sessions = a.get("_session_count", 0)
+                aname = esc(a["name"])
+                asport = esc(a.get("sport") or "—")
+                aid = a["id"]
+                ug_rows += (
+                    f'<tr style="border-bottom:1px solid #DDE0E3;">'
+                    f'<td style="font-weight:600;">{aname}</td>'
+                    f'<td style="color:var(--jag-muted);font-size:12px;">{asport}</td>'
+                    f'<td style="color:var(--jag-muted);font-size:12px;">{n_sessions} session{"s" if n_sessions!=1 else ""}</td>'
+                    f'<td>'
+                    f'<form method="post" action="/coach/admin/athletes/delete" '
+                    f'onsubmit="return confirm(\'Permanently delete {aname} and all their data? This cannot be undone.\');">'
+                    f'<input type="hidden" name="participant_id" value="{aid}" />'
+                    f'<button type="submit" class="btn btn-sm" '
+                    f'style="font-size:11px;background:#fee2e2;color:#9b1c1c;border:1px solid #fca5a5;">'
+                    f'Delete</button>'
+                    f'</form>'
+                    f'</td>'
+                    f'</tr>'
+                )
+            ungrouped_html = f"""
+            <div style="margin-bottom:24px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+                <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--jag-navy);">
+                  Ungrouped Athletes ({len(ungrouped)})
+                </h3>
+                <form method="post" action="/coach/admin/athletes/delete-ungrouped"
+                      onsubmit="return confirm('Permanently delete ALL {len(ungrouped)} ungrouped athletes and all their data? This cannot be undone.');">
+                  <button type="submit" class="btn btn-sm"
+                          style="background:#fee2e2;color:#9b1c1c;border:1px solid #fca5a5;font-weight:700;">
+                    &#128465; Delete All Ungrouped
+                  </button>
+                </form>
+              </div>
+              <div class="card" style="overflow-x:auto;padding:0;">
+                <table class="table" style="width:100%;">
+                  <thead>
+                    <tr style="background:#2D323B;color:#fff;">
+                      <th>Name</th><th>Sport</th><th>Sessions</th><th></th>
+                    </tr>
+                  </thead>
+                  <tbody>{ug_rows}</tbody>
+                </table>
+              </div>
+            </div>"""
+
     merge_panel = ""
     if selected_group_id and athlete_sessions:
         multi = sum(1 for _, s in athlete_sessions if len(s) > 1)
@@ -5729,6 +5783,7 @@ def admin_sessions_page(admin, groups, selected_group_id=None, athlete_sessions=
       <a href="/coach/progress" class="btn btn-ghost">&larr; Back to Overview</a>
     </div>
     {flash_html}
+    {ungrouped_html}
     <div class="card" style="margin-bottom:20px;">
       <form method="get" action="/coach/admin/sessions" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
         <label style="flex:1;min-width:200px;">Group

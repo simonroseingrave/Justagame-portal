@@ -588,6 +588,24 @@ def delete_measurement_session(conn, session_id):
     conn.commit()
 
 
+def delete_participant(conn, participant_id):
+    """Permanently delete a participant and all their associated data."""
+    # measurement results → sessions
+    ms_ids = [r["id"] for r in conn.execute(
+        "SELECT id FROM measurement_sessions WHERE participant_id = ?", (participant_id,)
+    ).fetchall()]
+    for ms_id in ms_ids:
+        conn.execute("DELETE FROM measurement_results WHERE session_id = ?", (ms_id,))
+    conn.execute("DELETE FROM measurement_sessions WHERE participant_id = ?", (participant_id,))
+    # awards
+    conn.execute("DELETE FROM awards WHERE participant_id = ?", (participant_id,))
+    # activity sessions
+    conn.execute("DELETE FROM sessions WHERE participant_id = ?", (participant_id,))
+    # user record
+    conn.execute("DELETE FROM users WHERE id = ?", (participant_id,))
+    conn.commit()
+
+
 def merge_sessions_for_group(conn, group_id, target_label="baseline", target_month=None):
     """Merge all measurement sessions for each athlete in a group into a single session.
 
