@@ -599,8 +599,8 @@ def delete_participant(conn, participant_id):
     conn.execute("DELETE FROM measurement_sessions WHERE participant_id = ?", (participant_id,))
     # awards
     conn.execute("DELETE FROM awards WHERE participant_id = ?", (participant_id,))
-    # activity sessions
-    conn.execute("DELETE FROM sessions WHERE participant_id = ?", (participant_id,))
+    # activity sessions (sessions table uses user_id, not participant_id)
+    conn.execute("DELETE FROM sessions WHERE user_id = ?", (participant_id,))
     # user record
     conn.execute("DELETE FROM users WHERE id = ?", (participant_id,))
     conn.commit()
