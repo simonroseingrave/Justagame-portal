@@ -936,6 +936,110 @@ def all_progress(req):
         conn.close()
 
 
+@router.get("/coach/progress/pdf")
+def progress_stats_pdf(req):
+    """Download achievement statistics as a PDF.
+    Query params:
+      scope=group  + group_id=<int>  → single group
+      scope=overall                  → all visible groups combined (org_admin / system_admin)
+      scope=orgs                     → one section per organisation (system_admin only)
+    """
+    import traceback as _tb
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+
+    scope    = req.query.get("scope", ["group"])[0].strip()
+    group_id_str = req.query.get("group_id", [""])[0].strip()
+    group_id = int(group_id_str) if group_id_str.isdigit() else None
+
+    conn = db.get_conn()
+    try:
+        role = coach.get("role", "")
+
+        if scope == "group" and group_id:
+            # Per-group PDF — any staff member with access to that group
+            group = conn.execute("SELECT * FROM participant_groups WHERE id = ?", (group_id,)).fetchone()
+            if not group:
+                return Response(views.simple_message_page("Not found", "Group not found.", user=coach), status=404)
+            if role not in {"org_admin", "system_admin"}:
+                coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
+                if group_id not in coach_group_ids:
+                    return Response(views.simple_message_page("Access denied", "You don't have access to this group.", user=coach), status=403)
+            participants = conn.execute(
+                "SELECT * FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name",
+                (group_id,),
+            ).fetchall()
+            ps_data = [(dict(p), db.measurement_sessions_for(conn, p["id"], group_id=group_id)) for p in participants]
+            groups_sections = [(group["name"], ps_data)]
+            title    = group["name"]
+            subtitle = "Achievement Statistics"
+            filename = f"stats_{group['name'].replace(' ', '_')}.pdf"
+
+        elif scope == "overall" and role in {"org_admin", "system_admin"}:
+            # All visible groups in one PDF
+            if role in {"org_admin", "system_admin"}:
+                group_rows, _ = db.list_participants_by_group(conn)
+            else:
+                coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
+                group_rows = []
+                for gid in coach_group_ids:
+                    g = conn.execute("SELECT * FROM participant_groups WHERE id = ?", (gid,)).fetchone()
+                    if g:
+                        parts = conn.execute(
+                            "SELECT * FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name", (gid,)
+                        ).fetchall()
+                        group_rows.append((g, parts))
+            groups_sections = []
+            for group, participants in group_rows:
+                ps_data = [(dict(p), db.measurement_sessions_for(conn, p["id"], group_id=group["id"])) for p in participants]
+                groups_sections.append((group["name"], ps_data))
+            title    = "Programme Overview"
+            subtitle = "Achievement Statistics — All Groups"
+            filename = "stats_all_groups.pdf"
+
+        elif scope == "orgs" and role == "system_admin":
+            # One section per organisation, groups nested inside
+            orgs = conn.execute(
+                "SELECT * FROM organisations ORDER BY name"
+            ).fetchall()
+            groups_sections = []
+            for org in orgs:
+                org_groups = conn.execute(
+                    "SELECT * FROM participant_groups WHERE organisation_id = ? ORDER BY name",
+                    (org["id"],)
+                ).fetchall()
+                for group in org_groups:
+                    parts = conn.execute(
+                        "SELECT * FROM users WHERE role='participant' AND active=1 AND group_id=? ORDER BY name",
+                        (group["id"],)
+                    ).fetchall()
+                    ps_data = [(dict(p), db.measurement_sessions_for(conn, p["id"], group_id=group["id"])) for p in parts]
+                    label = f"{org['name']} — {group['name']}"
+                    groups_sections.append((label, ps_data))
+            title    = "All Organisations"
+            subtitle = "Achievement Statistics — System Overview"
+            filename = "stats_by_organisation.pdf"
+
+        else:
+            return Response(views.simple_message_page("Access denied", "You don't have permission for this report.", user=coach), status=403)
+
+        try:
+            pdf_bytes = views.achievement_stats_pdf(title, subtitle, groups_sections)
+        except Exception:
+            return Response(
+                f"<pre style='color:red;padding:20px;'>Error generating PDF:\n{_tb.format_exc()}</pre>",
+                status=500
+            )
+
+        resp = Response(body=pdf_bytes, content_type="application/pdf")
+        resp.headers.append(("Content-Disposition", f'attachment; filename="{filename}"'))
+        resp.headers.append(("Content-Length", str(len(pdf_bytes))))
+        return resp
+    finally:
+        conn.close()
+
+
 @router.get("/coach/groups/<int:group_id>/progress")
 def group_progress(req, group_id):
     coach = require_staff(req)
@@ -1380,6 +1484,63 @@ def edit_measurement_session(req, participant_id, session_id):
         selected_label=s.get("session_label"),
         selected_month=s.get("session_month"),
     ))
+
+
+@router.get("/coach/admin/sessions")
+def admin_sessions_get(req):
+    """System-admin tool: view all sessions for a group so duplicates can be deleted."""
+    coach = require_system_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        groups = conn.execute(
+            "SELECT pg.*, o.name AS org_name FROM participant_groups pg "
+            "LEFT JOIN organisations o ON o.id = pg.organisation_id "
+            "ORDER BY o.name NULLS LAST, pg.name"
+        ).fetchall()
+        group_id_str = req.query.get("group_id", [""])[0].strip()
+        group_id = int(group_id_str) if group_id_str.isdigit() else None
+        athlete_sessions = None
+        if group_id:
+            participants = conn.execute(
+                "SELECT * FROM users WHERE group_id = ? AND role = 'participant' ORDER BY name",
+                (group_id,),
+            ).fetchall()
+            athlete_sessions = [
+                (dict(p), db.measurement_sessions_for(conn, p["id"], group_id=group_id))
+                for p in participants
+            ]
+        flash = req.query.get("flash", [""])[0] or None
+        return Response(views.admin_sessions_page(
+            coach, [dict(g) for g in groups],
+            selected_group_id=group_id,
+            athlete_sessions=athlete_sessions,
+            flash=flash,
+        ))
+    finally:
+        conn.close()
+
+
+@router.post("/coach/admin/sessions/delete")
+def admin_sessions_delete(req):
+    """System-admin: delete a specific measurement session."""
+    coach = require_system_admin(req)
+    if not coach:
+        return redirect("/login")
+    body = parse_body(req)
+    session_id_str = body.get("session_id", [""])[0].strip()
+    group_id_str   = body.get("group_id",   [""])[0].strip()
+    session_id = int(session_id_str) if session_id_str.isdigit() else None
+    group_id   = int(group_id_str)   if group_id_str.isdigit()   else None
+    if session_id:
+        conn = db.get_conn()
+        try:
+            db.delete_measurement_session(conn, session_id)
+        finally:
+            conn.close()
+    redirect_url = f"/coach/admin/sessions?group_id={group_id or ''}&flash=Session+deleted."
+    return redirect(redirect_url)
 
 
 @router.post("/coach/participants/<int:participant_id>/measurement/<int:session_id>/delete")

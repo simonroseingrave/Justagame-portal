@@ -2773,7 +2773,8 @@ def all_progress_page(coach, groups_data, sport_filter=None, max_level=None):
         if gid:
             links = (f'<a href="/coach/groups/{gid}/achievement-summary" class="btn btn-sm" '
                      f'style="font-size:12px;background:var(--jag-green);color:var(--jag-navy);font-weight:700;border:none;">Group Stats</a>'
-                     f'<a href="/coach/groups/{gid}/scores" class="btn btn-ghost btn-sm" style="font-size:12px;">Scores Table</a>')
+                     f'<a href="/coach/groups/{gid}/scores" class="btn btn-ghost btn-sm" style="font-size:12px;">Scores Table</a>'
+                     f'<a href="/coach/progress/pdf?scope=group&group_id={gid}" class="btn btn-ghost btn-sm no-print" style="font-size:12px;">&#128196; PDF</a>')
 
         group_sections_html += f"""
         <div style="margin-bottom:44px;">
@@ -2811,12 +2812,27 @@ def all_progress_page(coach, groups_data, sport_filter=None, max_level=None):
                   {overall_tables}
                 </div>"""
 
+    # PDF download buttons — shown based on role
+    role = coach.get("role", "")
+    pdf_btns = ""
+    if role in {"org_admin", "system_admin"}:
+        pdf_btns += (
+            f'<a href="/coach/progress/pdf?scope=overall" class="btn btn-ghost btn-sm no-print" '
+            f'style="font-size:12px;" title="Download all-groups PDF">&#128196; All Groups PDF</a>'
+        )
+    if role == "system_admin":
+        pdf_btns += (
+            f'<a href="/coach/progress/pdf?scope=orgs" class="btn btn-ghost btn-sm no-print" '
+            f'style="font-size:12px;" title="Download per-organisation PDF">&#128196; By Organisation PDF</a>'
+        )
+
     body = f"""
     <div class="page-head">
       <div>
         <h1>Achievement Statistics Overview</h1>
         <p class="muted">Group averages across all measurement rounds{(" &mdash; " + esc(sport_filter) + " athletes") if sport_filter else ""}</p>
       </div>
+      <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;">{pdf_btns}</div>
     </div>
     {hero_card}
     {group_cards}
@@ -2824,6 +2840,233 @@ def all_progress_page(coach, groups_data, sport_filter=None, max_level=None):
     {group_sections_html}
     {overall_html}"""
     return layout("Achievement Statistics", body, user=coach, active_nav="progress")
+
+
+def achievement_stats_pdf(title, subtitle, groups_sections, max_level=None):
+    """Generate a landscape A4 PDF of Achievement Statistics round tables.
+
+    groups_sections: list of (group_name_str, athletes_sessions_list) tuples.
+    Returns bytes.
+    """
+    import io
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                    Paragraph, Spacer, HRFlowable)
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT, TA_RIGHT
+    from constants import games_for_max_level
+
+    JAG_NAVY  = colors.HexColor("#2D323B")
+    JAG_GOLD  = colors.HexColor("#F0A82E")
+    JAG_LIGHT = colors.HexColor("#F3F4F5")
+    JAG_GREEN = colors.HexColor("#2E7D32")
+    JAG_RED   = colors.HexColor("#9b1c1c")
+    JAG_GREY  = colors.HexColor("#6E737B")
+
+    buf = io.BytesIO()
+    page_size = landscape(A4)
+    doc = SimpleDocTemplate(
+        buf, pagesize=page_size,
+        leftMargin=12*mm, rightMargin=12*mm,
+        topMargin=12*mm, bottomMargin=12*mm,
+    )
+
+    # Styles
+    t_style  = ParagraphStyle("t",  fontName="Helvetica-Bold", fontSize=16, textColor=JAG_NAVY)
+    s_style  = ParagraphStyle("s",  fontName="Helvetica",      fontSize=9,  textColor=JAG_GREY)
+    g_style  = ParagraphStyle("g",  fontName="Helvetica-Bold", fontSize=11, textColor=colors.white)
+    gm_style = ParagraphStyle("gm", fontName="Helvetica-Bold", fontSize=9,  textColor=JAG_NAVY)
+    hdr_s    = ParagraphStyle("hd", fontName="Helvetica-Bold", fontSize=7,  textColor=colors.white,
+                               alignment=TA_CENTER, leading=9)
+    fld_s    = ParagraphStyle("fl", fontName="Helvetica-Bold", fontSize=7,  textColor=JAG_NAVY,
+                               alignment=TA_LEFT, leading=9)
+    val_s    = ParagraphStyle("vl", fontName="Helvetica",      fontSize=8,  alignment=TA_CENTER)
+    pct_s    = ParagraphStyle("pc", fontName="Helvetica-Bold", fontSize=8,  alignment=TA_CENTER)
+    pct_g    = ParagraphStyle("pg", fontName="Helvetica-Bold", fontSize=8,  textColor=JAG_GREEN, alignment=TA_CENTER)
+    pct_r    = ParagraphStyle("pr", fontName="Helvetica-Bold", fontSize=8,  textColor=JAG_RED,   alignment=TA_CENTER)
+    sec_s    = ParagraphStyle("sc", fontName="Helvetica-Bold", fontSize=7,  textColor=JAG_GREY,
+                               alignment=TA_LEFT, leading=9)
+
+    today = _dt.date.today().strftime("%d %B %Y")
+    story = []
+
+    # Page title block
+    story.append(Paragraph(title, t_style))
+    story.append(Spacer(1, 1*mm))
+    story.append(Paragraph(f"{subtitle} &nbsp;&middot;&nbsp; Generated {today} &nbsp;&middot;&nbsp; Just A Game", s_style))
+    story.append(Spacer(1, 4*mm))
+    story.append(HRFlowable(width="100%", thickness=1.5, color=JAG_GOLD))
+    story.append(Spacer(1, 6*mm))
+
+    page_w = page_size[0] - 24*mm   # usable width after margins
+    field_col_w = 44*mm
+
+    def _pdf_round_data(athletes_sessions, game):
+        """Return (rounds_meta, active_fields, rows_data) for one game, or None if no data."""
+        all_fields = game["fields"] + game.get("computed", [])
+        max_rounds = max((len(s) for _, s in athletes_sessions), default=0)
+        if max_rounds == 0:
+            return None
+        rounds = []
+        for r in range(max_rounds):
+            dates, n_athletes = [], 0
+            field_vals = {f["key"]: [] for f in all_fields}
+            for _p, sessions in athletes_sessions:
+                if len(sessions) <= r:
+                    continue
+                sess = sessions[-(r + 1)]
+                dates.append(sess["date"])
+                n_athletes += 1
+                for field in all_fields:
+                    v = sess["results"].get((game["key"], field["key"]))
+                    if v is not None:
+                        field_vals[field["key"]].append(v)
+            if not dates:
+                break
+            d_label = min(dates) if min(dates) == max(dates) else f"{min(dates)[:7]}…"
+            avgs = {k: (sum(v)/len(v) if v else None) for k, v in field_vals.items()}
+            rounds.append({"date": d_label, "avgs": avgs, "n": n_athletes})
+        if not rounds:
+            return None
+        active = [f for f in all_fields if any(rd["avgs"].get(f["key"]) is not None for rd in rounds)]
+        if not active:
+            return None
+        return rounds, active
+
+    for group_name, athletes_sessions in groups_sections:
+        if not athletes_sessions:
+            continue
+
+        # Group header band
+        g_hdr_data = [[Paragraph(group_name or "Ungrouped", g_style)]]
+        n_a  = len(athletes_sessions)
+        n_s  = len([p for p, s in athletes_sessions if s])
+        with_2 = [(p, s) for p, s in athletes_sessions if len(s) >= 2]
+        gimps = []
+        for _, sessions in with_2:
+            pct = _calc_improvement_pct(sessions)
+            if pct is not None:
+                gimps.append(pct)
+        gavg_str = f"Avg improvement: {'+' if (sum(gimps)/len(gimps))>=0 else ''}{sum(gimps)/len(gimps):.1f}%" if gimps else "No comparison data yet"
+
+        g_hdr_tbl = Table(g_hdr_data, colWidths=[page_w])
+        g_hdr_tbl.setStyle(TableStyle([
+            ("BACKGROUND",  (0,0), (-1,-1), JAG_NAVY),
+            ("TOPPADDING",  (0,0), (-1,-1), 5),
+            ("BOTTOMPADDING",(0,0),(-1,-1), 5),
+            ("LEFTPADDING", (0,0), (-1,-1), 8),
+        ]))
+        story.append(g_hdr_tbl)
+        story.append(Paragraph(
+            f"{n_a} athlete{'s' if n_a!=1 else ''} &nbsp;&middot;&nbsp; {n_s} tested &nbsp;&middot;&nbsp; {gavg_str}",
+            s_style
+        ))
+        story.append(Spacer(1, 3*mm))
+
+        has_any_data = False
+        for section in games_for_max_level(max_level):
+            section_header_added = False
+            for game in section["games"]:
+                result = _pdf_round_data(athletes_sessions, game)
+                if result is None:
+                    continue
+                rounds, active_fields = result
+                has_any_data = True
+
+                if not section_header_added:
+                    story.append(Paragraph(section["section"].upper(), sec_s))
+                    story.append(Spacer(1, 1*mm))
+                    section_header_added = True
+
+                # Game name row
+                story.append(Paragraph(game["name"], gm_style))
+                story.append(Spacer(1, 1*mm))
+
+                # Build table: rows = fields, cols = rounds
+                n_rounds = len(rounds)
+                round_col_w = max(18*mm, (page_w - field_col_w) / n_rounds)
+                col_widths = [field_col_w] + [round_col_w] * n_rounds
+
+                # Header row
+                hdr_row = [Paragraph("Measurement", hdr_s)]
+                for i, rd in enumerate(rounds):
+                    label = "Baseline" if i == 0 else f"Round {i+1}"
+                    hdr_row.append(Paragraph(
+                        f"{label}<br/><font size='6'>{rd['date']}<br/>{rd['n']} athlete{'s' if rd['n']!=1 else ''}</font>",
+                        hdr_s
+                    ))
+
+                tbl_data = [hdr_row]
+
+                # Field rows
+                for field in active_fields:
+                    row = [Paragraph(field["label"], fld_s)]
+                    for rd in rounds:
+                        avg = rd["avgs"].get(field["key"])
+                        if avg is None:
+                            row.append(Paragraph("—", val_s))
+                        else:
+                            val_str = f"{avg:.2f}s" if field["type"] == "time" else f"{avg:.1f}"
+                            row.append(Paragraph(val_str, val_s))
+                    tbl_data.append(row)
+
+                # % change row (if 2+ rounds)
+                if n_rounds >= 2:
+                    pct_row = [Paragraph("Avg % change vs baseline", fld_s)]
+                    for i, rd in enumerate(rounds):
+                        if i == 0:
+                            pct_row.append(Paragraph("—", val_s))
+                            continue
+                        pcts = []
+                        for field in active_fields:
+                            fv = rounds[0]["avgs"].get(field["key"])
+                            lv = rd["avgs"].get(field["key"])
+                            if fv is not None and lv is not None and fv != 0:
+                                raw = (lv - fv) / fv * 100
+                                corrected = -raw if field["type"] == "time" else raw
+                                pcts.append(corrected)
+                        if pcts:
+                            ap = sum(pcts) / len(pcts)
+                            sign = "+" if ap >= 0 else ""
+                            style = pct_g if ap >= 0 else pct_r
+                            pct_row.append(Paragraph(f"{sign}{ap:.1f}%", style))
+                        else:
+                            pct_row.append(Paragraph("—", val_s))
+                    tbl_data.append(pct_row)
+
+                tbl = Table(tbl_data, colWidths=col_widths, repeatRows=1)
+                style_cmds = [
+                    ("BACKGROUND",     (0,0), (-1,0),  JAG_NAVY),
+                    ("TEXTCOLOR",      (0,0), (-1,0),  colors.white),
+                    ("FONTNAME",       (0,0), (-1,0),  "Helvetica-Bold"),
+                    ("ALIGN",          (0,0), (-1,-1), "CENTER"),
+                    ("ALIGN",          (0,0), (0,-1),  "LEFT"),
+                    ("ROWBACKGROUNDS", (0,1), (-1,-1), [colors.white, JAG_LIGHT]),
+                    ("GRID",           (0,0), (-1,-1), 0.3, colors.HexColor("#cccccc")),
+                    ("TOPPADDING",     (0,0), (-1,-1), 3),
+                    ("BOTTOMPADDING",  (0,0), (-1,-1), 3),
+                    ("LEFTPADDING",    (0,0), (-1,-1), 4),
+                    ("RIGHTPADDING",   (0,0), (-1,-1), 4),
+                ]
+                if n_rounds >= 2:
+                    # Highlight % change row
+                    last = len(tbl_data) - 1
+                    style_cmds.append(("BACKGROUND", (0, last), (-1, last), JAG_LIGHT))
+                    style_cmds.append(("LINEABOVE",  (0, last), (-1, last), 1.0, JAG_GOLD))
+                tbl.setStyle(TableStyle(style_cmds))
+                story.append(tbl)
+                story.append(Spacer(1, 3*mm))
+
+        if not has_any_data:
+            story.append(Paragraph("No measurement data recorded yet for this group.", s_style))
+            story.append(Spacer(1, 3*mm))
+
+        story.append(Spacer(1, 4*mm))
+
+    doc.build(story)
+    return buf.getvalue()
 
 
 # ---------------------------------------------------------------------------
@@ -5372,6 +5615,99 @@ def help_page(user):
 def simple_message_page(title, message, user=None):
     body = f'<div class="card"><p>{esc(message)}</p></div>'
     return layout(title, body, user=user)
+
+
+def admin_sessions_page(admin, groups, selected_group_id=None, athlete_sessions=None, flash=None):
+    """System-admin tool: view and delete measurement sessions per group.
+    athlete_sessions: list of (athlete_dict, sessions_list) for the selected group.
+    """
+    from constants import SESSION_LABEL_MAP
+
+    group_opts = '<option value="">— Select a group —</option>' + "".join(
+        f'<option value="{g["id"]}" {"selected" if selected_group_id and g["id"]==selected_group_id else ""}>'
+        f'{esc(g["name"])}</option>'
+        for g in groups
+    )
+
+    flash_html = ""
+    if flash:
+        flash_html = (f'<div style="background:#d1fae5;border:1px solid #6ee7b7;border-radius:6px;'
+                      f'padding:10px 14px;margin-bottom:16px;font-size:13px;font-weight:600;color:#065f46;">'
+                      f'{esc(flash)}</div>')
+
+    sessions_html = ""
+    if athlete_sessions is not None:
+        if not athlete_sessions:
+            sessions_html = '<div class="card"><p class="muted">No athletes or sessions in this group.</p></div>'
+        else:
+            rows = ""
+            for athlete, sessions in athlete_sessions:
+                if not sessions:
+                    rows += (f'<tr><td style="font-weight:600;">{esc(athlete["name"])}</td>'
+                             f'<td colspan="5" class="muted" style="font-style:italic;">No sessions</td></tr>')
+                    continue
+                first = True
+                for s in sessions:
+                    label_disp = SESSION_LABEL_MAP.get(s.get("session_label") or "", s.get("session_label") or "—")
+                    month_disp = s.get("session_month") or "—"
+                    n_results  = len([v for v in (s.get("results") or {}).values() if v is not None])
+                    name_cell  = (f'<td rowspan="{len(sessions)}" style="font-weight:600;vertical-align:top;'
+                                  f'padding-top:10px;">{esc(athlete["name"])}</td>' if first else "")
+                    rows += (
+                        f'<tr style="border-bottom:1px solid #DDE0E3;">'
+                        f'{name_cell}'
+                        f'<td>{esc(str(s["id"]))}</td>'
+                        f'<td>{esc(s["date"])}</td>'
+                        f'<td><span style="font-size:12px;padding:2px 8px;border-radius:999px;background:#F3F4F5;'
+                        f'font-weight:600;">{esc(label_disp)}</span></td>'
+                        f'<td style="color:var(--jag-muted);font-size:12px;">{esc(month_disp)}</td>'
+                        f'<td style="color:var(--jag-muted);font-size:12px;">{n_results} field{"s" if n_results!=1 else ""} recorded</td>'
+                        f'<td>'
+                        f'<form method="post" action="/coach/admin/sessions/delete" '
+                        f'onsubmit="return confirm(\'Delete this session? This cannot be undone.\');">'
+                        f'<input type="hidden" name="session_id" value="{s["id"]}" />'
+                        f'<input type="hidden" name="group_id" value="{selected_group_id}" />'
+                        f'<button type="submit" class="btn btn-sm" '
+                        f'style="font-size:11px;background:#fee2e2;color:#9b1c1c;border:1px solid #fca5a5;">'
+                        f'Delete</button>'
+                        f'</form>'
+                        f'</td>'
+                        f'</tr>'
+                    )
+                    first = False
+
+            sessions_html = f"""
+            <div class="card" style="overflow-x:auto;padding:0;">
+              <table class="table" style="width:100%;">
+                <thead>
+                  <tr style="background:#2D323B;color:#fff;">
+                    <th>Athlete</th><th>Session ID</th><th>Date</th>
+                    <th>Label</th><th>Month</th><th>Fields</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>{rows}</tbody>
+              </table>
+            </div>"""
+
+    body = f"""
+    <div class="page-head">
+      <div>
+        <h1>Session Manager</h1>
+        <p class="muted">System Admin &mdash; view and delete measurement sessions per group</p>
+      </div>
+      <a href="/coach/progress" class="btn btn-ghost">&larr; Back to Overview</a>
+    </div>
+    {flash_html}
+    <div class="card" style="margin-bottom:20px;">
+      <form method="get" action="/coach/admin/sessions" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;">
+        <label style="flex:1;min-width:200px;">Group
+          <select name="group_id" required>{group_opts}</select>
+        </label>
+        <button type="submit" class="btn btn-primary">View Sessions</button>
+      </form>
+    </div>
+    {sessions_html}"""
+    return layout("Session Manager", body, user=admin, active_nav="progress")
 
 
 def confirm_replace_session_page(coach, participant, results, session_label, session_month,
