@@ -2815,11 +2815,11 @@ def all_progress_page(coach, groups_data, sport_filter=None, max_level=None):
     # PDF download buttons — shown based on role
     role = coach.get("role", "")
     pdf_btns = ""
-    if role in {"org_admin", "system_admin"}:
-        pdf_btns += (
-            f'<a href="/coach/progress/pdf?scope=overall" class="btn btn-ghost btn-sm no-print" '
-            f'style="font-size:12px;" title="Download all-groups PDF">&#128196; All Groups PDF</a>'
-        )
+    # All staff can download an "all my groups" overall PDF
+    pdf_btns += (
+        f'<a href="/coach/progress/pdf?scope=overall" class="btn btn-ghost btn-sm no-print" '
+        f'style="font-size:12px;" title="Download all-groups PDF">&#128196; All Groups PDF</a>'
+    )
     if role == "system_admin":
         pdf_btns += (
             f'<a href="/coach/progress/pdf?scope=orgs" class="btn btn-ghost btn-sm no-print" '

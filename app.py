@@ -976,8 +976,8 @@ def progress_stats_pdf(req):
             subtitle = "Achievement Statistics"
             filename = f"stats_{group['name'].replace(' ', '_')}.pdf"
 
-        elif scope == "overall" and role in {"org_admin", "system_admin"}:
-            # All visible groups in one PDF
+        elif scope == "overall":
+            # All visible groups in one PDF — admins see all, practitioners see their assigned groups
             if role in {"org_admin", "system_admin"}:
                 group_rows, _ = db.list_participants_by_group(conn)
             else:
