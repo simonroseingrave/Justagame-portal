@@ -2814,17 +2814,21 @@ def all_progress_page(coach, groups_data, sport_filter=None, max_level=None):
 
     # PDF download buttons — shown based on role
     role = coach.get("role", "")
+    btn_style = 'style="background:#F0A82E;color:#2D323B;font-weight:700;border:none;padding:8px 16px;border-radius:6px;font-size:13px;text-decoration:none;display:inline-block;"'
     pdf_btns = ""
     # All staff can download an "all my groups" overall PDF
-    pdf_btns += (
-        f'<a href="/coach/progress/pdf?scope=overall" class="btn btn-ghost btn-sm no-print" '
-        f'style="font-size:12px;" title="Download all-groups PDF">&#128196; All Groups PDF</a>'
-    )
+    pdf_btns += f'<a href="/coach/progress/pdf?scope=overall" {btn_style}>&#128196; All Groups PDF</a>'
     if role == "system_admin":
-        pdf_btns += (
-            f'<a href="/coach/progress/pdf?scope=orgs" class="btn btn-ghost btn-sm no-print" '
-            f'style="font-size:12px;" title="Download per-organisation PDF">&#128196; By Organisation PDF</a>'
-        )
+        pdf_btns += f'<a href="/coach/progress/pdf?scope=orgs" {btn_style}>&#128196; By Organisation PDF</a>'
+
+    # Prominent download bar shown in the page body (not just the header)
+    download_bar = f"""
+    <div class="no-print" style="background:#2D323B;border-radius:10px;padding:14px 20px;
+         margin-bottom:24px;display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+      <span style="color:#F0A82E;font-weight:700;font-size:13px;">&#128196; Download PDF Reports</span>
+      <span style="flex:1;min-width:0;"></span>
+      {pdf_btns}
+    </div>""" if pdf_btns else ""
 
     body = f"""
     <div class="page-head">
@@ -2832,8 +2836,8 @@ def all_progress_page(coach, groups_data, sport_filter=None, max_level=None):
         <h1>Achievement Statistics Overview</h1>
         <p class="muted">Group averages across all measurement rounds{(" &mdash; " + esc(sport_filter) + " athletes") if sport_filter else ""}</p>
       </div>
-      <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;">{pdf_btns}</div>
     </div>
+    {download_bar}
     {hero_card}
     {group_cards}
     {filter_bar}
