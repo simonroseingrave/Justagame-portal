@@ -588,6 +588,86 @@ def delete_measurement_session(conn, session_id):
     conn.commit()
 
 
+def merge_sessions_for_group(conn, group_id, target_label="baseline", target_month=None):
+    """Merge all measurement sessions for each athlete in a group into a single session.
+
+    For each athlete with multiple sessions in this group:
+    - Keep the earliest session (by date, then id) as the target.
+    - Copy measurement_results from all later sessions into the target,
+      skipping any (game_key, field_key) pair that already exists in the target.
+    - Update the target session's label and month to target_label / target_month.
+    - Delete the extra sessions.
+
+    Returns (athletes_merged, sessions_removed) counts.
+    """
+    athletes = conn.execute(
+        "SELECT id FROM users WHERE group_id = ? AND role = 'participant'",
+        (group_id,),
+    ).fetchall()
+
+    athletes_merged = 0
+    sessions_removed = 0
+
+    for athlete in athletes:
+        pid = athlete["id"]
+        sessions = conn.execute(
+            "SELECT id FROM measurement_sessions "
+            "WHERE participant_id = ? AND group_id = ? "
+            "ORDER BY date ASC, id ASC",
+            (pid, group_id),
+        ).fetchall()
+
+        if len(sessions) <= 1:
+            # Nothing to merge; still relabel if there's exactly one
+            if len(sessions) == 1:
+                conn.execute(
+                    "UPDATE measurement_sessions SET session_label = ?, session_month = ? WHERE id = ?",
+                    (target_label, target_month, sessions[0]["id"]),
+                )
+            continue
+
+        target_id = sessions[0]["id"]
+        extra_ids = [s["id"] for s in sessions[1:]]
+
+        # Build set of (game_key, field_key) already in target
+        existing = set(
+            (r["game_key"], r["field_key"])
+            for r in conn.execute(
+                "SELECT game_key, field_key FROM measurement_results WHERE session_id = ?",
+                (target_id,),
+            ).fetchall()
+        )
+
+        # Copy results from extra sessions that don't already exist in target
+        for eid in extra_ids:
+            rows = conn.execute(
+                "SELECT game_key, field_key, value FROM measurement_results WHERE session_id = ?",
+                (eid,),
+            ).fetchall()
+            for row in rows:
+                key = (row["game_key"], row["field_key"])
+                if key not in existing and row["value"] is not None:
+                    conn.execute(
+                        "INSERT INTO measurement_results (session_id, game_key, field_key, value) VALUES (?, ?, ?, ?)",
+                        (target_id, row["game_key"], row["field_key"], row["value"]),
+                    )
+                    existing.add(key)
+            # Delete extra session
+            conn.execute("DELETE FROM measurement_results WHERE session_id = ?", (eid,))
+            conn.execute("DELETE FROM measurement_sessions WHERE id = ?", (eid,))
+            sessions_removed += 1
+
+        # Relabel the surviving session
+        conn.execute(
+            "UPDATE measurement_sessions SET session_label = ?, session_month = ? WHERE id = ?",
+            (target_label, target_month, target_id),
+        )
+        athletes_merged += 1
+
+    conn.commit()
+    return athletes_merged, sessions_removed
+
+
 def relabel_unlabelled_sessions(conn, group_id, session_label, session_month):
     """Tag all unlabelled sessions for athletes in a group with a phase label and month.
     Only touches sessions that have no session_label yet.

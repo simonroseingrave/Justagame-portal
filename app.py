@@ -1522,6 +1522,29 @@ def admin_sessions_get(req):
         conn.close()
 
 
+@router.post("/coach/admin/sessions/merge")
+def admin_sessions_merge(req):
+    """System-admin: merge all sessions for every athlete in a group into one baseline."""
+    coach = require_system_admin(req)
+    if not coach:
+        return redirect("/login")
+    body = parse_body(req)
+    group_id_str   = body.get("group_id",   [""])[0].strip()
+    target_month   = body.get("target_month", [""])[0].strip() or None
+    group_id = int(group_id_str) if group_id_str.isdigit() else None
+    if not group_id:
+        return redirect("/coach/admin/sessions")
+    conn = db.get_conn()
+    try:
+        athletes_merged, sessions_removed = db.merge_sessions_for_group(
+            conn, group_id, target_label="baseline", target_month=target_month
+        )
+    finally:
+        conn.close()
+    msg = f"Merged+{athletes_merged}+athlete(s),+removed+{sessions_removed}+extra+session(s).+All+labelled+Baseline."
+    return redirect(f"/coach/admin/sessions?group_id={group_id}&flash={msg}")
+
+
 @router.post("/coach/admin/sessions/delete")
 def admin_sessions_delete(req):
     """System-admin: delete a specific measurement session."""

@@ -5689,11 +5689,42 @@ def admin_sessions_page(admin, groups, selected_group_id=None, athlete_sessions=
               </table>
             </div>"""
 
+    merge_panel = ""
+    if selected_group_id and athlete_sessions:
+        multi = sum(1 for _, s in athlete_sessions if len(s) > 1)
+        if multi > 0:
+            merge_panel = f"""
+            <div style="background:#fffbeb;border:1px solid #F0A82E;border-left:4px solid #F0A82E;
+                        border-radius:8px;padding:14px 18px;margin-bottom:20px;">
+              <div style="font-weight:700;font-size:14px;color:#2D323B;margin-bottom:6px;">
+                &#9889; Merge into Baseline
+              </div>
+              <p style="margin:0 0 12px;font-size:13px;color:#6E737B;">
+                <strong>{multi} athlete{"s have" if multi!=1 else " has"}</strong> multiple sessions.
+                This will combine all sessions per athlete into one, keeping the earliest date as the base
+                and copying across any results that don't conflict. All surviving sessions will be labelled <strong>Baseline</strong>.
+              </p>
+              <form method="post" action="/coach/admin/sessions/merge"
+                    onsubmit="return confirm('Merge all sessions for this group into one Baseline per athlete? This cannot be undone.');">
+                <input type="hidden" name="group_id" value="{selected_group_id}" />
+                <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;">
+                  <label style="font-size:13px;font-weight:600;">
+                    Baseline month (optional)
+                    {_month_select("target_month")}
+                  </label>
+                  <button type="submit" class="btn btn-primary"
+                          style="background:#F0A82E;color:#2D323B;border:none;font-weight:700;">
+                    &#9889; Merge All into Baseline
+                  </button>
+                </div>
+              </form>
+            </div>"""
+
     body = f"""
     <div class="page-head">
       <div>
         <h1>Session Manager</h1>
-        <p class="muted">System Admin &mdash; view and delete measurement sessions per group</p>
+        <p class="muted">System Admin &mdash; view and merge measurement sessions per group</p>
       </div>
       <a href="/coach/progress" class="btn btn-ghost">&larr; Back to Overview</a>
     </div>
@@ -5706,6 +5737,7 @@ def admin_sessions_page(admin, groups, selected_group_id=None, athlete_sessions=
         <button type="submit" class="btn btn-primary">View Sessions</button>
       </form>
     </div>
+    {merge_panel}
     {sessions_html}"""
     return layout("Session Manager", body, user=admin, active_nav="progress")
 
