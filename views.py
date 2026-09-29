@@ -1613,7 +1613,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
       <a class="btn btn-primary" href="/coach/participants/new">+ Add Participant</a>
       <button type="button" class="btn btn-primary" onclick="var p=document.getElementById('create-group-panel');p.style.display=p.style.display==='none'?'block':'none';">+ Create Group</button>
       <a class="btn btn-primary" href="/coach/session">Record Session</a>
-      {'<a class="btn btn-ghost" href="/coach/participants/import" title="Bulk-import athletes from CSV">&#8679; Import Athletes</a><a class="btn btn-ghost" href="/coach/participants/export.csv" title="Export all athletes with new temp passwords">&#8681; Export Athletes</a><a class="btn btn-ghost" href="/coach/scores/import" title="Bulk-import test scores from CSV">&#8679; Import Scores</a>' if is_admin else ''}
+      {'<a class="btn btn-ghost" href="/coach/participants/import" title="Bulk-import athletes from CSV">&#8679; Import Athletes</a><a class="btn btn-ghost" href="/coach/participants/export.csv" title="Export all athletes with new temp passwords">&#8681; Export Athletes</a><a class="btn btn-ghost" href="/coach/scores/import" title="Bulk-import test scores from CSV">&#8679; Import Scores</a><a class="btn btn-ghost" href="/coach/admin/game-thresholds" title="Set XP level thresholds and run retroactive XP pass">&#9881; XP Thresholds</a>' if is_admin else ''}
     </div>
     {create_group_form}""" if is_admin else ""
 
@@ -4014,7 +4014,8 @@ def session_sheet_page(coach, groups, session_types):
 
 def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
                    selected_month=None, selected_game_key=None,
-                   athletes=None, game=None, existing=None, completion_data=None):
+                   athletes=None, game=None, existing=None, completion_data=None,
+                   athlete_xp_levels=None):
     """Single page combining:
       1. Selector form (group + phase + month + optional game)
       2. Completion matrix (shown when group+phase selected)
@@ -4070,6 +4071,81 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
       </div>
       <button type="submit" class="btn btn-primary" style="white-space:nowrap;">Load</button>
     </form>"""
+
+    # ── Athlete overview panel (XP rank + level summary) ─────────────────────
+    athlete_xp_levels = athlete_xp_levels or {}
+    overview_html = ""
+    if athletes and athlete_xp_levels:
+        from constants import CORE_AAP_GAMES
+        LEVEL_COLOURS_HUB = {
+            0: ("#E5E7EB", "#6E737B"),
+            1: ("#1EBE8B", "#fff"),
+            2: ("#F0A82E", "#2D323B"),
+            3: ("#2D323B", "#fff"),
+            4: ("#F97316", "#fff"),
+            5: ("#8B5CF6", "#fff"),
+        }
+        tiles = ""
+        for a in athletes:
+            aid = a["id"]
+            aname = esc(a.get("name", ""))
+            an = a.get("athlete_number") or ""
+            ax = athlete_xp_levels.get(aid, {})
+            levels = ax.get("levels", {})
+            tier = ax.get("tier") or {"label": "Starter", "colour": "#6E737B"}
+            total_xp = ax.get("total_xp", 0)
+            tier_colour = tier["colour"]
+
+            # Initials avatar
+            parts = a.get("name", "").strip().split()
+            inits = (parts[0][0] + parts[-1][0]).upper() if len(parts) >= 2 else (parts[0][0].upper() if parts else "?")
+
+            # Mini level dots — 8 core games
+            dots = ""
+            for gk in CORE_AAP_GAMES:
+                lvl = levels.get(gk, 0)
+                bg, _ = LEVEL_COLOURS_HUB.get(lvl, ("#E5E7EB", "#6E737B"))
+                from constants import find_measurement_game as _fmg
+                gdef = _fmg(gk)
+                title = f"{gdef['name']}: L{lvl}" if (gdef and lvl > 0) else (gdef["name"] if gdef else gk)
+                dots += (f'<div title="{esc(title)}" style="width:10px;height:10px;border-radius:50%;'
+                         f'background:{bg};flex-shrink:0;"></div>')
+
+            tiles += f"""
+            <a href="/coach/participants/{aid}"
+               style="display:flex;flex-direction:column;background:#fff;border:1px solid #E5E7EB;
+                      border-radius:12px;padding:14px;text-decoration:none;min-width:140px;flex:1;
+                      transition:box-shadow 0.15s,border-color 0.15s;"
+               onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,0.1)';this.style.borderColor='#F0A82E'"
+               onmouseout="this.style.boxShadow='';this.style.borderColor='#E5E7EB'">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                <div style="width:38px;height:38px;border-radius:50%;background:#2D323B;
+                            display:flex;align-items:center;justify-content:center;
+                            font-weight:800;font-size:13px;color:#F0A82E;flex-shrink:0;">{inits}</div>
+                <div style="min-width:0;">
+                  <div style="font-size:13px;font-weight:700;color:#2D323B;
+                              white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{aname}</div>
+                  {f'<div style="font-size:11px;color:#9CA3AF;">#{esc(an)}</div>' if an else ''}
+                </div>
+              </div>
+              <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+                <span style="font-size:10px;font-weight:700;background:{tier_colour};color:#fff;
+                             border-radius:999px;padding:1px 7px;">{esc(tier['label'])}</span>
+                <span style="font-size:11px;color:#6E737B;">{total_xp:,} XP</span>
+              </div>
+              <div style="display:flex;flex-wrap:wrap;gap:3px;">{dots}</div>
+            </a>"""
+
+        overview_html = f"""
+        <div class="card" style="margin-bottom:0;">
+          <div style="font-size:13px;font-weight:700;color:#2D323B;margin-bottom:12px;">
+            Group Overview
+            <span style="font-size:11px;font-weight:400;color:#6E737B;margin-left:6px;">
+              {len(athletes)} athlete{'s' if len(athletes) != 1 else ''} · dots = game levels (green=L1 → purple=L5)
+            </span>
+          </div>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;">{tiles}</div>
+        </div>"""
 
     # ── Completion matrix ─────────────────────────────────────────────────────
     matrix_html = ""
@@ -4421,6 +4497,8 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
 
     # ── Assemble sections ─────────────────────────────────────────────────────
     sections = []
+    if overview_html:
+        sections.append(("Athletes", overview_html))
     if matrix_html:
         sections.append(("Completion Overview", matrix_html))
     if entry_html:

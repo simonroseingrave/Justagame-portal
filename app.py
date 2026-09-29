@@ -183,6 +183,17 @@ def login_post(req):
         )
         conn.commit()
 
+        # Award welcome bonus XP to athletes on their first-ever login
+        if row["role"] == "participant":
+            try:
+                if not db._has_awarded_xp_type(conn, row["id"], "welcome_bonus"):
+                    from constants import XP_PARTICIPATION
+                    db.award_xp(conn, row["id"], "welcome_bonus",
+                                XP_PARTICIPATION.get("welcome_bonus", 100),
+                                notes="Welcome to Just a Game!")
+            except Exception:
+                pass
+
         resp = redirect("/coach" if row["role"] in STAFF_ROLES else "/dashboard")
         resp.set_cookie(SESSION_COOKIE, token, max_age=60 * 60 * 24 * 14)
         return resp
@@ -716,6 +727,20 @@ def group_hub_get(req):
                             (sess["id"], game_key)
                         ).fetchall()
                         existing[a["id"]] = {r["field_key"]: r["value"] for r in rows}
+
+        # Fetch XP + level data per athlete for the overview panel
+        athlete_xp_levels = {}
+        for a in athletes:
+            try:
+                xp = db.get_athlete_xp(conn, a["id"])
+                lvs = db.get_all_athlete_levels(conn, a["id"])
+                athlete_xp_levels[a["id"]] = {
+                    "total_xp": xp.get("total", 0),
+                    "tier": xp.get("tier"),
+                    "levels": lvs,
+                }
+            except Exception:
+                pass
     finally:
         conn.close()
 
@@ -729,6 +754,7 @@ def group_hub_get(req):
         game=game,
         existing=existing,
         completion_data={k: list(v) for k, v in completion_data.items()},
+        athlete_xp_levels=athlete_xp_levels,
     ))
 
 
