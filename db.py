@@ -393,7 +393,7 @@ def _migrate_level_tables(conn):
     idempotent on an already-migrated DB (column check skips the work).
     """
     # Check if level_achievements already has field_key
-    cols_la = {row[1] for row in conn.execute("PRAGMA table_info(level_achievements)").fetchall()}
+    cols_la = {row["name"] for row in conn.execute("PRAGMA table_info(level_achievements)").fetchall()}
     if "field_key" not in cols_la:
         conn.executescript("""
             BEGIN;
