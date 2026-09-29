@@ -3350,6 +3350,15 @@ def coach_participant_xp(req, participant_id):
     return Response(views.athlete_xp_page(dict(participant), xp_data, levels, coach=dict(coach)))
 
 
+@router.get("/coach/admin/hub")
+def admin_hub_get(req):
+    """System admin hub — all admin links in one place."""
+    coach = require_system_admin(req)
+    if not coach:
+        return redirect("/login")
+    return Response(views.system_admin_hub_page(coach))
+
+
 @router.get("/coach/admin/score-distribution")
 def score_distribution_get(req):
     """System admin: score percentile distribution report for all core games."""

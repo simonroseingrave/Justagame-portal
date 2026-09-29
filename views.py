@@ -145,6 +145,8 @@ def layout(title, body, user=None, flash=None, active_nav=None):
                 links.append(("/coach/coaches", "Practitioners", "coaches"))
                 links.append(("/coach/organisations", "Organisations", "organisations"))
             links.append(("/coach/reports", "Statistics & Reports", "progress"))
+            if user.get("role") == "system_admin":
+                links.append(("/coach/admin/hub", "⚙ Admin Hub", "admin_hub"))
             links.append(("/help", "Help", "help"))
         else:
             links = [("/dashboard", "My Dashboard", "dashboard"),
@@ -8390,3 +8392,103 @@ def score_distribution_page(coach, distributions):
     </div>"""
 
     return layout("Score Distribution", body, user=coach, active_nav="dashboard")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SYSTEM ADMIN HUB  (system_admin only)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def system_admin_hub_page(user):
+    def _section(title, icon, cards_html):
+        return f"""
+        <div style="margin-bottom:36px;">
+          <h3 style="font-size:14px;font-weight:700;text-transform:uppercase;
+                     letter-spacing:0.08em;color:#9CA3AF;margin:0 0 12px;">{icon} {esc(title)}</h3>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;">
+            {cards_html}
+          </div>
+        </div>"""
+
+    def _card(href, label, desc, colour="#2D323B", icon="→"):
+        return f"""
+        <a href="{href}" style="display:block;background:#fff;border:1px solid #E5E7EB;
+                   border-radius:12px;padding:16px 18px;text-decoration:none;
+                   transition:box-shadow 0.15s,transform 0.15s;"
+           onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,0.10)';this.style.transform='translateY(-2px)'"
+           onmouseout="this.style.boxShadow='';this.style.transform=''">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <span style="font-size:20px;">{icon}</span>
+            <span style="font-size:14px;font-weight:700;color:{colour};">{esc(label)}</span>
+          </div>
+          <div style="font-size:12px;color:#6E737B;line-height:1.5;">{esc(desc)}</div>
+        </a>"""
+
+    thresholds = _section("JAG Standard — Thresholds & Standards", "🎯",
+        _card("/coach/admin/score-distribution", "Score Distribution",
+              "Percentile breakdown per game — P25, mean, P75, P90, max. Use to decide threshold values.",
+              "#F0A82E", "📊") +
+        _card("/coach/admin/game-thresholds", "XP Thresholds",
+              "Set the official JAG Standard level thresholds (L1–L5) for all 8 core games.",
+              "#2D323B", "⚙")
+    )
+
+    data_tools = _section("Data — Import & Export", "📁",
+        _card("/coach/participants/import", "Import Athletes",
+              "Bulk-upload athletes from a CSV file. Auto-assigns athlete numbers.",
+              "#1EBE8B", "⬆") +
+        _card("/coach/participants/export.csv", "Export Athletes",
+              "Download all athletes with temporary passwords as a CSV.",
+              "#6E737B", "⬇") +
+        _card("/coach/scores/import", "Import Scores",
+              "Bulk-upload measurement session scores from a CSV file.",
+              "#1EBE8B", "⬆")
+    )
+
+    xp_tools = _section("XP Engine", "⚡",
+        _card("/coach/admin/game-thresholds#retroactive", "Retroactive XP Pass",
+              "Re-run the XP engine across all historical sessions. Use after changing thresholds.",
+              "#F97316", "🔄") +
+        _card("/coach/leaderboard", "Group Leaderboard",
+              "View XP rankings within any group. Toggle per-group leaderboard visibility in group settings.",
+              "#8B5CF6", "🏆")
+    )
+
+    people = _section("People & Organisations", "👥",
+        _card("/coach/coaches", "Practitioners",
+              "Manage practitioner accounts, roles, and school assignments.",
+              "#2D323B", "👤") +
+        _card("/coach/organisations", "Organisations",
+              "Manage partner organisations and their branding.",
+              "#2D323B", "🏢") +
+        _card("/coach", "Practitioner Dashboard",
+              "Main dashboard — groups, athletes, and session recording.",
+              "#6E737B", "🏠")
+    )
+
+    reports = _section("Reports & Statistics", "📈",
+        _card("/coach/reports", "Statistics & Reports",
+              "All-groups progress overview, completion tracker, and achievement summaries.",
+              "#2D323B", "📈") +
+        _card("/coach/admin/sessions", "Session Browser",
+              "Browse, merge, and manage all recorded measurement sessions.",
+              "#6E737B", "📋")
+    )
+
+    body = f"""
+    <div style="max-width:900px;padding-top:28px;">
+      <div style="margin-bottom:28px;">
+        <h2 style="font-size:24px;font-weight:800;color:#2D323B;margin:0 0 4px;">
+          System Admin Hub
+        </h2>
+        <p style="font-size:13px;color:#6E737B;margin:0;">
+          All admin tools in one place. These pages are only visible to system admins.
+        </p>
+      </div>
+      {thresholds}
+      {data_tools}
+      {xp_tools}
+      {people}
+      {reports}
+    </div>"""
+
+    return layout("Admin Hub", body, user=user, active_nav="admin_hub")
