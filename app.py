@@ -251,6 +251,16 @@ def dashboard(req):
         thresholds = {f"{r['game_key']}|{r['level']}": r["threshold_value"]
                       for r in thresholds_raw}
         att_count = db.count_attendance(conn, pid)
+        # Active measurement window for this athlete's group
+        active_window = None
+        already_submitted = False
+        try:
+            w = db.get_active_window_for_participant(conn, pid)
+            if w:
+                active_window = dict(w)
+                already_submitted = db.athlete_has_submitted(conn, w["id"], pid)
+        except Exception:
+            pass
         # Recent public resources for dashboard preview (up to 6)
         try:
             _fg, _ug = db.list_resources_by_folder(conn)
@@ -265,6 +275,8 @@ def dashboard(req):
             thresholds=thresholds,
             resources=resources,
             attendance_count=att_count,
+            active_window=active_window,
+            already_submitted=already_submitted,
         ))
     finally:
         conn.close()
@@ -752,6 +764,17 @@ def group_hub_get(req):
                 }
             except Exception:
                 pass
+        # Active window for selected group (if any)
+        active_window = None
+        recent_windows = []
+        if group_id:
+            try:
+                w = db.get_active_window_for_group(conn, group_id)
+                if w:
+                    active_window = dict(w)
+                recent_windows = [dict(r) for r in db.get_recent_windows_for_group(conn, group_id)]
+            except Exception:
+                pass
     finally:
         conn.close()
 
@@ -766,6 +789,8 @@ def group_hub_get(req):
         existing=existing,
         completion_data={k: list(v) for k, v in completion_data.items()},
         athlete_xp_levels=athlete_xp_levels,
+        active_window=active_window,
+        recent_windows=recent_windows,
     ))
 
 
@@ -3610,6 +3635,208 @@ class _FastRequestHandler(WSGIRequestHandler):
 
     def address_string(self):
         return self.client_address[0]
+
+
+# ── Measurement Windows ───────────────────────────────────────────────────────
+
+@router.post("/coach/groups/<int:group_id>/window/open")
+def window_open(req, group_id):
+    """Practitioner opens a measurement window for a group."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    session_label = req.form_get("session_label") or None
+    session_month = req.form_get("session_month") or None
+    conn = db.get_conn()
+    try:
+        # Only one open window per group at a time
+        existing = db.get_active_window_for_group(conn, group_id)
+        if existing:
+            return flash_redirect(
+                f"/coach/window/{existing['id']}",
+                "A measurement window is already open for this group.",
+            )
+        window_id = db.open_measurement_window(
+            conn, group_id, coach["id"],
+            session_label=session_label,
+            session_month=session_month,
+        )
+    finally:
+        conn.close()
+    return redirect(f"/coach/window/{window_id}")
+
+
+@router.get("/coach/window/<int:window_id>")
+def window_status(req, window_id):
+    """Practitioner live view: who has submitted vs. who is pending."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        window = db.get_measurement_window(conn, window_id)
+        if not window:
+            return flash_redirect("/coach/group-hub", "Window not found.")
+        window = dict(window)
+        group_id = window["group_id"]
+        # All athletes in the group
+        athletes = conn.execute(
+            "SELECT id, name, athlete_number FROM users "
+            "WHERE group_id = ? AND role = 'participant' ORDER BY name",
+            (group_id,),
+        ).fetchall()
+        athletes = [dict(a) for a in athletes]
+        submissions = db.get_window_submissions(conn, window_id)
+        submitted_ids = {s["participant_id"] for s in submissions}
+        group = conn.execute(
+            "SELECT * FROM participant_groups WHERE id = ?", (group_id,)
+        ).fetchone()
+    finally:
+        conn.close()
+    return Response(views.measurement_window_status_page(
+        coach, window, dict(group), athletes, [dict(s) for s in submissions], submitted_ids
+    ))
+
+
+@router.post("/coach/window/<int:window_id>/close")
+def window_close(req, window_id):
+    """Close window: commit all submissions and run XP for each."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        window = db.get_measurement_window(conn, window_id)
+        if not window:
+            return flash_redirect("/coach/group-hub", "Window not found.")
+        to_process = db.close_measurement_window(conn, window_id)
+        # Award XP for each newly committed session
+        xp_total = 0
+        for session_id, participant_id in to_process:
+            result = db.process_session_xp(conn, session_id, participant_id, is_formal=True)
+            xp_total += result.get("total_xp_awarded", 0)
+        group_id = window["group_id"]
+    finally:
+        conn.close()
+    msg = f"Window closed. {len(to_process)} session(s) committed, {xp_total} XP awarded."
+    return flash_redirect(f"/coach/window/{window_id}", msg)
+
+
+@router.post("/coach/window/<int:window_id>/reopen")
+def window_reopen(req, window_id):
+    """Re-open a closed window so absentees can submit."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        window = db.get_measurement_window(conn, window_id)
+        if not window:
+            return flash_redirect("/coach/group-hub", "Window not found.")
+        db.reopen_measurement_window(conn, window_id)
+    finally:
+        conn.close()
+    return flash_redirect(f"/coach/window/{window_id}", "Window re-opened. Athletes can submit again.")
+
+
+@router.get("/athlete/window/<int:window_id>")
+def athlete_window_get(req, window_id):
+    """Athlete self-score entry form for an open measurement window."""
+    from constants import active_measurement_games, games_for_max_level
+    user = require_role(req, "participant")
+    if not user:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        window = db.get_measurement_window(conn, window_id)
+        if not window or window["status"] != "open":
+            return flash_redirect("/dashboard", "This measurement window is not open.")
+        # Confirm this athlete is in the right group
+        if user.get("group_id") != window["group_id"]:
+            return flash_redirect("/dashboard", "This window is not for your group.")
+        already = db.athlete_has_submitted(conn, window_id, user["id"])
+        group = conn.execute(
+            "SELECT * FROM participant_groups WHERE id = ?", (window["group_id"],)
+        ).fetchone()
+        max_level = group["max_level"] if group and "max_level" in group.keys() else None
+        games = games_for_max_level(max_level) if max_level else active_measurement_games()
+    finally:
+        conn.close()
+    return Response(views.athlete_window_submit_page(
+        user, dict(window), games, already_submitted=already
+    ))
+
+
+@router.post("/athlete/window/<int:window_id>/submit")
+def athlete_window_post(req, window_id):
+    """Save athlete's self-scored session from a measurement window."""
+    import json
+    from constants import active_measurement_games, games_for_max_level, find_measurement_game
+    user = require_role(req, "participant")
+    if not user:
+        return Response('{"error":"unauthenticated"}', status=401, content_type="application/json")
+    conn = db.get_conn()
+    try:
+        window = db.get_measurement_window(conn, window_id)
+        if not window or window["status"] != "open":
+            return Response('{"error":"window_closed"}', status=400, content_type="application/json")
+        if user.get("group_id") != window["group_id"]:
+            return Response('{"error":"wrong_group"}', status=403, content_type="application/json")
+        if db.athlete_has_submitted(conn, window_id, user["id"]):
+            return Response('{"error":"already_submitted"}', status=409, content_type="application/json")
+
+        # Parse submitted scores: expects JSON body {"game_key.field_key": value, ...}
+        try:
+            body = req.environ.get("wsgi.input").read(int(req.environ.get("CONTENT_LENGTH", 0) or 0))
+            data = json.loads(body)
+        except Exception:
+            return Response('{"error":"bad_json"}', status=400, content_type="application/json")
+
+        date = window["session_month"] + "-01" if window.get("session_month") else db.today()
+        session_id = db.create_bare_session(
+            conn, user["id"], date, user["id"],
+            group_id=user.get("group_id"),
+            session_label=window.get("session_label"),
+            session_month=window.get("session_month"),
+        )
+
+        # Save results and compute derived fields
+        saved_games = set()
+        for composite_key, raw_value in data.items():
+            if "." not in composite_key:
+                continue
+            game_key, field_key = composite_key.split(".", 1)
+            try:
+                value = float(raw_value)
+            except (ValueError, TypeError):
+                continue
+            db.upsert_measurement_result(conn, session_id, game_key, field_key, value)
+            saved_games.add(game_key)
+
+        # Compute derived fields for each game
+        for game_key in saved_games:
+            game = find_measurement_game(game_key)
+            if not game:
+                continue
+            rows = conn.execute(
+                "SELECT field_key, value FROM measurement_results WHERE session_id = ? AND game_key = ?",
+                (session_id, game_key),
+            ).fetchall()
+            current = {r["field_key"]: r["value"] for r in rows}
+            for comp in game.get("computed", []):
+                inputs = [current.get(k) for k in comp["of"]]
+                if all(v is not None for v in inputs):
+                    result = round(
+                        sum(inputs) if comp.get("formula") == "sum_of" else sum(inputs) / len(inputs), 2
+                    )
+                    db.upsert_measurement_result(conn, session_id, game_key, comp["key"], result)
+
+        # Register the submission (XP awarded later, when window is closed)
+        db.create_window_submission(conn, window_id, user["id"], session_id)
+
+    finally:
+        conn.close()
+    return Response('{"ok":true}', content_type="application/json")
 
 
 def main():

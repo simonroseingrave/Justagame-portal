@@ -1075,7 +1075,8 @@ def _calc_improvement_pct(measurement_sessions):
 def participant_dashboard(user, measurement_sessions,
                            xp_data=None, levels=None,
                            pending_self_directed=None, thresholds=None,
-                           resources=None, attendance_count=None):
+                           resources=None, attendance_count=None,
+                           active_window=None, already_submitted=False):
     """Full athlete dashboard: rank hero, XP progress, game level grid, guided steps, nudge."""
     from constants import CORE_AAP_GAMES, XP_GAME_CONFIG, find_measurement_game
 
@@ -1104,6 +1105,42 @@ def participant_dashboard(user, measurement_sessions,
                          f'{xp_to_next:,} XP to {esc(next_tier["label"])}</span>')
     else:
         xp_next_label = '<span style="font-size:12px;color:#1EBE8B;font-weight:700;">Max rank reached!</span>'
+
+    # ── Active measurement window banner ──────────────────────────────────────
+    window_banner = ""
+    if active_window:
+        wid = active_window["id"]
+        label_txt = esc(active_window.get("session_label") or "")
+        label_part = f' — <strong>{label_txt}</strong>' if label_txt else ''
+        if already_submitted:
+            window_banner = f"""
+    <div style="background:#065F46;border-radius:14px;padding:16px 20px;margin-bottom:20px;
+                display:flex;align-items:center;gap:14px;">
+      <span style="font-size:24px;">✅</span>
+      <div>
+        <div style="font-weight:700;color:#fff;font-size:15px;">Scores submitted{label_part}</div>
+        <div style="color:#A7F3D0;font-size:13px;margin-top:2px;">
+          Your scores have been recorded. XP will be awarded when your practitioner closes the session.
+        </div>
+      </div>
+    </div>"""
+        else:
+            window_banner = f"""
+    <div style="background:#92400E;border-radius:14px;padding:16px 20px;margin-bottom:20px;
+                display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+      <span style="font-size:24px;">📋</span>
+      <div style="flex:1;min-width:180px;">
+        <div style="font-weight:700;color:#fff;font-size:15px;">Measurement session open{label_part}</div>
+        <div style="color:#FDE68A;font-size:13px;margin-top:2px;">
+          Your practitioner has opened a testing session. Enter your scores now.
+        </div>
+      </div>
+      <a href="/athlete/window/{wid}"
+         style="background:#F0A82E;color:#2D323B;font-weight:700;font-size:14px;
+                border-radius:10px;padding:10px 20px;text-decoration:none;white-space:nowrap;">
+        Enter My Scores →
+      </a>
+    </div>"""
 
     # ── Hero card ─────────────────────────────────────────────────────────────
     sport_pill = (f'<span style="font-size:12px;font-weight:600;'
@@ -1297,6 +1334,7 @@ def participant_dashboard(user, measurement_sessions,
 
     body = f"""
     <div style="max-width:860px;">
+      {window_banner}
       {hero}
       {nudge_html}
       {stats_html}
@@ -4100,7 +4138,7 @@ def session_sheet_page(coach, groups, session_types):
 def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
                    selected_month=None, selected_game_key=None,
                    athletes=None, game=None, existing=None, completion_data=None,
-                   athlete_xp_levels=None):
+                   athlete_xp_levels=None, active_window=None, recent_windows=None):
     """Single page combining:
       1. Selector form (group + phase + month + optional game)
       2. Completion matrix (shown when group+phase selected)
@@ -4607,6 +4645,107 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
     if not content_html:
         content_html = '<p class="muted" style="margin-top:24px;">Select a group and phase above to get started.</p>'
 
+    # ── Measurement Window panel (shown when a group is selected) ─────────────
+    window_panel = ""
+    if selected_group_id:
+        recent_windows = recent_windows or []
+        if active_window:
+            wid = active_window["id"]
+            label_txt = esc(active_window.get("session_label") or "")
+            label_part = f' — <strong>{label_txt}</strong>' if label_txt else ''
+            opened_at = esc(active_window.get("opened_at", "")[:16])
+            window_panel = f"""
+    <div style="background:#1EBE8B1A;border:1.5px solid #1EBE8B;border-radius:14px;
+                padding:18px 20px;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div>
+          <div style="font-weight:700;color:#065F46;font-size:15px;">
+            🟢 Measurement Window Open{label_part}
+          </div>
+          <div style="color:#047857;font-size:13px;margin-top:3px;">
+            Opened {opened_at} — athletes can self-score from their dashboard.
+          </div>
+        </div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <a href="/coach/window/{wid}"
+             style="background:#2D323B;color:#fff;font-weight:600;font-size:13px;
+                    border-radius:8px;padding:8px 16px;text-decoration:none;">
+            View Status
+          </a>
+          <form method="post" action="/coach/window/{wid}/close" style="margin:0;">
+            <button type="submit"
+                    onclick="return confirm('Close window? This commits all submitted scores and awards XP. Athletes who haven\\'t submitted will be excluded (you can re-open later).')"
+                    style="background:#F97316;color:#fff;font-weight:600;font-size:13px;
+                           border:none;border-radius:8px;padding:8px 16px;cursor:pointer;">
+              Close &amp; Commit
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>"""
+        else:
+            from constants import SESSION_TYPES
+            label_options = "".join(
+                f'<option value="{esc(t["key"])}">{esc(t["label"])}</option>'
+                for t in SESSION_TYPES
+            )
+            recent_html = ""
+            if recent_windows:
+                rows = "".join(
+                    f'<tr><td>{esc(w.get("session_label") or "—")}</td>'
+                    f'<td>{esc((w.get("opened_at") or "")[:10])}</td>'
+                    f'<td>{esc(w.get("status", ""))}</td>'
+                    f'<td>{w.get("submission_count", 0)}</td>'
+                    f'<td><a href="/coach/window/{w["id"]}" style="color:#2D323B;font-weight:600;">View</a></td></tr>'
+                    for w in recent_windows
+                )
+                recent_html = f"""
+        <div style="margin-top:16px;border-top:1px solid #E5E7EB;padding-top:12px;">
+          <div style="font-size:12px;font-weight:700;color:#6E737B;text-transform:uppercase;
+                      letter-spacing:0.06em;margin-bottom:8px;">Recent Windows</div>
+          <table style="width:100%;font-size:13px;border-collapse:collapse;">
+            <thead><tr style="color:#6E737B;">
+              <th style="text-align:left;padding:4px 8px;">Phase</th>
+              <th style="text-align:left;padding:4px 8px;">Opened</th>
+              <th style="text-align:left;padding:4px 8px;">Status</th>
+              <th style="text-align:left;padding:4px 8px;">Submitted</th>
+              <th style="padding:4px 8px;"></th>
+            </tr></thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </div>"""
+            window_panel = f"""
+    <div style="background:#F9FAFB;border:1.5px solid #E5E7EB;border-radius:14px;
+                padding:18px 20px;margin-bottom:20px;">
+      <div style="font-weight:700;color:#2D323B;font-size:15px;margin-bottom:12px;">
+        📋 Open a Measurement Window
+      </div>
+      <p style="font-size:13px;color:#6E737B;margin:0 0 14px;">
+        Open a window so athletes can self-score from their dashboard.
+        XP is awarded when you close the window.
+      </p>
+      <form method="post" action="/coach/groups/{selected_group_id}/window/open"
+            style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
+        <div>
+          <label style="font-size:12px;font-weight:600;color:#6E737B;display:block;margin-bottom:4px;">
+            Phase label (optional)
+          </label>
+          <select name="session_label"
+                  style="border:1px solid #DDE0E3;border-radius:8px;padding:8px 10px;
+                         font-size:13px;color:#2D323B;background:#fff;">
+            <option value="">— select —</option>
+            {label_options}
+          </select>
+        </div>
+        <button type="submit"
+                style="background:#2D323B;color:#F0A82E;font-weight:700;font-size:13px;
+                       border:none;border-radius:8px;padding:9px 20px;cursor:pointer;">
+          Open Window
+        </button>
+      </form>
+      {recent_html}
+    </div>"""
+
     body = f"""
     <div class="page-head">
       <div>
@@ -4615,6 +4754,7 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
       </div>
     </div>
     <div class="card form-card" style="margin-bottom:20px;">{selector_form}</div>
+    {window_panel}
     {content_html}
     <style>
       table td, table th {{ padding:8px 10px; }}
@@ -8552,3 +8692,302 @@ def system_admin_hub_page(user):
     </div>"""
 
     return layout("Admin Hub", body, user=user, active_nav="admin_hub")
+
+
+# ── Measurement Window views ───────────────────────────────────────────────────
+
+def measurement_window_status_page(coach, window, group, athletes, submissions, submitted_ids):
+    """Practitioner live status view for an open/closed measurement window."""
+    wid     = window["id"]
+    status  = window.get("status", "open")
+    gname   = esc(group.get("name", "Group"))
+    label   = esc(window.get("session_label") or "—")
+    opened  = esc((window.get("opened_at") or "")[:16])
+    closed  = esc((window.get("closed_at") or "")[:16])
+    opened_by = esc(window.get("opened_by_name", ""))
+
+    is_open  = status == "open"
+    status_chip = (
+        '<span style="background:#1EBE8B;color:#fff;border-radius:999px;'
+        'padding:3px 12px;font-size:12px;font-weight:700;">OPEN</span>'
+        if is_open else
+        '<span style="background:#6E737B;color:#fff;border-radius:999px;'
+        'padding:3px 12px;font-size:12px;font-weight:700;">CLOSED</span>'
+    )
+
+    submitted_count = len(submitted_ids)
+    total_count     = len(athletes)
+    missing_count   = total_count - submitted_count
+
+    # Athlete rows
+    rows_html = ""
+    for a in athletes:
+        aid     = a["id"]
+        aname   = esc(a["name"])
+        anum    = esc(a.get("athlete_number") or "")
+        done    = aid in submitted_ids
+        dot     = ('<span style="color:#1EBE8B;font-size:18px;font-weight:700;">✓</span>'
+                   if done else
+                   '<span style="color:#DDE0E3;font-size:18px;">○</span>')
+        status_txt = ('<span style="color:#1EBE8B;font-size:13px;font-weight:600;">Submitted</span>'
+                      if done else
+                      '<span style="color:#9CA3AF;font-size:13px;">Pending</span>')
+        rows_html += f"""
+        <tr>
+          <td style="padding:10px 12px;">{dot}</td>
+          <td style="padding:10px 12px;font-weight:600;color:#2D323B;">{aname}</td>
+          <td style="padding:10px 12px;color:#6E737B;">{anum}</td>
+          <td style="padding:10px 12px;">{status_txt}</td>
+        </tr>"""
+
+    # Action buttons
+    if is_open:
+        warning_js = ""
+        if missing_count > 0:
+            warning_js = f"return confirm('{missing_count} athlete(s) haven\\'t submitted yet. Close anyway and skip them? (You can re-open later for missing entries.)')"
+        else:
+            warning_js = "return confirm('All athletes have submitted. Close window and award XP?')"
+        actions = f"""
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">
+          <form method="post" action="/coach/window/{wid}/close" style="margin:0;">
+            <button type="submit" onclick="{warning_js}"
+                    style="background:#F97316;color:#fff;font-weight:700;font-size:14px;
+                           border:none;border-radius:10px;padding:11px 22px;cursor:pointer;">
+              Close &amp; Award XP
+            </button>
+          </form>
+          <a href="/coach/group-hub?group_id={group['id']}"
+             style="background:#F4F5F7;color:#2D323B;font-weight:600;font-size:14px;
+                    border-radius:10px;padding:11px 22px;text-decoration:none;">
+            ← Back to Group Hub
+          </a>
+        </div>"""
+    else:
+        actions = f"""
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">
+          <form method="post" action="/coach/window/{wid}/reopen" style="margin:0;">
+            <button type="submit"
+                    style="background:#2D323B;color:#F0A82E;font-weight:700;font-size:14px;
+                           border:none;border-radius:10px;padding:11px 22px;cursor:pointer;">
+              Re-open for Missing Entries
+            </button>
+          </form>
+          <a href="/coach/reports/completion?group_id={group['id']}"
+             style="background:#1EBE8B;color:#fff;font-weight:600;font-size:14px;
+                    border-radius:10px;padding:11px 22px;text-decoration:none;">
+            📊 View Completion Report
+          </a>
+          <a href="/coach/group-hub?group_id={group['id']}"
+             style="background:#F4F5F7;color:#2D323B;font-weight:600;font-size:14px;
+                    border-radius:10px;padding:11px 22px;text-decoration:none;">
+            ← Back to Group Hub
+          </a>
+        </div>"""
+
+    missing_note = ""
+    if is_open and missing_count > 0:
+        missing_note = f"""
+    <div style="background:#FEF3C7;border:1px solid #F0A82E;border-radius:10px;
+                padding:12px 16px;margin-bottom:16px;font-size:13px;color:#92400E;">
+      <strong>{missing_count} athlete{'' if missing_count == 1 else 's'} yet to submit.</strong>
+      They will be excluded if you close now — you can re-open later to capture their scores.
+    </div>"""
+
+    body = f"""
+    <div style="max-width:760px;">
+      <div class="page-head" style="margin-bottom:16px;">
+        <div>
+          <h1 style="margin:0 0 4px;">Measurement Window — {gname}</h1>
+          <p class="muted" style="margin:0;">
+            Phase: <strong>{label}</strong> &nbsp;·&nbsp;
+            Opened: {opened} by {opened_by} &nbsp;·&nbsp;
+            {status_chip}
+            {f'&nbsp;·&nbsp; Closed: {closed}' if closed else ''}
+          </p>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-bottom:20px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:120px;background:#1EBE8B1A;border:1px solid #1EBE8B;
+                    border-radius:12px;padding:14px 16px;text-align:center;">
+          <div style="font-size:28px;font-weight:800;color:#065F46;">{submitted_count}</div>
+          <div style="font-size:12px;color:#047857;font-weight:600;margin-top:2px;">Submitted</div>
+        </div>
+        <div style="flex:1;min-width:120px;background:#FEF3C71A;border:1px solid #F0A82E;
+                    border-radius:12px;padding:14px 16px;text-align:center;">
+          <div style="font-size:28px;font-weight:800;color:#92400E;">{missing_count}</div>
+          <div style="font-size:12px;color:#B45309;font-weight:600;margin-top:2px;">Pending</div>
+        </div>
+        <div style="flex:1;min-width:120px;background:#F4F5F7;
+                    border-radius:12px;padding:14px 16px;text-align:center;">
+          <div style="font-size:28px;font-weight:800;color:#2D323B;">{total_count}</div>
+          <div style="font-size:12px;color:#6E737B;font-weight:600;margin-top:2px;">Total Athletes</div>
+        </div>
+      </div>
+
+      {missing_note}
+
+      <div class="card" style="padding:0;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:#2D323B;color:#fff;font-size:12px;text-transform:uppercase;letter-spacing:0.06em;">
+              <th style="padding:10px 12px;text-align:left;width:36px;"></th>
+              <th style="padding:10px 12px;text-align:left;">Athlete</th>
+              <th style="padding:10px 12px;text-align:left;">#</th>
+              <th style="padding:10px 12px;text-align:left;">Status</th>
+            </tr>
+          </thead>
+          <tbody>{rows_html}</tbody>
+        </table>
+      </div>
+
+      {actions}
+    </div>"""
+
+    return layout(f"Window — {gname}", body, user=coach, active_nav="group_hub")
+
+
+def athlete_window_submit_page(user, window, games, already_submitted=False):
+    """Athlete self-score entry form for an open measurement window."""
+    from constants import GAME_DISPLAY_NAMES
+    wid      = window["id"]
+    label    = esc(window.get("session_label") or "")
+    label_h  = f' — <strong>{label}</strong>' if label else ''
+    name     = esc(user.get("name", "Athlete").split()[0])
+
+    if already_submitted:
+        body = f"""
+        <div style="max-width:640px;margin:40px auto;text-align:center;">
+          <div style="font-size:48px;margin-bottom:16px;">✅</div>
+          <h1 style="color:#2D323B;">Scores already submitted{label_h}</h1>
+          <p style="color:#6E737B;font-size:15px;">
+            Your scores have been recorded. XP will be awarded when your practitioner closes the session.
+          </p>
+          <a href="/dashboard"
+             style="display:inline-block;margin-top:20px;background:#2D323B;color:#F0A82E;
+                    font-weight:700;border-radius:10px;padding:12px 28px;text-decoration:none;">
+            Back to Dashboard
+          </a>
+        </div>"""
+        return layout("Scores Submitted", body, user=user, active_nav="dashboard")
+
+    # Build game entry sections
+    game_sections = ""
+    for section in games:
+        section_label = esc(section.get("section", ""))
+        fields_html = ""
+        for g in section.get("games", []):
+            gkey  = g["key"]
+            gname = esc(GAME_DISPLAY_NAMES.get(gkey, gkey.replace("_", " ").title()))
+            visible_fields = [f for f in g.get("fields", []) if not f.get("hidden") and not f.get("computed")]
+            if not visible_fields:
+                continue
+            field_inputs = ""
+            for f in visible_fields:
+                fkey   = f["key"]
+                flabel = esc(f.get("label", fkey))
+                funit  = esc(f.get("unit", ""))
+                fmin   = f.get("min", 0)
+                fmax   = f.get("max", "")
+                fstep  = f.get("step", "any")
+                field_inputs += f"""
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+                <label style="flex:1;font-size:13px;color:#6E737B;">{flabel}
+                  {f'<span style="color:#9CA3AF;font-size:11px;"> ({funit})</span>' if funit else ''}
+                </label>
+                <input type="number" name="{gkey}.{fkey}"
+                       min="{fmin}" {'max="'+str(fmax)+'"' if fmax else ''} step="{fstep}"
+                       placeholder="—"
+                       style="width:90px;border:1.5px solid #DDE0E3;border-radius:8px;
+                              padding:7px 10px;font-size:15px;text-align:center;
+                              color:#2D323B;font-weight:600;">
+              </div>"""
+            fields_html += f"""
+          <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:12px;
+                      padding:14px 16px;margin-bottom:12px;">
+            <div style="font-weight:700;color:#2D323B;font-size:14px;margin-bottom:10px;">
+              {gname}
+            </div>
+            {field_inputs}
+          </div>"""
+        if fields_html:
+            game_sections += f"""
+        <div style="margin-bottom:24px;">
+          <div style="font-size:11px;font-weight:700;color:#9CA3AF;text-transform:uppercase;
+                      letter-spacing:0.08em;margin-bottom:10px;">{section_label}</div>
+          {fields_html}
+        </div>"""
+
+    body = f"""
+    <div style="max-width:640px;">
+      <div style="background:#2D323B;border-radius:16px;padding:20px 24px;margin-bottom:24px;">
+        <h1 style="margin:0 0 4px;color:#fff;font-size:22px;">
+          Hi {name} — enter your scores{label_h}
+        </h1>
+        <p style="margin:0;color:#9CA3AF;font-size:13px;">
+          Enter the score for each game you completed today. You only submit once — take your time.
+        </p>
+      </div>
+
+      <form id="windowForm">
+        {game_sections}
+        <div style="position:sticky;bottom:0;background:#fff;padding:16px 0;
+                    border-top:1px solid #E5E7EB;margin-top:8px;">
+          <button type="submit" id="submitBtn"
+                  style="width:100%;background:#1EBE8B;color:#fff;font-weight:700;font-size:16px;
+                         border:none;border-radius:12px;padding:14px;cursor:pointer;">
+            Submit My Scores
+          </button>
+          <p id="submitMsg" style="text-align:center;font-size:13px;color:#6E737B;
+                                   margin:8px 0 0;display:none;"></p>
+        </div>
+      </form>
+    </div>
+
+    <script>
+    document.getElementById('windowForm').addEventListener('submit', async function(e) {{
+      e.preventDefault();
+      const btn = document.getElementById('submitBtn');
+      const msg = document.getElementById('submitMsg');
+      btn.disabled = true;
+      btn.textContent = 'Submitting…';
+      const data = {{}};
+      new FormData(this).forEach((v, k) => {{ if (v !== '') data[k] = parseFloat(v); }});
+      if (Object.keys(data).length === 0) {{
+        msg.textContent = 'Please enter at least one score before submitting.';
+        msg.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Submit My Scores';
+        return;
+      }}
+      try {{
+        const r = await fetch('/athlete/window/{wid}/submit', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify(data),
+        }});
+        const j = await r.json();
+        if (j.ok) {{
+          btn.style.background = '#065F46';
+          btn.textContent = '✓ Scores Submitted!';
+          msg.textContent = 'Your scores have been saved. XP will be awarded when the session closes.';
+          msg.style.display = 'block';
+          setTimeout(() => window.location.href = '/dashboard', 2000);
+        }} else if (j.error === 'already_submitted') {{
+          msg.textContent = 'You have already submitted scores for this session.';
+          msg.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'Submit My Scores';
+        }} else {{
+          throw new Error(j.error || 'Server error');
+        }}
+      }} catch(err) {{
+        msg.textContent = 'Something went wrong — please try again. (' + err.message + ')';
+        msg.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Submit My Scores';
+      }}
+    }});
+    </script>"""
+
+    return layout(f"Score Entry{' — ' + label if label else ''}", body, user=user, active_nav="dashboard")

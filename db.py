@@ -212,6 +212,28 @@ CREATE TABLE IF NOT EXISTS athlete_personal_bests (
     updated_at TEXT NOT NULL,
     UNIQUE (participant_id, game_key, field_key)
 );
+
+CREATE TABLE IF NOT EXISTS measurement_windows (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id INTEGER NOT NULL REFERENCES participant_groups(id),
+    opened_by INTEGER NOT NULL REFERENCES users(id),
+    opened_at TEXT NOT NULL,
+    closed_at TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    session_label TEXT,
+    session_month TEXT,
+    notes TEXT
+);
+
+CREATE TABLE IF NOT EXISTS window_submissions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    window_id INTEGER NOT NULL REFERENCES measurement_windows(id),
+    participant_id INTEGER NOT NULL REFERENCES users(id),
+    session_id INTEGER REFERENCES measurement_sessions(id),
+    submitted_at TEXT NOT NULL,
+    committed INTEGER NOT NULL DEFAULT 0,
+    UNIQUE (window_id, participant_id)
+);
 """
 
 
@@ -1999,6 +2021,128 @@ def cleanup_demo_data():
         print("cleanup_demo_data: complete", flush=True)
     finally:
         conn.close()
+
+
+# ── Measurement Windows ───────────────────────────────────────────────────────
+
+def open_measurement_window(conn, group_id, opened_by, session_label=None, session_month=None):
+    """Open a new measurement window for a group. Returns the new window id."""
+    now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    cur = conn.execute(
+        "INSERT INTO measurement_windows (group_id, opened_by, opened_at, status, session_label, session_month) "
+        "VALUES (?, ?, ?, 'open', ?, ?)",
+        (group_id, opened_by, now, session_label, session_month),
+    )
+    conn.commit()
+    return cur.lastrowid
+
+
+def get_measurement_window(conn, window_id):
+    """Return a single window row or None."""
+    return conn.execute(
+        "SELECT mw.*, pg.name AS group_name, u.name AS opened_by_name "
+        "FROM measurement_windows mw "
+        "JOIN participant_groups pg ON pg.id = mw.group_id "
+        "JOIN users u ON u.id = mw.opened_by "
+        "WHERE mw.id = ?",
+        (window_id,),
+    ).fetchone()
+
+
+def get_active_window_for_group(conn, group_id):
+    """Return the open window for a group, or None."""
+    return conn.execute(
+        "SELECT * FROM measurement_windows WHERE group_id = ? AND status = 'open' ORDER BY opened_at DESC LIMIT 1",
+        (group_id,),
+    ).fetchone()
+
+
+def get_active_window_for_participant(conn, participant_id):
+    """Return the open window for the participant's group, or None."""
+    row = conn.execute(
+        "SELECT group_id FROM users WHERE id = ?", (participant_id,)
+    ).fetchone()
+    if not row or not row["group_id"]:
+        return None
+    return get_active_window_for_group(conn, row["group_id"])
+
+
+def get_window_submissions(conn, window_id):
+    """Return all submissions for a window, with participant info."""
+    return conn.execute(
+        "SELECT ws.*, u.name AS participant_name, u.athlete_number "
+        "FROM window_submissions ws "
+        "JOIN users u ON u.id = ws.participant_id "
+        "WHERE ws.window_id = ? "
+        "ORDER BY ws.submitted_at",
+        (window_id,),
+    ).fetchall()
+
+
+def athlete_has_submitted(conn, window_id, participant_id):
+    """True if this athlete already has a submission for the window."""
+    return conn.execute(
+        "SELECT id FROM window_submissions WHERE window_id = ? AND participant_id = ?",
+        (window_id, participant_id),
+    ).fetchone() is not None
+
+
+def create_window_submission(conn, window_id, participant_id, session_id):
+    """Record an athlete's submission. Raises on duplicate (UNIQUE constraint)."""
+    now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    conn.execute(
+        "INSERT INTO window_submissions (window_id, participant_id, session_id, submitted_at, committed) "
+        "VALUES (?, ?, ?, ?, 0)",
+        (window_id, participant_id, session_id, now),
+    )
+    conn.commit()
+
+
+def close_measurement_window(conn, window_id):
+    """Close the window. Returns list of (session_id, participant_id) for uncommitted
+    submissions so the caller can run XP processing on each."""
+    now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+    # Fetch uncommitted submissions before marking them committed
+    rows = conn.execute(
+        "SELECT session_id, participant_id FROM window_submissions "
+        "WHERE window_id = ? AND committed = 0 AND session_id IS NOT NULL",
+        (window_id,),
+    ).fetchall()
+    # Mark all submissions as committed and close the window
+    conn.execute(
+        "UPDATE window_submissions SET committed = 1 WHERE window_id = ? AND committed = 0",
+        (window_id,),
+    )
+    conn.execute(
+        "UPDATE measurement_windows SET status = 'closed', closed_at = ? WHERE id = ?",
+        (now, window_id),
+    )
+    conn.commit()
+    return [(r["session_id"], r["participant_id"]) for r in rows]
+
+
+def reopen_measurement_window(conn, window_id):
+    """Reopen a closed window so absentees can submit. Already-committed
+    submissions are not touched."""
+    conn.execute(
+        "UPDATE measurement_windows SET status = 'open', closed_at = NULL WHERE id = ?",
+        (window_id,),
+    )
+    conn.commit()
+
+
+def get_recent_windows_for_group(conn, group_id, limit=5):
+    """Return recent windows for a group (open first, then most recently closed)."""
+    return conn.execute(
+        "SELECT mw.*, u.name AS opened_by_name, "
+        "(SELECT COUNT(*) FROM window_submissions ws WHERE ws.window_id = mw.id) AS submission_count "
+        "FROM measurement_windows mw "
+        "JOIN users u ON u.id = mw.opened_by "
+        "WHERE mw.group_id = ? "
+        "ORDER BY CASE WHEN mw.status = 'open' THEN 0 ELSE 1 END, mw.opened_at DESC "
+        "LIMIT ?",
+        (group_id, limit),
+    ).fetchall()
 
 
 def maybe_reset_coach_password():
