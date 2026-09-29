@@ -220,8 +220,64 @@ def dashboard(req):
         return redirect("/login")
     conn = db.get_conn()
     try:
-        measurement_sessions = db.measurement_sessions_for(conn, user["id"])
-        return Response(views.participant_dashboard(user, measurement_sessions))
+        pid = user["id"]
+        measurement_sessions = db.measurement_sessions_for(conn, pid)
+        xp_data = db.get_athlete_xp(conn, pid)
+        levels = db.get_all_athlete_levels(conn, pid)
+        pending_sd = db.get_pending_self_directed_events(conn, pid)
+        thresholds_raw = db.get_all_thresholds(conn)
+        thresholds = {f"{r['game_key']}|{r['level']}": r["threshold_value"]
+                      for r in thresholds_raw}
+        att_count = db.count_attendance(conn, pid)
+        # Recent public resources for dashboard preview (up to 6)
+        try:
+            _fg, _ug = db.list_resources_by_folder(conn)
+            _flat = [r for _f, rs in _fg for r in rs] + list(_ug)
+            resources = [dict(r) for r in _flat[:6]]
+        except Exception:
+            resources = []
+        return Response(views.participant_dashboard(
+            user, measurement_sessions,
+            xp_data=xp_data, levels=levels,
+            pending_self_directed=pending_sd,
+            thresholds=thresholds,
+            resources=resources,
+            attendance_count=att_count,
+        ))
+    finally:
+        conn.close()
+
+
+@router.get("/athlete/resources")
+def athlete_resources(req):
+    user = require_role(req, "participant")
+    if not user:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        all_tags = db.list_tags(conn)
+        tag_id_param = req.params.get("tag")
+        selected_tag_id = int(tag_id_param) if tag_id_param and tag_id_param.isdigit() else None
+        _fg2, _ug2 = db.list_resources_by_folder(conn)
+        all_resources = [r for _f, rs in _fg2 for r in rs] + list(_ug2)
+        # Build tags per resource
+        all_ids = [r["id"] for r in all_resources]
+        tags_by_res = db.get_tags_for_resources(conn, all_ids) if all_ids else {}
+        # Group resources by tag
+        resources_by_tag = {}  # tag_id (or None) -> list of resource dicts
+        for r in all_resources:
+            r_dict = dict(r)
+            r_tags = tags_by_res.get(r["id"], [])
+            r_dict["tag_names"] = [t["name"] for t in r_tags]
+            tag_ids_for_r = [t["id"] for t in r_tags]
+            if not tag_ids_for_r:
+                resources_by_tag.setdefault(None, []).append(r_dict)
+            else:
+                for tid in tag_ids_for_r:
+                    resources_by_tag.setdefault(tid, []).append(r_dict)
+        return Response(views.athlete_resources_page(
+            user, resources_by_tag, all_tags, selected_tag_id=selected_tag_id
+        ))
     finally:
         conn.close()
 

@@ -146,6 +146,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             links = [("/dashboard", "My Dashboard", "dashboard"),
                      ("/athlete/self-directed", "Self-Directed", "self_directed"),
                      ("/athlete/xp", "My XP", "xp"),
+                     ("/athlete/resources", "Resources", "resources"),
                      ("/help", "Help", "help")]
         nav_items = "".join(
             f'<a class="nav-link{" active" if active_nav == key else ""}" href="{href}">{label}</a>'
@@ -959,79 +960,326 @@ def _calc_improvement_pct(measurement_sessions):
     return sum(improvements) / len(improvements)
 
 
-def participant_dashboard(user, measurement_sessions):
-    from constants import get_improvement_level
+def participant_dashboard(user, measurement_sessions,
+                           xp_data=None, levels=None,
+                           pending_self_directed=None, thresholds=None,
+                           resources=None, attendance_count=None):
+    """Full athlete dashboard: rank hero, XP progress, game level grid, guided steps, nudge."""
+    from constants import CORE_AAP_GAMES, XP_GAME_CONFIG, find_measurement_game
+
     first_name = esc(user['name'].split(' ')[0])
-    # Avatar
     name = user['name']
     parts = name.strip().split()
     inits = (parts[0][0] + parts[-1][0]).upper() if len(parts) >= 2 else name[0].upper()
     sport = esc(user.get('sport') or '')
     programme = esc(user.get('programme') or '')
     session_count = len(measurement_sessions)
-    # Improvement-based level
-    imp_pct = _calc_improvement_pct(measurement_sessions)
-    lvl = get_improvement_level(imp_pct)
-    bar_pct = int(lvl['progress'] * 100)
-    if lvl['baseline_only']:
-        next_txt = ('<span style="font-size:12px;color:var(--jag-muted);">'
-                    'Baseline recorded &mdash; your progress unlocks after your next session</span>')
-        bar_marker = ('<div style="width:10px;height:10px;border-radius:50%;background:var(--jag-green);'
-                      'margin-top:-1px;"></div>')
-        bar_inner = bar_marker
-    elif lvl['next_name']:
-        to_next = lvl['next_threshold'] - (imp_pct or 0)
-        next_txt = (f'<span style="font-size:12px;color:var(--jag-muted);">'
-                    f'{to_next:.1f}% avg improvement to {esc(lvl["next_name"])}</span>')
-        bar_inner = (f'<div style="background:var(--jag-green);width:{bar_pct}%;height:100%;'
-                     f'border-radius:999px;transition:width 0.6s ease;"></div>')
+    att_count = attendance_count or 0
+
+    # ── XP & rank ────────────────────────────────────────────────────────────
+    xp_data = xp_data or {}
+    total_xp = xp_data.get("total", 0)
+    tier = xp_data.get("tier") or {"label": "Starter", "colour": "#6E737B"}
+    next_tier = xp_data.get("next_tier")
+    xp_progress = xp_data.get("progress", 0.0)
+    tier_colour = tier["colour"]
+    tier_label = esc(tier["label"])
+
+    xp_bar_pct = int(xp_progress * 100)
+    if next_tier:
+        xp_to_next = next_tier["min_xp"] - total_xp
+        xp_next_label = (f'<span style="font-size:12px;color:#6E737B;">'
+                         f'{xp_to_next:,} XP to {esc(next_tier["label"])}</span>')
     else:
-        next_txt = '<span style="font-size:12px;color:var(--jag-green);font-weight:700;">Top level reached!</span>'
-        bar_inner = '<div style="background:var(--jag-green);width:100%;height:100%;border-radius:999px;"></div>'
-    level_bar = f"""
-    <div style="margin-top:10px;">
-      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px;">
-        <span style="font-weight:700;font-size:14px;color:var(--jag-navy);">&#127942; {esc(lvl['name'])}</span>
-        {next_txt}
+        xp_next_label = '<span style="font-size:12px;color:#1EBE8B;font-weight:700;">Max rank reached!</span>'
+
+    # ── Hero card ─────────────────────────────────────────────────────────────
+    sport_pill = (f'<span style="font-size:12px;font-weight:600;'
+                  f'background:rgba(240,168,46,0.15);color:#F0A82E;'
+                  f'border-radius:999px;padding:2px 10px;">{sport}</span>') if sport else ''
+    hero = f"""
+    <div style="background:#2D323B;border-radius:20px;padding:28px;margin-bottom:24px;
+                position:relative;overflow:hidden;">
+      <div style="position:absolute;top:-30px;right:-30px;width:180px;height:180px;
+                  border-radius:50%;background:rgba(240,168,46,0.08);pointer-events:none;"></div>
+      <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;">
+        <!-- Avatar -->
+        <div style="width:72px;height:72px;border-radius:50%;background:#F0A82E;
+                    display:flex;align-items:center;justify-content:center;
+                    font-weight:800;font-size:26px;color:#2D323B;flex-shrink:0;
+                    box-shadow:0 4px 20px rgba(240,168,46,0.4);">{inits}</div>
+        <!-- Name + rank -->
+        <div style="flex:1;min-width:200px;">
+          <div style="font-size:13px;color:#9CA3AF;margin-bottom:2px;">Welcome back</div>
+          <h1 style="margin:0 0 8px;font-size:26px;color:#fff;font-weight:800;">{first_name}!</h1>
+          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
+            <span style="font-size:12px;font-weight:700;background:{tier_colour};color:#fff;
+                         border-radius:999px;padding:3px 12px;letter-spacing:0.04em;">{tier_label}</span>
+            {sport_pill}
+          </div>
+        </div>
+        <!-- XP block -->
+        <div style="text-align:right;flex-shrink:0;">
+          <div style="font-size:32px;font-weight:800;color:#F0A82E;line-height:1;">{total_xp:,}</div>
+          <div style="font-size:11px;color:#9CA3AF;margin-bottom:8px;letter-spacing:0.05em;">TOTAL XP</div>
+          {xp_next_label}
+        </div>
       </div>
-      <div style="background:var(--jag-border);border-radius:999px;height:8px;overflow:hidden;
-                  display:flex;align-items:center;">
-        {bar_inner}
+      <!-- XP progress bar -->
+      <div style="margin-top:20px;">
+        <div style="background:rgba(255,255,255,0.1);border-radius:999px;height:6px;overflow:hidden;">
+          <div style="background:{tier_colour};width:{xp_bar_pct}%;height:100%;
+                      border-radius:999px;transition:width 0.6s ease;"></div>
+        </div>
       </div>
     </div>"""
-    sport_pill = (f'<span style="font-size:12px;font-weight:600;background:{av_color}22;color:{av_color};'
-                  f'border-radius:999px;padding:2px 10px;">{sport}</span>') if sport else ''
-    imp_stat = (f'{imp_pct:+.1f}%' if imp_pct is not None else '—')
-    body = f"""
-    <div style="background:var(--jag-card);border-radius:16px;padding:24px 28px;margin-bottom:28px;
-                display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;
-                border:2px solid rgba(240,168,46,0.35);">
-      <div style="width:68px;height:68px;border-radius:50%;background:#2D323B;display:flex;
-                  align-items:center;justify-content:center;font-weight:800;font-size:24px;color:#F0A82E;
-                  flex-shrink:0;box-shadow:0 4px 16px rgba(45,50,59,0.35);">{inits}</div>
-      <div style="flex:1;min-width:200px;">
-        <h1 style="margin:0 0 4px;font-size:24px;">Welcome back, {first_name}!</h1>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:4px;">{sport_pill}</div>
-        {f'<p style="margin:0 0 4px;font-size:13px;color:var(--jag-muted);">{programme}</p>' if programme else ''}
-        {level_bar}
-      </div>
-    </div>
 
-    <section class="stat-row">
+    # ── Pending self-directed nudge ───────────────────────────────────────────
+    nudge_html = ""
+    if pending_self_directed:
+        count = len(pending_self_directed)
+        nudge_html = f"""
+        <a href="/athlete/self-directed" style="text-decoration:none;display:block;
+           background:rgba(240,168,46,0.1);border:1.5px solid #F0A82E;border-radius:12px;
+           padding:14px 18px;margin-bottom:20px;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <div style="font-size:24px;">🏃</div>
+            <div style="flex:1;">
+              <div style="font-size:14px;font-weight:700;color:#2D323B;">
+                {count} self-directed session{'s' if count > 1 else ''} ready to score
+              </div>
+              <div style="font-size:12px;color:#6E737B;margin-top:2px;">
+                Tap to record your scores and earn XP →
+              </div>
+            </div>
+          </div>
+        </a>"""
+
+    # ── Quick stats ───────────────────────────────────────────────────────────
+    levels = levels or {}
+    games_with_level = sum(1 for g in CORE_AAP_GAMES if levels.get(g, 0) >= 1)
+    imp_pct = _calc_improvement_pct(measurement_sessions)
+    imp_stat = f'{imp_pct:+.1f}%' if imp_pct is not None else '—'
+    stats_html = f"""
+    <section class="stat-row" style="margin-bottom:24px;">
+      <div class="card stat-card">
+        <div class="stat-number">{att_count}</div>
+        <div class="stat-label">Sessions Attended</div>
+      </div>
       <div class="card stat-card">
         <div class="stat-number">{session_count}</div>
         <div class="stat-label">Test Sessions</div>
       </div>
       <div class="card stat-card">
+        <div class="stat-number">{games_with_level}<span style="font-size:16px;color:#6E737B;">/8</span></div>
+        <div class="stat-label">Games Level 1+</div>
+      </div>
+      <div class="card stat-card">
         <div class="stat-number">{imp_stat}</div>
         <div class="stat-label">Avg Improvement</div>
       </div>
-    </section>
+    </section>"""
 
-    <h2 class="section-title">Measurement Games Results</h2>
-    {measurement_games_history(measurement_sessions)}
-    """
+    # ── Level colours ─────────────────────────────────────────────────────────
+    LEVEL_COLOURS = {
+        0: ("#6E737B", "#fff"),
+        1: ("#1EBE8B", "#fff"),
+        2: ("#F0A82E", "#2D323B"),
+        3: ("#2D323B", "#fff"),
+        4: ("#F97316", "#fff"),
+        5: ("#8B5CF6", "#fff"),
+    }
+
+    # ── Game level grid + guided steps ───────────────────────────────────────
+    thresholds = thresholds or {}
+    game_cards = ""
+    for game_key in CORE_AAP_GAMES:
+        game_def = find_measurement_game(game_key)
+        if not game_def:
+            continue
+        game_name = esc(game_def["name"])
+        current_level = levels.get(game_key, 0)
+        next_level = current_level + 1
+        bg_col, txt_col = LEVEL_COLOURS.get(current_level, ("#6E737B", "#fff"))
+        level_label = f"L{current_level}" if current_level > 0 else "—"
+
+        # Guided step: what's needed for next level
+        cfg = XP_GAME_CONFIG.get(game_key, {})
+        primary_field = cfg.get("primary_field")
+        guide_html = ""
+        if next_level <= 5 and primary_field:
+            threshold_key = f"{game_key}|{next_level}"
+            threshold_val = thresholds.get(threshold_key)
+            if threshold_val is not None:
+                lower_better = cfg.get("lower_is_better", False)
+                direction = "or lower" if lower_better else "or more"
+                # Find field label
+                field_label = primary_field.replace("_", " ").title()
+                for f in game_def.get("fields", []) + game_def.get("computed", []):
+                    if f["key"] == primary_field:
+                        field_label = f["label"]
+                        break
+                guide_html = (
+                    f'<div style="font-size:11px;color:#6E737B;margin-top:6px;line-height:1.4;">'
+                    f'Next level: <strong style="color:#2D323B;">{threshold_val} {direction}</strong>'
+                    f'<br><span style="color:#9CA3AF;">{esc(field_label)}</span>'
+                    f'</div>'
+                )
+            else:
+                if next_level <= 5:
+                    guide_html = '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">Thresholds not yet set</div>'
+        elif current_level >= 5:
+            guide_html = '<div style="font-size:11px;color:#8B5CF6;font-weight:700;margin-top:6px;">Max level reached!</div>'
+
+        game_cards += f"""
+        <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;
+                    padding:14px 16px;display:flex;flex-direction:column;gap:4px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+            <div style="font-size:13px;font-weight:600;color:#2D323B;line-height:1.3;">{game_name}</div>
+            <div style="font-size:13px;font-weight:800;background:{bg_col};color:{txt_col};
+                        border-radius:999px;padding:2px 10px;white-space:nowrap;flex-shrink:0;">{level_label}</div>
+          </div>
+          {guide_html}
+        </div>"""
+
+    level_grid = f"""
+    <h2 class="section-title" style="margin-bottom:12px;">Game Levels & Next Steps</h2>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:28px;">
+      {game_cards}
+    </div>"""
+
+    # ── Resource quick links ──────────────────────────────────────────────────
+    resource_links_html = ""
+    if resources:
+        tiles = ""
+        for r in resources[:6]:
+            r_name = esc(r.get("name", ""))
+            r_url = r.get("url", "")
+            tag_names = ", ".join(esc(t) for t in (r.get("tag_names") or []))
+            tiles += f"""
+            <a href="{esc(r_url)}" target="_blank" rel="noopener"
+               style="display:block;background:#fff;border:1px solid #E5E7EB;border-radius:10px;
+                      padding:12px 14px;text-decoration:none;
+                      transition:box-shadow 0.15s,border-color 0.15s;"
+               onmouseover="this.style.boxShadow='0 2px 12px rgba(0,0,0,0.08)';this.style.borderColor='#F0A82E'"
+               onmouseout="this.style.boxShadow='';this.style.borderColor='#E5E7EB'">
+              <div style="font-size:13px;font-weight:600;color:#2D323B;">{r_name}</div>
+              {f'<div style="font-size:11px;color:#9CA3AF;margin-top:3px;">{tag_names}</div>' if tag_names else ''}
+            </a>"""
+        more_link = (f'<a href="/athlete/resources" style="font-size:13px;color:#2D323B;'
+                     f'font-weight:600;">View all resources →</a>'
+                     if len(resources) > 6 else '')
+        resource_links_html = f"""
+        <h2 class="section-title" style="margin-bottom:12px;">Resources</h2>
+        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:8px;">
+          {tiles}
+        </div>
+        <div style="margin-bottom:28px;">{more_link}</div>"""
+
+    # ── Recent results summary ────────────────────────────────────────────────
+    history_html = ""
+    if measurement_sessions:
+        history_html = f"""
+        <h2 class="section-title" style="margin-bottom:12px;">Recent Test Results</h2>
+        {measurement_games_history(measurement_sessions)}"""
+
+    body = f"""
+    <div style="max-width:860px;">
+      {hero}
+      {nudge_html}
+      {stats_html}
+      {level_grid}
+      {resource_links_html}
+      {history_html}
+    </div>"""
     return layout("My Dashboard", body, user=user, active_nav="dashboard")
+
+
+def athlete_resources_page(athlete, resources_by_tag, all_tags, selected_tag_id=None):
+    """Athlete-facing resource browser — tag chips + resource grid."""
+    # Tag filter bar
+    tag_chips = '<a href="/athlete/resources" style="display:inline-block;padding:5px 14px;' \
+                f'border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;margin:3px;' \
+                f'background:{"#2D323B" if not selected_tag_id else "#E5E7EB"};' \
+                f'color:{"#fff" if not selected_tag_id else "#2D323B"};">All</a>'
+    for t in all_tags:
+        active = (selected_tag_id == t["id"])
+        tag_chips += (
+            f'<a href="/athlete/resources?tag={t["id"]}" '
+            f'style="display:inline-block;padding:5px 14px;border-radius:999px;font-size:13px;'
+            f'font-weight:600;text-decoration:none;margin:3px;'
+            f'background:{"#2D323B" if active else "#E5E7EB"};'
+            f'color:{"#fff" if active else "#2D323B"};">{esc(t["name"])}</a>'
+        )
+
+    # Build resource tiles per tag group (or flat if filtered)
+    content_html = ""
+    if selected_tag_id:
+        # Flat view for a single tag
+        items = resources_by_tag.get(selected_tag_id, [])
+        if items:
+            tiles = _athlete_resource_tiles(items)
+            content_html = f'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;">{tiles}</div>'
+        else:
+            content_html = '<p style="color:#9CA3AF;font-size:14px;padding:20px 0;">No resources in this category.</p>'
+    else:
+        # Grouped by tag
+        if resources_by_tag:
+            for t in all_tags:
+                items = resources_by_tag.get(t["id"], [])
+                if not items:
+                    continue
+                tiles = _athlete_resource_tiles(items)
+                content_html += f"""
+                <h3 style="font-size:16px;font-weight:700;color:#2D323B;margin:24px 0 10px;">{esc(t['name'])}</h3>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:8px;">
+                  {tiles}
+                </div>"""
+            # Untagged
+            untagged = resources_by_tag.get(None, [])
+            if untagged:
+                tiles = _athlete_resource_tiles(untagged)
+                content_html += f"""
+                <h3 style="font-size:16px;font-weight:700;color:#2D323B;margin:24px 0 10px;">Other</h3>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
+                  {tiles}
+                </div>"""
+        else:
+            content_html = '<p style="color:#9CA3AF;font-size:14px;padding:32px 0;text-align:center;">No resources have been shared yet.</p>'
+
+    body = f"""
+    <div style="max-width:900px;padding-top:28px;">
+      <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 16px;">Resources</h2>
+      <div style="margin-bottom:20px;line-height:2.2;">{tag_chips}</div>
+      {content_html}
+    </div>"""
+    return layout("Resources", body, user=athlete, active_nav="resources")
+
+
+def _athlete_resource_tiles(items):
+    html = ""
+    for r in items:
+        r_name = esc(r.get("name", ""))
+        r_url = r.get("url", "")
+        r_notes = esc(r.get("notes") or "")
+        thumb = _gdrive_thumbnail(r_url) if "drive.google.com" in r_url else None
+        img_html = (f'<img src="{thumb}" alt="" style="width:100%;height:100px;'
+                    f'object-fit:cover;border-radius:8px 8px 0 0;display:block;">'
+                    if thumb else '')
+        html += f"""
+        <a href="{esc(r_url)}" target="_blank" rel="noopener"
+           style="display:flex;flex-direction:column;background:#fff;
+                  border:1px solid #E5E7EB;border-radius:12px;text-decoration:none;
+                  overflow:hidden;transition:box-shadow 0.15s,border-color 0.15s;"
+           onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,0.1)';this.style.borderColor='#F0A82E'"
+           onmouseout="this.style.boxShadow='';this.style.borderColor='#E5E7EB'">
+          {img_html}
+          <div style="padding:12px 14px;flex:1;">
+            <div style="font-size:13px;font-weight:700;color:#2D323B;line-height:1.3;">{r_name}</div>
+            {f'<div style="font-size:12px;color:#6E737B;margin-top:4px;">{r_notes}</div>' if r_notes else ''}
+          </div>
+        </a>"""
+    return html
 
 
 def _athlete_tile(p, is_admin=False):
