@@ -343,6 +343,11 @@ def init_db():
     # Migrate role values: 'coach' with is_admin=1 → 'system_admin',
     # 'coach' with is_admin=0 → 'practitioner' (idempotent).
     migrate_roles(conn)
+    # Ensure every participant has their welcome bonus XP (idempotent).
+    try:
+        retroactive_welcome_bonus(conn)
+    except Exception:
+        pass
     conn.close()
 
 
@@ -1886,10 +1891,33 @@ def check_attendance_streak(conn, participant_id):
     return awarded
 
 
+def retroactive_welcome_bonus(conn):
+    """Award welcome_bonus XP (100 XP) to every participant who doesn't already
+    have it. Idempotent — safe to run repeatedly. Called automatically from
+    retroactive_xp_pass and from init_db on each startup.
+    Returns count of athletes newly awarded."""
+    from constants import XP_PARTICIPATION
+    amount = XP_PARTICIPATION.get("welcome_bonus", 100)
+    participants = conn.execute(
+        "SELECT id FROM users WHERE role = 'participant' AND active = 1"
+    ).fetchall()
+    awarded = 0
+    for p in participants:
+        if not _has_awarded_xp_type(conn, p["id"], "welcome_bonus"):
+            award_xp(conn, p["id"], "welcome_bonus", amount,
+                     notes="Welcome to Just a Game!")
+            awarded += 1
+    return awarded
+
+
 def retroactive_xp_pass(conn):
-    """One-time pass: award XP for all existing formal measurement sessions.
+    """One-time pass: award XP for all existing formal measurement sessions,
+    and ensure every participant has their welcome bonus.
     Run once after deploying the XP engine. Idempotent — skips sessions that
     already have XP events. Returns count of sessions processed."""
+    # Ensure all athletes have welcome bonus
+    retroactive_welcome_bonus(conn)
+
     sessions = conn.execute(
         "SELECT id, participant_id FROM measurement_sessions ORDER BY date ASC, id ASC"
     ).fetchall()

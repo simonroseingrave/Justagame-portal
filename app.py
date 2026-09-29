@@ -1909,7 +1909,7 @@ def reset_coach_password(req, coach_id):
     try:
         target = conn.execute("SELECT * FROM users WHERE id = ? AND role IN ('practitioner','org_admin','system_admin')", (coach_id,)).fetchone()
         if not target:
-            return flash_redirect("/coach/coaches", "Coach not found.")
+            return flash_redirect("/coach/coaches", "Practitioner not found.")
         temp_password = generate_temp_password()
         db.update_password(conn, coach_id, temp_password)
         conn.execute("DELETE FROM sessions WHERE user_id = ?", (coach_id,))
@@ -1959,7 +1959,7 @@ def toggle_admin(req, coach_id):
     try:
         target = conn.execute("SELECT * FROM users WHERE id = ? AND role IN ('practitioner','org_admin','system_admin')", (coach_id,)).fetchone()
         if not target:
-            return flash_redirect("/coach/coaches", "Coach not found.")
+            return flash_redirect("/coach/coaches", "Practitioner not found.")
         new_admin = 0 if target["is_admin"] else 1
         db.set_admin_status(conn, coach_id, new_admin)
         action = "granted admin rights to" if new_admin else "removed admin rights from"
@@ -1983,7 +1983,7 @@ def toggle_coach(req, coach_id):
     try:
         target = conn.execute("SELECT * FROM users WHERE id = ? AND role IN ('practitioner','org_admin','system_admin')", (coach_id,)).fetchone()
         if not target:
-            return flash_redirect("/coach/coaches", "Coach not found.")
+            return flash_redirect("/coach/coaches", "Practitioner not found.")
         new_active = 0 if target["active"] else 1
         db.set_active(conn, coach_id, new_active)
         action = "reactivated" if new_active else "deactivated"
@@ -2006,7 +2006,7 @@ def assign_coach_org(req, coach_id):
     try:
         target = conn.execute("SELECT * FROM users WHERE id = ? AND role IN ('practitioner','org_admin','system_admin')", (coach_id,)).fetchone()
         if not target:
-            return flash_redirect("/coach/coaches", "Coach not found.")
+            return flash_redirect("/coach/coaches", "Practitioner not found.")
         # Also update the text field for display compat
         org_name = None
         if org_id:
@@ -3346,6 +3346,56 @@ def game_thresholds_delete(req):
         conn.close()
     return flash_redirect("/coach/admin/game-thresholds",
                           f"Threshold removed: {game_key} L{level}")
+
+
+@router.get("/coach/leaderboard")
+def coach_leaderboard(req):
+    """Group XP leaderboard — ranked by total XP."""
+    coach = require_coach(req)
+    if not coach:
+        return redirect("/login")
+    from constants import XP_RANK_TIERS, CORE_AAP_GAMES
+    conn = db.get_conn()
+    try:
+        groups = db.list_groups(conn)
+        group_id_str = req.params.get("group_id", "").strip()
+        selected_group_id = int(group_id_str) if group_id_str.isdigit() else None
+        ranked_athletes = None
+        if selected_group_id:
+            athletes = conn.execute(
+                "SELECT u.id, u.name, u.athlete_number FROM users u "
+                "JOIN group_members gm ON gm.user_id = u.id "
+                "WHERE gm.group_id = ? AND u.role = 'participant' AND u.active = 1 "
+                "ORDER BY u.name",
+                (selected_group_id,)
+            ).fetchall()
+            ranked_athletes = []
+            for a in athletes:
+                pid = a["id"]
+                xp_data = db.get_athlete_xp(conn, pid)
+                levels = db.get_all_athlete_levels(conn, pid)
+                total_xp = xp_data.get("total_xp", 0)
+                # Determine tier
+                tier = XP_RANK_TIERS[0]
+                for t in XP_RANK_TIERS:
+                    if total_xp >= t["min_xp"]:
+                        tier = t
+                ranked_athletes.append({
+                    "id": pid,
+                    "name": a["name"],
+                    "athlete_number": a.get("athlete_number"),
+                    "total_xp": total_xp,
+                    "tier": tier,
+                    "levels": levels,
+                })
+            ranked_athletes.sort(key=lambda x: x["total_xp"], reverse=True)
+    finally:
+        conn.close()
+    return views.group_leaderboard_page(
+        coach, groups,
+        selected_group_id=selected_group_id,
+        ranked_athletes=ranked_athletes
+    )
 
 
 @router.post("/coach/admin/xp-retroactive")
