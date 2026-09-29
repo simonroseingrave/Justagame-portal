@@ -147,8 +147,10 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             links = [("/dashboard", "My Dashboard", "dashboard"),
                      ("/athlete/self-directed", "Self-Directed", "self_directed"),
                      ("/athlete/xp", "My XP", "xp"),
-                     ("/athlete/resources", "Resources", "resources"),
-                     ("/help", "Help", "help")]
+                     ("/athlete/resources", "Resources", "resources")]
+            if user.get("show_leaderboard"):
+                links.append(("/athlete/leaderboard", "Leaderboard", "leaderboard"))
+            links.append(("/help", "Help", "help"))
         nav_items = "".join(
             f'<a class="nav-link{" active" if active_nav == key else ""}" href="{href}">{label}</a>'
             for href, label, key in links
@@ -1363,6 +1365,7 @@ def edit_group_page(user, group, error=None):
         'object-fit:contain;border-radius:4px;border:1px solid var(--jag-border);"'
         ' onerror="this.style.display=\'none\'">'
     ) if icon_url else ""
+    lb_checked = "checked" if group.get("show_leaderboard") else ""
     body = f"""
     <div class="page-head">
       <h1>Edit Group</h1>
@@ -1376,6 +1379,20 @@ def edit_group_page(user, group, error=None):
         <label for="icon_url">Icon URL <span class="muted" style="font-weight:400;">(optional — paste a favicon or logo URL)</span></label>
         <input type="url" id="icon_url" name="icon_url" value="{esc(icon_url)}" placeholder="https://example.com/favicon.ico" />
         {icon_preview}
+        <div style="margin-top:20px;padding:14px 16px;background:#F9FAFB;border-radius:8px;
+                    border:1px solid var(--jag-border);">
+          <label style="display:flex;align-items:flex-start;gap:12px;cursor:pointer;margin:0;">
+            <input type="checkbox" name="show_leaderboard" value="1" {lb_checked}
+                   style="width:18px;height:18px;margin-top:2px;accent-color:#2D323B;flex-shrink:0;" />
+            <span>
+              <strong style="font-size:14px;color:#2D323B;">Show group leaderboard to athletes</strong>
+              <span style="display:block;font-size:12px;color:#6E737B;margin-top:2px;">
+                When enabled, athletes in this group can view a ranked XP leaderboard
+                for their group. Leave off for programmes focused on individual progress.
+              </span>
+            </span>
+          </label>
+        </div>
         <button type="submit" class="btn btn-primary btn-block" style="margin-top:16px;">Save Changes</button>
       </form>
     </div>
@@ -8096,3 +8113,90 @@ def group_leaderboard_page(coach, groups, selected_group_id=None, ranked_athlete
       {ranked_html}
     </div>"""
     return layout("Leaderboard", body, user=coach, active_nav="leaderboard")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ATHLETE-FACING GROUP LEADERBOARD
+# ══════════════════════════════════════════════════════════════════════════════
+
+def athlete_leaderboard_page(athlete, ranked_athletes, group_name=""):
+    """Athlete-facing group leaderboard — only shown when group has show_leaderboard enabled."""
+    from constants import CORE_AAP_GAMES
+    LEVEL_COLOURS_ALB = {
+        0: ("#E5E7EB", "#6E737B"),
+        1: ("#1EBE8B", "#fff"),
+        2: ("#F0A82E", "#2D323B"),
+        3: ("#2D323B", "#fff"),
+        4: ("#F97316", "#fff"),
+        5: ("#8B5CF6", "#fff"),
+    }
+
+    if not ranked_athletes:
+        rows_html = '<p style="color:#9CA3AF;font-size:14px;padding:16px 0;">No athletes with XP yet — get scoring!</p>'
+    else:
+        rows_html = ""
+        own_id = athlete["id"]
+        for i, a in enumerate(ranked_athletes):
+            pos = i + 1
+            is_me = a["id"] == own_id
+            tier = a.get("tier") or {"label": "Starter", "colour": "#6E737B"}
+            levels = a.get("levels", {})
+            name_parts = a["name"].strip().split()
+            inits = (name_parts[0][0] + name_parts[-1][0]).upper() if len(name_parts) >= 2 else name_parts[0][0].upper()
+            pos_style = ""
+            if pos == 1:
+                pos_style = "color:#F0A82E;font-weight:800;"
+            elif pos == 2:
+                pos_style = "color:#9CA3AF;font-weight:700;"
+            elif pos == 3:
+                pos_style = "color:#CD7F32;font-weight:700;"
+            dots = ""
+            for gk in CORE_AAP_GAMES:
+                lvl = levels.get(gk, 0)
+                bg, _ = LEVEL_COLOURS_ALB.get(lvl, ("#E5E7EB", "#6E737B"))
+                dots += f'<div style="width:8px;height:8px;border-radius:50%;background:{bg};flex-shrink:0;"></div>'
+            me_border = "border:2px solid #F0A82E;" if is_me else "border:2px solid transparent;"
+            me_bg = "#FFFBEB" if is_me else ("#F9FAFB" if i % 2 == 0 else "#fff")
+            me_tag = '<span style="font-size:10px;font-weight:700;background:#F0A82E;color:#2D323B;border-radius:999px;padding:1px 7px;margin-left:6px;">You</span>' if is_me else ""
+            rows_html += f"""
+            <div style="display:flex;align-items:center;gap:14px;padding:12px 16px;
+                        background:{me_bg};{me_border}border-radius:8px;margin-bottom:4px;">
+              <div style="width:28px;text-align:right;font-size:14px;{pos_style}">{pos}</div>
+              <div style="width:40px;height:40px;border-radius:50%;
+                          background:{'#F0A82E' if is_me else '#2D323B'};
+                          display:flex;align-items:center;justify-content:center;
+                          font-weight:800;font-size:14px;
+                          color:{'#2D323B' if is_me else '#F0A82E'};flex-shrink:0;">{inits}</div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:14px;font-weight:700;color:#2D323B;">
+                  {esc(a['name'])}{me_tag}
+                </div>
+                <div style="display:flex;gap:3px;margin-top:4px;">{dots}</div>
+              </div>
+              <div style="text-align:right;flex-shrink:0;">
+                <div style="font-size:13px;font-weight:800;color:#2D323B;">{a['total_xp']:,}</div>
+                <div style="font-size:10px;color:#9CA3AF;">XP</div>
+              </div>
+              <div style="flex-shrink:0;">
+                <span style="font-size:11px;font-weight:700;background:{tier['colour']};
+                             color:#fff;border-radius:999px;padding:2px 9px;">
+                  {esc(tier['label'])}
+                </span>
+              </div>
+            </div>"""
+
+    group_label = f" — {esc(group_name)}" if group_name else ""
+    body = f"""
+    <div style="max-width:680px;padding-top:28px;">
+      <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 4px;">
+        Group Leaderboard{group_label}
+      </h2>
+      <p style="font-size:13px;color:#6E737B;margin:0 0 20px;">
+        Ranked by total XP earned — your position is highlighted.
+      </p>
+      <div style="font-size:11px;color:#9CA3AF;margin-bottom:10px;padding:0 4px;">
+        Dots = game levels (grey=none · green=L1 · gold=L2 · navy=L3 · orange=L4 · purple=L5)
+      </div>
+      {rows_html}
+    </div>"""
+    return layout("Leaderboard", body, user=athlete, active_nav="leaderboard")

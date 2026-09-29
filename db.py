@@ -328,6 +328,7 @@ def init_db():
         "ALTER TABLE measurement_sessions ADD COLUMN session_month TEXT",
         "ALTER TABLE measurement_sessions ADD COLUMN session_type TEXT NOT NULL DEFAULT 'formal'",
         "ALTER TABLE measurement_sessions ADD COLUMN attendance_event_id INTEGER REFERENCES session_events(id)",
+        "ALTER TABLE participant_groups ADD COLUMN show_leaderboard INTEGER NOT NULL DEFAULT 0",
     ]:
         try:
             conn.execute(sql)
@@ -951,10 +952,10 @@ def add_participant_group(conn, name, created_by, icon_url=None):
     conn.commit()
 
 
-def update_participant_group(conn, group_id, name, icon_url=None):
+def update_participant_group(conn, group_id, name, icon_url=None, show_leaderboard=0):
     conn.execute(
-        "UPDATE participant_groups SET name = ?, icon_url = ? WHERE id = ?",
-        (name, icon_url or None, group_id),
+        "UPDATE participant_groups SET name = ?, icon_url = ?, show_leaderboard = ? WHERE id = ?",
+        (name, icon_url or None, int(bool(show_leaderboard)), group_id),
     )
     conn.commit()
 

@@ -44,7 +44,18 @@ def get_current_user(req):
             "SELECT u.* FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.session_id = ?",
             (token,),
         ).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        user = dict(row)
+        # For participants: inject group's show_leaderboard flag so the nav can
+        # conditionally render the Leaderboard link without an extra DB call.
+        if user.get("role") == "participant" and user.get("group_id"):
+            grp = conn.execute(
+                "SELECT show_leaderboard FROM participant_groups WHERE id = ?",
+                (user["group_id"],),
+            ).fetchone()
+            user["show_leaderboard"] = bool(grp and grp["show_leaderboard"]) if grp else False
+        return user
     finally:
         conn.close()
 
@@ -2192,6 +2203,7 @@ def group_edit_post(req, group_id):
         return redirect("/login")
     name = req.form_get("group_name").strip()
     icon_url = req.form_get("icon_url").strip() or None
+    show_leaderboard = 1 if req.form_get("show_leaderboard") else 0
     if not name:
         conn = db.get_conn()
         try:
@@ -2201,7 +2213,7 @@ def group_edit_post(req, group_id):
             conn.close()
     conn = db.get_conn()
     try:
-        db.update_participant_group(conn, group_id, name, icon_url)
+        db.update_participant_group(conn, group_id, name, icon_url, show_leaderboard=show_leaderboard)
         return flash_redirect("/coach", f'Group "{name}" updated.')
     finally:
         conn.close()
@@ -3267,6 +3279,57 @@ def athlete_xp_page(req):
     finally:
         conn.close()
     return Response(views.athlete_xp_page(user, xp_data, levels))
+
+
+@router.get("/athlete/leaderboard")
+def athlete_leaderboard(req):
+    """Athlete-facing group leaderboard — only accessible when group has show_leaderboard enabled."""
+    from constants import XP_RANK_TIERS, CORE_AAP_GAMES
+    user = require_role(req, "participant")
+    if not user:
+        return redirect("/login")
+    if not user.get("show_leaderboard"):
+        return flash_redirect("/dashboard", "Leaderboard is not enabled for your group.")
+    group_id = user.get("group_id")
+    conn = db.get_conn()
+    try:
+        group = conn.execute(
+            "SELECT * FROM participant_groups WHERE id = ?", (group_id,)
+        ).fetchone() if group_id else None
+        group_name = group["name"] if group else ""
+        athletes = conn.execute(
+            "SELECT u.id, u.name FROM users u "
+            "JOIN group_members gm ON gm.user_id = u.id "
+            "WHERE gm.group_id = ? AND u.role = 'participant' AND u.active = 1",
+            (group_id,)
+        ).fetchall() if group_id else []
+        # Fallback: use group_id column on users if no group_members rows
+        if not athletes and group_id:
+            athletes = conn.execute(
+                "SELECT id, name FROM users WHERE group_id = ? AND role = 'participant' AND active = 1",
+                (group_id,)
+            ).fetchall()
+        ranked = []
+        for a in athletes:
+            pid = a["id"]
+            xp_data = db.get_athlete_xp(conn, pid)
+            levels = db.get_all_athlete_levels(conn, pid)
+            total_xp = xp_data.get("total_xp", 0)
+            tier = XP_RANK_TIERS[0]
+            for t in XP_RANK_TIERS:
+                if total_xp >= t["min_xp"]:
+                    tier = t
+            ranked.append({
+                "id": pid,
+                "name": a["name"],
+                "total_xp": total_xp,
+                "tier": tier,
+                "levels": levels,
+            })
+        ranked.sort(key=lambda x: x["total_xp"], reverse=True)
+    finally:
+        conn.close()
+    return Response(views.athlete_leaderboard_page(user, ranked, group_name=group_name))
 
 
 @router.get("/coach/participants/<int:participant_id>/xp")
