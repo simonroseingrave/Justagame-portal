@@ -206,6 +206,129 @@ def find_measurement_game(key):
 
 
 # ----------------------------------------------------------------------
+# XP Engine — Athlete Engagement & Achievement System
+# ----------------------------------------------------------------------
+
+# The 8 core AAP measurement games that have full 5-level progressions
+# and contribute to XP milestones (breadth bonuses, L1-all-8, etc.)
+CORE_AAP_GAMES = [
+    "skipping_rope_sprint",
+    "balance_ball_catching",
+    "leap_catching_throwing",   # Grid Leap
+    "split_step",
+    "diamond_games",            # Diamond Gates
+    "diamond_dribble",
+    "diamond_gym",              # Step Up
+    "lob_scotch",
+]
+
+# Per-game XP configuration.
+# xp_type "count"       → score * multiplier XP awarded per session
+# xp_type "improvement" → XP only on PB, 5 XP per unit_size improvement
+# score_fields: all fields that can contribute a score (used for in-game XP total)
+# primary_field: the single field used for PB tracking and level threshold checks
+XP_GAME_CONFIG = {
+    "skipping_rope_sprint": {
+        "xp_type": "improvement",
+        "xp_per_unit": 5,
+        "unit_size": 0.1,           # seconds per XP unit
+        "score_fields": ["average"],
+        "primary_field": "average",
+        "lower_is_better": True,
+        "pb_only": True,
+    },
+    "balance_ball_catching": {
+        "xp_type": "count",
+        "multiplier": 1,
+        "score_fields": [
+            "large_ball_wall_bounce", "small_ball_wall_bounce",
+            "one_foot_balance_catch", "opposite_foot_balance_catch",
+        ],
+        "primary_field": "large_ball_wall_bounce",
+    },
+    "leap_catching_throwing": {
+        "xp_type": "count",
+        "multiplier": 5,
+        "score_fields": ["points"],
+        "primary_field": "points",
+    },
+    "split_step": {
+        "xp_type": "count",
+        "multiplier": 1,
+        "score_fields": ["catches"],
+        "primary_field": "catches",
+    },
+    "diamond_games": {
+        "xp_type": "count",
+        "multiplier": 5,
+        "score_fields": ["small_group", "large_group"],
+        "primary_field": "small_group",
+    },
+    "diamond_dribble": {
+        "xp_type": "count",
+        "multiplier": 5,
+        "score_fields": ["small_group", "large_group"],
+        "primary_field": "small_group",
+    },
+    "diamond_gym": {
+        "xp_type": "count",
+        "multiplier": 1,
+        "score_fields": ["step_bench", "step_bench_small"],
+        "primary_field": "step_bench",
+    },
+    "lob_scotch": {
+        "xp_type": "count",
+        "multiplier": 5,
+        "score_fields": ["squares_scored"],
+        "primary_field": "squares_scored",
+    },
+}
+
+# XP awarded when an athlete earns a level achievement (one-time, permanent)
+LEVEL_XP_AWARDS = {1: 100, 2: 200, 3: 350, 4: 500, 5: 750}
+
+# Rank tiers (ascending by min_xp). label, min_xp, hex colour
+XP_RANK_TIERS = [
+    {"label": "Starter",  "min_xp": 0,     "colour": "#6E737B"},
+    {"label": "Bronze",   "min_xp": 200,   "colour": "#1EBE8B"},
+    {"label": "Silver",   "min_xp": 1000,  "colour": "#F0A82E"},
+    {"label": "Gold",     "min_xp": 5000,  "colour": "#F97316"},
+    {"label": "Titanium", "min_xp": 15000, "colour": "#8B5CF6"},
+]
+
+# Flat XP award amounts for participation events
+XP_PARTICIPATION = {
+    "formal_game":       50,   # completing one game in a formal test session
+    "self_directed_game": 25,  # completing one game in a self-directed session
+    "pb_formal":         50,   # personal best in a formal session
+    "pb_self_directed":  25,   # personal best in a self-directed session
+    "welcome_bonus":     100,  # first ever session
+    "first_game":        20,   # first time ever playing a specific game
+    "all_8_session":     100,  # all 8 core games completed in one session
+    "streak_3":          30,   # 3-session attendance streak
+    "streak_5":          75,   # 5-session attendance streak
+    "all_8_l1":          500,  # earned L1 in all 8 core games (cumulative milestone)
+}
+
+
+def get_athlete_rank_tier(total_xp):
+    """Return the rank tier dict for a given total XP value."""
+    tier = XP_RANK_TIERS[0]
+    for t in XP_RANK_TIERS:
+        if total_xp >= t["min_xp"]:
+            tier = t
+    return tier
+
+
+def get_next_rank_tier(total_xp):
+    """Return the next rank tier dict (or None if at Titanium)."""
+    for i, t in enumerate(XP_RANK_TIERS):
+        if total_xp < t["min_xp"]:
+            return t
+    return None
+
+
+# ----------------------------------------------------------------------
 # Sport-Specific Measurement Games
 # Same structure as MEASUREMENT_GAMES but keyed by sport name.
 # Add new sports here as they are defined.

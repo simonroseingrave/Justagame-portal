@@ -6900,3 +6900,277 @@ Alex,Lee,Masterton School,Under 12s,Male,Football</pre>
     """
     return layout("Import Athletes", body, user=user, active_nav="dashboard")
 
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# XP ENGINE VIEWS
+# ══════════════════════════════════════════════════════════════════════════════
+
+_XP_TYPE_LABELS = {
+    "formal_game":        "Formal session",
+    "self_directed_game": "Self-directed session",
+    "pb_formal":          "Personal best (formal)",
+    "pb_self":            "Personal best (self-directed)",
+    "ingame_formal":      "In-game score",
+    "ingame_self":        "In-game score (self-directed)",
+    "level_achievement":  "Level achieved",
+    "breadth_first_game": "First time playing",
+    "welcome_bonus":      "Welcome bonus",
+    "streak_3":           "3-session streak",
+    "streak_5":           "5-session streak",
+    "all_8_session":      "All 8 games in one session",
+    "all_8_l1":           "Level 1 in all 8 games",
+}
+
+_GAME_DISPLAY_NAMES = {
+    "skipping_rope_sprint":  "Skipping Rope Sprint",
+    "balance_ball_catching": "Balance Catching",
+    "leap_catching_throwing": "Grid Leap",
+    "split_step":            "Split Step",
+    "diamond_games":         "Diamond Gates",
+    "diamond_dribble":       "Diamond Dribble",
+    "diamond_gym":           "Step Up",
+    "lob_scotch":            "Lob Scotch",
+}
+
+_LEVEL_COLOURS = {
+    1: ("#1EBE8B", "#fff"),
+    2: ("#F0A82E", "#2D323B"),
+    3: ("#2D323B", "#fff"),
+    4: ("#F97316", "#fff"),
+    5: ("#8B5CF6", "#fff"),
+}
+
+
+def _xp_event_row(event, i):
+    xp_type = event.get("xp_type", "")
+    label = _XP_TYPE_LABELS.get(xp_type, xp_type.replace("_", " ").title())
+    game = _GAME_DISPLAY_NAMES.get(event.get("game_key"), event.get("game_key") or "")
+    amount = int(event.get("amount", 0))
+    created = (event.get("created_at") or "")[:10]
+    shade = "#F3F4F5" if i % 2 == 0 else "#fff"
+    game_chip = (
+        f'<span style="font-size:11px;background:#2D323B;color:#fff;border-radius:999px;'
+        f'padding:2px 8px;margin-left:6px;">{esc(game)}</span>'
+        if game else ""
+    )
+    return f"""
+    <tr style="background:{shade};">
+      <td style="padding:9px 14px;font-size:13px;color:#2D323B;">{esc(label)}{game_chip}</td>
+      <td style="padding:9px 14px;font-size:13px;color:#6E737B;">{esc(created)}</td>
+      <td style="padding:9px 14px;font-size:13px;font-weight:700;color:#2D323B;text-align:right;">+{amount:,} XP</td>
+    </tr>"""
+
+
+def athlete_xp_page(athlete, xp_data, levels, coach=None):
+    """XP profile page — usable by both athletes (self-view) and coaches (viewing an athlete)."""
+    name = esc(athlete.get("name", "Athlete"))
+    total = xp_data.get("total", 0)
+    tier = xp_data.get("tier", {})
+    next_tier = xp_data.get("next_tier")
+    progress = xp_data.get("progress", 0.0)
+    events = xp_data.get("events", [])
+    tier_label = tier.get("label", "Starter")
+    tier_colour = tier.get("colour", "#6E737B")
+
+    # ── Rank hero card ────────────────────────────────────────────────────────
+    if next_tier:
+        xp_to_next = next_tier["min_xp"] - total
+        next_label = next_tier["label"]
+        next_colour = next_tier["colour"]
+        progress_bar = f"""
+        <div style="margin-top:16px;">
+          <div style="display:flex;justify-content:space-between;font-size:12px;color:rgba(255,255,255,0.75);margin-bottom:6px;">
+            <span>{tier_label}</span><span>{esc(next_label)}</span>
+          </div>
+          <div style="background:rgba(255,255,255,0.25);border-radius:999px;height:10px;overflow:hidden;">
+            <div style="width:{int(progress*100)}%;background:#fff;height:100%;border-radius:999px;transition:width 0.6s;"></div>
+          </div>
+          <div style="text-align:right;font-size:12px;color:rgba(255,255,255,0.75);margin-top:5px;">
+            {xp_to_next:,} XP to {esc(next_label)}
+          </div>
+        </div>"""
+    else:
+        progress_bar = f"""
+        <div style="margin-top:16px;font-size:13px;color:rgba(255,255,255,0.8);">
+          Maximum rank achieved — keep earning XP!
+        </div>"""
+
+    hero = f"""
+    <div style="background:{tier_colour};border-radius:16px;padding:28px 32px;margin-bottom:28px;color:#fff;">
+      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+        <div style="flex:1;min-width:200px;">
+          <div style="font-size:13px;opacity:0.8;text-transform:uppercase;letter-spacing:0.08em;">Rank</div>
+          <div style="font-size:36px;font-weight:800;line-height:1.1;">{esc(tier_label)}</div>
+          <div style="font-size:14px;opacity:0.85;margin-top:4px;">{name}</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:48px;font-weight:900;line-height:1;">{total:,}</div>
+          <div style="font-size:14px;opacity:0.8;">XP total</div>
+        </div>
+      </div>
+      {progress_bar}
+    </div>"""
+
+    # ── Level achievements grid ───────────────────────────────────────────────
+    level_chips = ""
+    for game_key, display in _GAME_DISPLAY_NAMES.items():
+        lvl = levels.get(game_key, 0)
+        bg, fg = _LEVEL_COLOURS.get(lvl, ("#E5E7EB", "#6E737B")) if lvl else ("#F3F4F5", "#9CA3AF")
+        label_text = f"L{lvl}" if lvl else "—"
+        level_chips += f"""
+        <div style="display:flex;align-items:center;justify-content:space-between;
+          padding:10px 14px;background:#fff;border-radius:10px;border:1px solid #E5E7EB;">
+          <span style="font-size:13px;color:#2D323B;font-weight:600;">{esc(display)}</span>
+          <span style="font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;
+            background:{bg};color:{fg};">{label_text}</span>
+        </div>"""
+
+    levels_section = f"""
+    <div style="margin-bottom:32px;">
+      <h3 style="font-size:16px;font-weight:700;color:#2D323B;margin:0 0 14px;">Level Achievements</h3>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">
+        {level_chips}
+      </div>
+    </div>"""
+
+    # ── Recent XP events ──────────────────────────────────────────────────────
+    rows = "".join(_xp_event_row(e, i) for i, e in enumerate(events))
+    if not rows:
+        rows = '<tr><td colspan="3" style="padding:20px;text-align:center;color:#9CA3AF;font-size:13px;">No XP earned yet — complete a measurement session to get started.</td></tr>'
+
+    events_section = f"""
+    <div style="margin-bottom:32px;">
+      <h3 style="font-size:16px;font-weight:700;color:#2D323B;margin:0 0 14px;">Recent XP Events</h3>
+      <div style="border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:#2D323B;">
+              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;font-weight:600;">Event</th>
+              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;font-weight:600;">Date</th>
+              <th style="padding:10px 14px;text-align:right;font-size:12px;color:#fff;font-weight:600;">XP</th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </div>
+    </div>"""
+
+    back_link = ""
+    if coach:
+        back_link = f'<a href="/coach/participants/{esc(str(athlete.get("id","")))}" class="btn btn-ghost btn-sm" style="margin-bottom:20px;">← Back to Profile</a>'
+
+    body = f"""
+    <div class="container" style="max-width:860px;padding-top:32px;">
+      {back_link}
+      <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 24px;">
+        {"XP Profile — " + name if coach else "My XP Profile"}
+      </h2>
+      {hero}
+      {levels_section}
+      {events_section}
+    </div>"""
+
+    user = coach if coach else athlete
+    return layout("XP Profile", body, user=user,
+                  active_nav="dashboard" if coach else "dashboard")
+
+
+def game_thresholds_page(coach, thresholds, core_games, xp_game_config):
+    """System admin page for managing per-game level thresholds."""
+    # Build a dict for easy lookup
+    existing = {}
+    for t in thresholds:
+        existing[(t["game_key"], t["level"])] = dict(t)
+
+    rows_html = ""
+    for game_key in core_games:
+        display = _GAME_DISPLAY_NAMES.get(game_key, game_key)
+        cfg = xp_game_config.get(game_key, {})
+        primary_field = cfg.get("primary_field", "")
+        lower = cfg.get("lower_is_better", False)
+
+        rows_html += f"""
+        <tr>
+          <td colspan="5" style="padding:10px 14px 4px;font-size:12px;font-weight:700;
+            color:#fff;background:#2D323B;letter-spacing:0.06em;">{esc(display)}</td>
+        </tr>"""
+
+        for level in range(1, 6):
+            bg, fg = _LEVEL_COLOURS.get(level, ("#E5E7EB", "#2D323B"))
+            t = existing.get((game_key, level))
+            curr_val = f'{t["threshold_value"]:g}' if t else ""
+            curr_field = t["field_key"] if t else primary_field
+            shade = "#F3F4F5" if level % 2 == 0 else "#fff"
+            rows_html += f"""
+            <tr style="background:{shade};">
+              <td style="padding:8px 14px;">
+                <span style="font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;
+                  background:{bg};color:{fg};">L{level}</span>
+              </td>
+              <td style="padding:8px 14px;font-size:13px;color:#6E737B;">{esc(curr_field)}</td>
+              <td style="padding:8px 14px;font-size:13px;color:#2D323B;">
+                {f'<strong>{curr_val}</strong>' if curr_val else '<em style="color:#9CA3AF;">not set</em>'}
+              </td>
+              <td style="padding:8px 14px;">
+                <form method="post" action="/coach/admin/game-thresholds/set"
+                      style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                  <input type="hidden" name="game_key" value="{esc(game_key)}" />
+                  <input type="hidden" name="level" value="{level}" />
+                  <input type="hidden" name="lower_is_better" value="{'1' if lower else '0'}" />
+                  <input type="text" name="field_key" value="{esc(curr_field)}"
+                         style="width:180px;font-size:12px;" placeholder="field key" />
+                  <input type="number" name="threshold_value" value="{esc(curr_val)}"
+                         step="0.01" style="width:90px;font-size:12px;" placeholder="value" />
+                  <button type="submit" class="btn btn-primary btn-sm" style="font-size:12px;">Save</button>
+                </form>
+              </td>
+              <td style="padding:8px 14px;">
+                {f'''<form method="post" action="/coach/admin/game-thresholds/delete">
+                  <input type="hidden" name="game_key" value="{esc(game_key)}" />
+                  <input type="hidden" name="level" value="{level}" />
+                  <button class="btn btn-ghost btn-sm" style="font-size:12px;color:#DC2626;"
+                    onclick="return confirm('Remove this threshold?')">Remove</button>
+                </form>''' if t else ''}
+              </td>
+            </tr>"""
+
+    body = f"""
+    <div class="container" style="max-width:960px;padding-top:32px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
+        <div>
+          <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 4px;">Game Level Thresholds</h2>
+          <p style="font-size:13px;color:#6E737B;margin:0;">
+            Set the score required to earn each level for each core game.
+            Thresholds are updateable — once earned, an athlete's level is permanent.
+          </p>
+        </div>
+        <form method="post" action="/coach/admin/xp-retroactive"
+              onsubmit="return confirm('Run retroactive XP pass over ALL existing sessions? This is safe to run multiple times but may take a moment.')">
+          <button class="btn btn-primary">Run Retroactive XP Pass</button>
+        </form>
+      </div>
+      <div style="background:#FFF3EB;border-left:4px solid #F97316;border-radius:8px;padding:12px 16px;
+        margin-bottom:24px;font-size:13px;color:#2D323B;">
+        <strong>Field keys</strong> must match the field keys defined in <code>constants.py</code>.
+        The <em>primary_field</em> for each game is pre-filled.
+        For Skipping Rope Sprint (lower is better), the system checks whether the score is
+        at or below the threshold.
+      </div>
+      <div style="border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:#2D323B;">
+              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Level</th>
+              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Field</th>
+              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Threshold</th>
+              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Update</th>
+              <th style="padding:10px 14px;font-size:12px;color:#fff;"></th>
+            </tr>
+          </thead>
+          <tbody>{rows_html}</tbody>
+        </table>
+      </div>
+    </div>"""
+
+    return layout("Level Thresholds", body, user=coach, active_nav="dashboard")

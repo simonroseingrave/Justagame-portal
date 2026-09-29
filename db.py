@@ -130,6 +130,64 @@ CREATE TABLE IF NOT EXISTS resource_tag_assignments (
     tag_id INTEGER NOT NULL REFERENCES resource_tags(id) ON DELETE CASCADE,
     PRIMARY KEY (resource_id, tag_id)
 );
+
+-- ── XP Engine ─────────────────────────────────────────────────────────────
+
+-- Append-only XP ledger. Every XP award is a separate row.
+-- xp_type values: participation_formal, participation_self, pb_formal,
+--   pb_self, ingame_formal, ingame_self, level_achievement, breadth_first_game,
+--   streak_3, streak_5, welcome_bonus, all_8_session, all_8_l1
+CREATE TABLE IF NOT EXISTS xp_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    xp_type TEXT NOT NULL,
+    amount INTEGER NOT NULL,
+    game_key TEXT,
+    session_id INTEGER REFERENCES measurement_sessions(id) ON DELETE SET NULL,
+    notes TEXT,
+    created_at TEXT NOT NULL
+);
+
+-- Append-only level achievement record. One row per (athlete × game × level).
+-- UNIQUE constraint prevents double-awarding. Never deleted.
+CREATE TABLE IF NOT EXISTS level_achievements (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    game_key TEXT NOT NULL,
+    level INTEGER NOT NULL,
+    session_id INTEGER REFERENCES measurement_sessions(id) ON DELETE SET NULL,
+    awarded_at TEXT NOT NULL,
+    UNIQUE (participant_id, game_key, level)
+);
+
+-- Admin-configurable threshold per (game × level).
+-- Score at or above this value earns the level.
+-- For skipping_rope_sprint (lower_is_better), score at or BELOW earns the level.
+CREATE TABLE IF NOT EXISTS game_level_thresholds (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    game_key TEXT NOT NULL,
+    level INTEGER NOT NULL,
+    field_key TEXT NOT NULL,
+    threshold_value REAL NOT NULL,
+    lower_is_better INTEGER NOT NULL DEFAULT 0,
+    set_by INTEGER REFERENCES users(id),
+    updated_at TEXT NOT NULL,
+    UNIQUE (game_key, level)
+);
+
+-- Per-athlete, per-game personal best tracking.
+-- One row per (athlete × game × field). Updated in place when a new PB is set.
+CREATE TABLE IF NOT EXISTS athlete_personal_bests (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    participant_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    game_key TEXT NOT NULL,
+    field_key TEXT NOT NULL,
+    best_value REAL NOT NULL,
+    session_id INTEGER REFERENCES measurement_sessions(id) ON DELETE SET NULL,
+    is_formal INTEGER NOT NULL DEFAULT 1,
+    updated_at TEXT NOT NULL,
+    UNIQUE (participant_id, game_key, field_key)
+);
 """
 
 
@@ -1062,6 +1120,487 @@ def reorder_items(conn, table, ordered_ids):
     for i, item_id in enumerate(ordered_ids):
         conn.execute(f"UPDATE {table} SET sort_order = ? WHERE id = ?", (i, item_id))
     conn.commit()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# XP ENGINE
+# All XP logic lives here so the rest of the app just calls process_session_xp.
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _import_xp_constants():
+    """Lazy import to avoid circular imports at module load time."""
+    from constants import (
+        XP_GAME_CONFIG, LEVEL_XP_AWARDS, XP_RANK_TIERS,
+        XP_PARTICIPATION, CORE_AAP_GAMES,
+    )
+    return XP_GAME_CONFIG, LEVEL_XP_AWARDS, XP_RANK_TIERS, XP_PARTICIPATION, CORE_AAP_GAMES
+
+
+# ── Ledger ────────────────────────────────────────────────────────────────────
+
+def award_xp(conn, participant_id, xp_type, amount, game_key=None,
+             session_id=None, notes=None):
+    """Append one XP event to the ledger. Returns the new event id."""
+    eid = conn.execute(
+        "INSERT INTO xp_events (participant_id, xp_type, amount, game_key, session_id, notes, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (participant_id, xp_type, amount, game_key, session_id, notes, now()),
+    ).lastrowid
+    conn.commit()
+    return eid
+
+
+def get_athlete_xp(conn, participant_id):
+    """Return dict with total XP, rank tier, next tier, and recent events."""
+    XP_GAME_CONFIG, LEVEL_XP_AWARDS, XP_RANK_TIERS, XP_PARTICIPATION, CORE_AAP_GAMES = _import_xp_constants()
+    from constants import get_athlete_rank_tier, get_next_rank_tier
+
+    total_row = conn.execute(
+        "SELECT COALESCE(SUM(amount), 0) AS total FROM xp_events WHERE participant_id = ?",
+        (participant_id,),
+    ).fetchone()
+    total = int(total_row["total"])
+
+    events = conn.execute(
+        "SELECT * FROM xp_events WHERE participant_id = ? ORDER BY id DESC LIMIT 50",
+        (participant_id,),
+    ).fetchall()
+
+    tier = get_athlete_rank_tier(total)
+    next_tier = get_next_rank_tier(total)
+
+    # Progress to next tier (0.0 – 1.0)
+    if next_tier:
+        span = next_tier["min_xp"] - tier["min_xp"]
+        into = total - tier["min_xp"]
+        progress = min(1.0, into / span) if span else 1.0
+    else:
+        progress = 1.0
+
+    return {
+        "total": total,
+        "tier": tier,
+        "next_tier": next_tier,
+        "progress": progress,
+        "events": [dict(e) for e in events],
+    }
+
+
+def xp_total_for(conn, participant_id):
+    """Lightweight: return just the total XP integer."""
+    row = conn.execute(
+        "SELECT COALESCE(SUM(amount), 0) AS total FROM xp_events WHERE participant_id = ?",
+        (participant_id,),
+    ).fetchone()
+    return int(row["total"])
+
+
+# ── Personal Bests ────────────────────────────────────────────────────────────
+
+def get_personal_best(conn, participant_id, game_key, field_key):
+    """Return the current PB row or None."""
+    return conn.execute(
+        "SELECT * FROM athlete_personal_bests WHERE participant_id = ? AND game_key = ? AND field_key = ?",
+        (participant_id, game_key, field_key),
+    ).fetchone()
+
+
+def update_personal_best(conn, participant_id, game_key, field_key, value,
+                         session_id=None, is_formal=True):
+    """Upsert a PB. Returns (is_new_pb: bool, improvement: float or None).
+    improvement is None for the first record, else the delta (positive = better)."""
+    existing = get_personal_best(conn, participant_id, game_key, field_key)
+    XP_GAME_CONFIG = _import_xp_constants()[0]
+    cfg = XP_GAME_CONFIG.get(game_key, {})
+    lower_is_better = cfg.get("lower_is_better", False)
+
+    if existing is None:
+        # First ever score for this game/field — always a PB
+        conn.execute(
+            "INSERT INTO athlete_personal_bests "
+            "(participant_id, game_key, field_key, best_value, session_id, is_formal, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (participant_id, game_key, field_key, value, session_id, 1 if is_formal else 0, now()),
+        )
+        conn.commit()
+        return True, None  # first record — no improvement delta yet
+
+    old = existing["best_value"]
+    if lower_is_better:
+        is_pb = value < old
+        improvement = old - value  # positive = faster
+    else:
+        is_pb = value > old
+        improvement = value - old  # positive = more
+
+    if is_pb:
+        conn.execute(
+            "UPDATE athlete_personal_bests SET best_value = ?, session_id = ?, is_formal = ?, updated_at = ? "
+            "WHERE participant_id = ? AND game_key = ? AND field_key = ?",
+            (value, session_id, 1 if is_formal else 0, now(), participant_id, game_key, field_key),
+        )
+        conn.commit()
+
+    return is_pb, improvement if is_pb else None
+
+
+# ── Level Achievements ────────────────────────────────────────────────────────
+
+def get_athlete_level(conn, participant_id, game_key):
+    """Return the highest level the athlete has earned for a game, or 0."""
+    row = conn.execute(
+        "SELECT MAX(level) AS lvl FROM level_achievements WHERE participant_id = ? AND game_key = ?",
+        (participant_id, game_key),
+    ).fetchone()
+    return row["lvl"] or 0
+
+
+def get_all_athlete_levels(conn, participant_id):
+    """Return dict {game_key: highest_level} for all games this athlete has levels in."""
+    rows = conn.execute(
+        "SELECT game_key, MAX(level) AS lvl FROM level_achievements "
+        "WHERE participant_id = ? GROUP BY game_key",
+        (participant_id,),
+    ).fetchall()
+    return {r["game_key"]: r["lvl"] for r in rows}
+
+
+def award_level(conn, participant_id, game_key, level, session_id=None):
+    """Award a level to an athlete. Idempotent (UNIQUE constraint, silently skips duplicates).
+    Returns True if a new level was awarded, False if already held."""
+    try:
+        conn.execute(
+            "INSERT INTO level_achievements (participant_id, game_key, level, session_id, awarded_at) "
+            "VALUES (?, ?, ?, ?, ?)",
+            (participant_id, game_key, level, session_id, now()),
+        )
+        conn.commit()
+        return True
+    except Exception:
+        return False
+
+
+# ── Level Thresholds ──────────────────────────────────────────────────────────
+
+def get_game_threshold(conn, game_key, level):
+    """Return threshold row or None. Threshold has: threshold_value, field_key, lower_is_better."""
+    return conn.execute(
+        "SELECT * FROM game_level_thresholds WHERE game_key = ? AND level = ?",
+        (game_key, level),
+    ).fetchone()
+
+
+def get_all_thresholds(conn):
+    """Return all threshold rows ordered by game_key, level."""
+    return conn.execute(
+        "SELECT * FROM game_level_thresholds ORDER BY game_key, level"
+    ).fetchall()
+
+
+def set_game_threshold(conn, game_key, level, field_key, threshold_value,
+                       lower_is_better=False, set_by=None):
+    """Insert or update a threshold. Only system_admin should call this."""
+    existing = conn.execute(
+        "SELECT id FROM game_level_thresholds WHERE game_key = ? AND level = ?",
+        (game_key, level),
+    ).fetchone()
+    if existing:
+        conn.execute(
+            "UPDATE game_level_thresholds SET field_key = ?, threshold_value = ?, "
+            "lower_is_better = ?, set_by = ?, updated_at = ? WHERE id = ?",
+            (field_key, threshold_value, 1 if lower_is_better else 0, set_by, now(), existing["id"]),
+        )
+    else:
+        conn.execute(
+            "INSERT INTO game_level_thresholds "
+            "(game_key, level, field_key, threshold_value, lower_is_better, set_by, updated_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (game_key, level, field_key, threshold_value, 1 if lower_is_better else 0, set_by, now()),
+        )
+    conn.commit()
+
+
+def delete_game_threshold(conn, game_key, level):
+    conn.execute(
+        "DELETE FROM game_level_thresholds WHERE game_key = ? AND level = ?",
+        (game_key, level),
+    )
+    conn.commit()
+
+
+def _check_level_thresholds(conn, participant_id, game_key, results_for_game, session_id):
+    """Check if this session's results earn any new levels. Awards them and returns
+    list of newly earned level ints."""
+    XP_GAME_CONFIG, LEVEL_XP_AWARDS = _import_xp_constants()[:2]
+    new_levels = []
+    current_level = get_athlete_level(conn, participant_id, game_key)
+
+    for target_level in range(1, 6):
+        if target_level <= current_level:
+            continue  # already have it
+        threshold = get_game_threshold(conn, game_key, target_level)
+        if not threshold:
+            continue  # no threshold set yet by admin
+        field_key = threshold["field_key"]
+        threshold_val = threshold["threshold_value"]
+        lower_is_better = bool(threshold["lower_is_better"])
+        score = results_for_game.get(field_key)
+        if score is None:
+            continue  # this field wasn't recorded in the session
+        try:
+            score = float(score)
+        except (TypeError, ValueError):
+            continue
+        earned = (score <= threshold_val) if lower_is_better else (score >= threshold_val)
+        if earned:
+            awarded = award_level(conn, participant_id, game_key, target_level, session_id)
+            if awarded:
+                new_levels.append(target_level)
+                # Award XP for the level achievement
+                xp_amount = LEVEL_XP_AWARDS.get(target_level, 0)
+                if xp_amount:
+                    award_xp(conn, participant_id, "level_achievement", xp_amount,
+                             game_key=game_key, session_id=session_id,
+                             notes=f"Earned Level {target_level} in {game_key}")
+    return new_levels
+
+
+# ── Breadth / Milestone helpers ───────────────────────────────────────────────
+
+def _has_played_game_before(conn, participant_id, game_key, current_session_id):
+    """True if there's an earlier session (not this one) with a result for this game."""
+    row = conn.execute(
+        "SELECT mr.id FROM measurement_results mr "
+        "JOIN measurement_sessions ms ON ms.id = mr.session_id "
+        "WHERE ms.participant_id = ? AND mr.game_key = ? AND ms.id != ? "
+        "ORDER BY ms.id ASC LIMIT 1",
+        (participant_id, game_key, current_session_id),
+    ).fetchone()
+    return row is not None
+
+
+def _check_all_8_in_session(conn, session_id):
+    """Return list of core game keys that have at least one result in this session."""
+    XP_GAME_CONFIG, LEVEL_XP_AWARDS, XP_RANK_TIERS, XP_PARTICIPATION, CORE_AAP_GAMES = _import_xp_constants()
+    rows = conn.execute(
+        "SELECT DISTINCT game_key FROM measurement_results WHERE session_id = ?",
+        (session_id,),
+    ).fetchall()
+    played = {r["game_key"] for r in rows}
+    return [g for g in CORE_AAP_GAMES if g in played]
+
+
+def _has_all_8_l1(conn, participant_id):
+    """True if the athlete holds L1 in all 8 core games."""
+    XP_GAME_CONFIG, LEVEL_XP_AWARDS, XP_RANK_TIERS, XP_PARTICIPATION, CORE_AAP_GAMES = _import_xp_constants()
+    for game_key in CORE_AAP_GAMES:
+        if get_athlete_level(conn, participant_id, game_key) < 1:
+            return False
+    return True
+
+
+def _has_awarded_xp_type_for_session(conn, participant_id, xp_type, session_id, game_key=None):
+    """True if this xp_type has already been awarded for this session (prevents double-up).
+    Pass game_key to restrict the check to a specific game."""
+    if game_key is not None:
+        row = conn.execute(
+            "SELECT id FROM xp_events WHERE participant_id = ? AND xp_type = ? "
+            "AND game_key = ? AND session_id = ?",
+            (participant_id, xp_type, game_key, session_id),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT id FROM xp_events WHERE participant_id = ? AND xp_type = ? AND session_id = ?",
+            (participant_id, xp_type, session_id),
+        ).fetchone()
+    return row is not None
+
+
+def _has_awarded_xp_type(conn, participant_id, xp_type):
+    """True if this xp_type has been awarded at any point (for one-time bonuses)."""
+    row = conn.execute(
+        "SELECT id FROM xp_events WHERE participant_id = ? AND xp_type = ?",
+        (participant_id, xp_type),
+    ).fetchone()
+    return row is not None
+
+
+# ── Main entry point ──────────────────────────────────────────────────────────
+
+def process_session_xp(conn, session_id, participant_id, is_formal=True):
+    """Calculate and award all XP for a completed measurement session.
+
+    Call this after saving all results for a session. Fully idempotent —
+    safe to call multiple times for the same session (duplicate guards in place).
+    is_formal=True  → formal test session (counts for levels, higher XP rates)
+    is_formal=False → self-directed session (XP only, never triggers levels)
+
+    Returns a summary dict with total_xp_awarded and breakdown list.
+    """
+    XP_GAME_CONFIG, LEVEL_XP_AWARDS, XP_RANK_TIERS, XP_PARTICIPATION, CORE_AAP_GAMES = _import_xp_constants()
+
+    awarded = []  # list of (xp_type, amount, game_key, notes) tuples for the summary
+
+    # Load all results for this session into a nested dict: {game_key: {field_key: value}}
+    rows = conn.execute(
+        "SELECT game_key, field_key, value FROM measurement_results WHERE session_id = ?",
+        (session_id,),
+    ).fetchall()
+    session_results = {}
+    for r in rows:
+        session_results.setdefault(r["game_key"], {})[r["field_key"]] = r["value"]
+
+    games_played = [gk for gk in session_results if gk in CORE_AAP_GAMES]
+
+    if not games_played:
+        return {"total_xp_awarded": 0, "breakdown": []}
+
+    participation_type = "formal_game" if is_formal else "self_directed_game"
+    pb_type = "pb_formal" if is_formal else "pb_self_directed"
+    ingame_type = "ingame_formal" if is_formal else "ingame_self"
+
+    # ── Welcome bonus (one-time ever) ────────────────────────────────────────
+    if not _has_awarded_xp_type(conn, participant_id, "welcome_bonus"):
+        amt = XP_PARTICIPATION["welcome_bonus"]
+        award_xp(conn, participant_id, "welcome_bonus", amt,
+                 session_id=session_id, notes="First session welcome bonus")
+        awarded.append(("welcome_bonus", amt, None, "Welcome bonus"))
+
+    for game_key in games_played:
+        game_results = session_results[game_key]
+        cfg = XP_GAME_CONFIG.get(game_key)
+        if not cfg:
+            continue
+
+        # ── First-time-playing bonus (per game, one-time) ─────────────────
+        if not _has_played_game_before(conn, participant_id, game_key, session_id):
+            if not conn.execute(
+                "SELECT id FROM xp_events WHERE participant_id = ? AND xp_type = 'breadth_first_game' AND game_key = ?",
+                (participant_id, game_key),
+            ).fetchone():
+                amt = XP_PARTICIPATION["first_game"]
+                award_xp(conn, participant_id, "breadth_first_game", amt,
+                         game_key=game_key, session_id=session_id,
+                         notes=f"First time playing {game_key}")
+                awarded.append(("breadth_first_game", amt, game_key, "First time"))
+
+        # ── Participation XP (per game per session) ───────────────────────
+        if not _has_awarded_xp_type_for_session(conn, participant_id, participation_type, session_id, game_key=game_key):
+            amt = XP_PARTICIPATION[participation_type]
+            award_xp(conn, participant_id, participation_type, amt,
+                     game_key=game_key, session_id=session_id,
+                     notes=f"Participation — {game_key}")
+            awarded.append((participation_type, amt, game_key, "Participation"))
+
+        # ── In-game XP from score ────────────────────────────────────────
+        if not _has_awarded_xp_type_for_session(conn, participant_id, ingame_type, session_id, game_key=game_key):
+            ingame_xp = 0
+            if cfg["xp_type"] == "count":
+                multiplier = cfg["multiplier"]
+                for field_key in cfg["score_fields"]:
+                    raw = game_results.get(field_key)
+                    if raw is not None:
+                        try:
+                            ingame_xp += int(float(raw)) * multiplier
+                        except (TypeError, ValueError):
+                            pass
+            elif cfg["xp_type"] == "improvement":
+                # Handled below under PB section for improvement games
+                pass
+
+            if ingame_xp > 0:
+                award_xp(conn, participant_id, ingame_type, ingame_xp,
+                         game_key=game_key, session_id=session_id,
+                         notes=f"In-game score — {game_key}")
+                awarded.append((ingame_type, ingame_xp, game_key, "In-game score"))
+
+        # ── PB tracking and PB XP ────────────────────────────────────────
+        primary_field = cfg.get("primary_field")
+        if primary_field and primary_field in game_results:
+            raw_score = game_results[primary_field]
+            try:
+                score = float(raw_score)
+            except (TypeError, ValueError):
+                score = None
+
+            if score is not None:
+                is_pb, improvement = update_personal_best(
+                    conn, participant_id, game_key, primary_field,
+                    score, session_id=session_id, is_formal=is_formal,
+                )
+                if is_pb and not _has_awarded_xp_type_for_session(
+                    conn, participant_id, pb_type, session_id, game_key=game_key
+                ):
+                    pb_xp = 0
+                    if cfg["xp_type"] == "improvement" and improvement is not None:
+                        # 5 XP per unit_size improvement
+                        unit_size = cfg.get("unit_size", 0.1)
+                        xp_per_unit = cfg.get("xp_per_unit", 5)
+                        units = improvement / unit_size
+                        pb_xp = max(0, int(units) * xp_per_unit)
+                    else:
+                        pb_xp = XP_PARTICIPATION[pb_type]
+
+                    if pb_xp > 0:
+                        award_xp(conn, participant_id, pb_type, pb_xp,
+                                 game_key=game_key, session_id=session_id,
+                                 notes=f"Personal best — {game_key} ({score})")
+                        awarded.append((pb_type, pb_xp, game_key, f"PB {score}"))
+
+        # ── Level threshold check (formal sessions only) ──────────────────
+        if is_formal:
+            new_levels = _check_level_thresholds(
+                conn, participant_id, game_key, game_results, session_id
+            )
+            for lvl in new_levels:
+                xp_amt = LEVEL_XP_AWARDS.get(lvl, 0)
+                awarded.append(("level_achievement", xp_amt, game_key, f"Level {lvl}"))
+
+    # ── All 8 core games in one session bonus ─────────────────────────────
+    core_in_session = _check_all_8_in_session(conn, session_id)
+    if len(core_in_session) >= 8:
+        if not _has_awarded_xp_type_for_session(conn, participant_id, "all_8_session", session_id):
+            amt = XP_PARTICIPATION["all_8_session"]
+            award_xp(conn, participant_id, "all_8_session", amt,
+                     session_id=session_id, notes="All 8 core games in one session")
+            awarded.append(("all_8_session", amt, None, "All 8 games bonus"))
+
+    # ── Breadth milestone: L1 in all 8 core games ────────────────────────
+    if is_formal and not _has_awarded_xp_type(conn, participant_id, "all_8_l1"):
+        if _has_all_8_l1(conn, participant_id):
+            amt = XP_PARTICIPATION["all_8_l1"]
+            award_xp(conn, participant_id, "all_8_l1", amt,
+                     session_id=session_id, notes="Earned Level 1 in all 8 core games")
+            awarded.append(("all_8_l1", amt, None, "L1 all 8 games milestone"))
+
+    total = sum(a[1] for a in awarded)
+    return {
+        "total_xp_awarded": total,
+        "breakdown": [
+            {"xp_type": a[0], "amount": a[1], "game_key": a[2], "notes": a[3]}
+            for a in awarded
+        ],
+    }
+
+
+def retroactive_xp_pass(conn):
+    """One-time pass: award XP for all existing formal measurement sessions.
+    Run once after deploying the XP engine. Idempotent — skips sessions that
+    already have XP events. Returns count of sessions processed."""
+    sessions = conn.execute(
+        "SELECT id, participant_id FROM measurement_sessions ORDER BY date ASC, id ASC"
+    ).fetchall()
+    processed = 0
+    for s in sessions:
+        # Skip if this session already has any XP events
+        existing = conn.execute(
+            "SELECT id FROM xp_events WHERE session_id = ? LIMIT 1", (s["id"],)
+        ).fetchone()
+        if existing:
+            continue
+        process_session_xp(conn, s["id"], s["participant_id"], is_formal=True)
+        processed += 1
+    return processed
 
 
 def cleanup_demo_data():

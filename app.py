@@ -1420,20 +1420,31 @@ def log_measurement_session(req, participant_id):
                 ))
 
         # Merge new results into existing session for this label
+        saved_session_id = None
         if session_label and confirm_replace:
             existing = db.find_session_by_label(conn, participant_id, session_label)
             if existing:
                 for (game_key, field_key, value) in results:
                     db.upsert_measurement_result(conn, existing["id"], game_key, field_key, value)
                 conn.commit()
+                saved_session_id = existing["id"]
             else:
-                db.create_measurement_session(conn, participant_id, date, coach["id"], results,
-                                              group_id=participant_group_id,
-                                              session_label=session_label, session_month=session_month)
+                saved_session_id = db.create_measurement_session(
+                    conn, participant_id, date, coach["id"], results,
+                    group_id=participant_group_id,
+                    session_label=session_label, session_month=session_month)
         else:
-            db.create_measurement_session(conn, participant_id, date, coach["id"], results,
-                                          group_id=participant_group_id,
-                                          session_label=session_label, session_month=session_month)
+            saved_session_id = db.create_measurement_session(
+                conn, participant_id, date, coach["id"], results,
+                group_id=participant_group_id,
+                session_label=session_label, session_month=session_month)
+
+        # ── XP Engine: process this session (formal test) ──────────────────
+        if saved_session_id:
+            try:
+                db.process_session_xp(conn, saved_session_id, participant_id, is_formal=True)
+            except Exception as _xp_err:
+                pass  # XP failure never blocks session save
     finally:
         conn.close()
     label_display = SESSION_LABEL_MAP.get(session_label, "") if session_label else ""
@@ -2880,6 +2891,119 @@ def participant_export_csv(req):
 # ------------------------------------------------------------------- bootstrap
 
 application = App(router, STATIC_DIR)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# XP ENGINE ROUTES
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/athlete/xp")
+def athlete_xp_page(req):
+    """Athlete-facing XP profile — rank, total points, recent events."""
+    user = require_role(req, "participant")
+    if not user:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        xp_data = db.get_athlete_xp(conn, user["id"])
+        levels = db.get_all_athlete_levels(conn, user["id"])
+    finally:
+        conn.close()
+    return Response(views.athlete_xp_page(user, xp_data, levels))
+
+
+@router.get("/coach/participants/<int:participant_id>/xp")
+def coach_participant_xp(req, participant_id):
+    """Coach view of an athlete's XP profile."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        participant = conn.execute("SELECT * FROM users WHERE id = ?", (participant_id,)).fetchone()
+        if not participant:
+            return flash_redirect("/coach", "Participant not found.")
+        xp_data = db.get_athlete_xp(conn, participant_id)
+        levels = db.get_all_athlete_levels(conn, participant_id)
+    finally:
+        conn.close()
+    return Response(views.athlete_xp_page(dict(participant), xp_data, levels, coach=dict(coach)))
+
+
+@router.get("/coach/admin/game-thresholds")
+def game_thresholds_get(req):
+    """System admin: view and set level achievement thresholds per game."""
+    coach = require_system_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        thresholds = db.get_all_thresholds(conn)
+    finally:
+        conn.close()
+    from constants import CORE_AAP_GAMES, XP_GAME_CONFIG
+    return Response(views.game_thresholds_page(coach, thresholds, CORE_AAP_GAMES, XP_GAME_CONFIG))
+
+
+@router.post("/coach/admin/game-thresholds/set")
+def game_thresholds_set(req):
+    """System admin: set or update a single game/level threshold."""
+    coach = require_system_admin(req)
+    if not coach:
+        return redirect("/login")
+    game_key  = req.form_get("game_key")
+    level     = req.form_get("level")
+    field_key = req.form_get("field_key")
+    threshold = req.form_get("threshold_value")
+    lower     = req.form_get("lower_is_better") == "1"
+    try:
+        level = int(level)
+        threshold = float(threshold)
+    except (TypeError, ValueError):
+        return flash_redirect("/coach/admin/game-thresholds", "Invalid level or threshold value.")
+    conn = db.get_conn()
+    try:
+        db.set_game_threshold(conn, game_key, level, field_key, threshold,
+                              lower_is_better=lower, set_by=coach["id"])
+    finally:
+        conn.close()
+    return flash_redirect("/coach/admin/game-thresholds",
+                          f"Threshold set: {game_key} L{level} = {threshold}")
+
+
+@router.post("/coach/admin/game-thresholds/delete")
+def game_thresholds_delete(req):
+    """System admin: remove a threshold."""
+    coach = require_system_admin(req)
+    if not coach:
+        return redirect("/login")
+    game_key = req.form_get("game_key")
+    try:
+        level = int(req.form_get("level"))
+    except (TypeError, ValueError):
+        return flash_redirect("/coach/admin/game-thresholds", "Invalid level.")
+    conn = db.get_conn()
+    try:
+        db.delete_game_threshold(conn, game_key, level)
+    finally:
+        conn.close()
+    return flash_redirect("/coach/admin/game-thresholds",
+                          f"Threshold removed: {game_key} L{level}")
+
+
+@router.post("/coach/admin/xp-retroactive")
+def xp_retroactive_pass(req):
+    """System admin: run the retroactive XP pass over all existing sessions."""
+    coach = require_system_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        processed = db.retroactive_xp_pass(conn)
+    finally:
+        conn.close()
+    return flash_redirect("/coach/admin/game-thresholds",
+                          f"Retroactive XP pass complete — {processed} sessions processed.")
 
 
 class _FastRequestHandler(WSGIRequestHandler):
