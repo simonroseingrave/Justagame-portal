@@ -12,6 +12,7 @@ from constants import (
     MEASUREMENT_GAMES,
     SPORT_SPECIFIC_GAMES,
     all_measurement_games,
+    all_active_measurement_games,
     active_measurement_games,
     games_for_max_level,
     max_game_level,
@@ -928,7 +929,7 @@ def _measurement_session_card(session, show_delete=False, participant_id=None):
         by_game.setdefault(game_key, {})[field_key] = value
 
     game_blocks = []
-    for game in all_measurement_games():
+    for game in all_active_measurement_games():
         values = by_game.get(game["key"])
         if not values:
             continue
@@ -993,7 +994,7 @@ def _calc_improvement_pct(measurement_sessions):
     latest = measurement_sessions[0]
     first  = measurement_sessions[-1]
     improvements = []
-    for game in all_measurement_games():
+    for game in all_active_measurement_games():
         for field in game["fields"] + game.get("computed", []):
             fv = first["results"].get((game["key"], field["key"]))
             lv = latest["results"].get((game["key"], field["key"]))
@@ -2071,8 +2072,6 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
 
 def participant_progress_page(coach, participant, measurement_sessions):
     """Progress page: first vs latest comparison + full trend across all sessions."""
-    from constants import all_measurement_games, MEASUREMENT_GAMES
-
     pid = participant["id"]
     n = len(measurement_sessions)
 
@@ -2118,7 +2117,7 @@ def participant_progress_page(coach, participant, measurement_sessions):
 
     # Build game sections
     sections_html = ""
-    for section in MEASUREMENT_GAMES:
+    for section in active_measurement_games():
         game_cards = ""
         for game in section["games"]:
             all_fields = game["fields"] + game.get("computed", [])
@@ -2180,7 +2179,7 @@ def participant_progress_page(coach, participant, measurement_sessions):
         trend_rows = ""
         for session in reversed(measurement_sessions):  # chronological order
             trend_rows += f'<tr><td colspan="99" style="background:var(--jag-bg); font-weight:700; font-size:12px; padding:6px 12px;">{session["date"]}</td></tr>'
-            for game in all_measurement_games():
+            for game in all_active_measurement_games():
                 all_fields = game["fields"] + game.get("computed", [])
                 game_results = [(f, session["results"].get((game["key"], f["key"]))) for f in all_fields]
                 game_results = [(f, v) for f, v in game_results if v is not None]
@@ -2209,7 +2208,7 @@ def participant_progress_page(coach, participant, measurement_sessions):
     highlights_html = ""
     if n >= 2:
         improvements = []
-        for section in MEASUREMENT_GAMES:
+        for section in active_measurement_games():
             for game in section["games"]:
                 for field in game["fields"] + game.get("computed", []):
                     fv = first["results"].get((game["key"], field["key"]))
@@ -2265,7 +2264,7 @@ def _progress_for_participant(p_name, p_id, sessions):
     first  = sessions[-1]   # oldest
     latest = sessions[0]    # most recent
     out = {}
-    for game in all_measurement_games():
+    for game in all_active_measurement_games():
         all_fields = game["fields"] + game.get("computed", [])
         for field in all_fields:
             key = (game["key"], field["key"])
@@ -2854,7 +2853,7 @@ def _overall_achievement_html(groups_data):
     athlete_count = len(all_ps)
     sections_html = ""
 
-    for section in MEASUREMENT_GAMES:
+    for section in active_measurement_games():
         game_cards = ""
         for game in section["games"]:
             all_fields = game["fields"] + game.get("computed", [])
@@ -5141,10 +5140,10 @@ def _build_game_so_map(resources):
     When multiple resources match the same game, the one with the most word
     overlap wins.
     """
-    from constants import all_measurement_games, all_sport_games, SPORT_SPECIFIC_GAMES
+    from constants import all_active_measurement_games, all_sport_games, SPORT_SPECIFIC_GAMES
     result = {}  # game_key → (overlap_count, self_org phrase)
 
-    all_games = all_measurement_games()
+    all_games = all_active_measurement_games()
     for sport_sections in SPORT_SPECIFIC_GAMES.values():
         for section in sport_sections:
             all_games.extend(section["games"])
@@ -5221,7 +5220,7 @@ def baseline_report_page(coach, group, athletes_data, resources=None):
     ordered most-recent-first; we use sessions[-1] as the baseline.
     resources: list of resource rows (for self-organisation tag matching).
     """
-    from constants import find_any_game, MEASUREMENT_GAMES, all_measurement_games
+    from constants import find_any_game
 
     today = _dt.date.today().strftime("%d %B %Y")
     group_name = group["name"] if group else "All Athletes"
@@ -5246,7 +5245,7 @@ def baseline_report_page(coach, group, athletes_data, resources=None):
     # Sort used_cols by game order in MEASUREMENT_GAMES
     col_order = {}
     idx = 0
-    for section in MEASUREMENT_GAMES:
+    for section in active_measurement_games():
         for game in section["games"]:
             for f in game.get("fields", []) + game.get("computed", []):
                 col_order[(game["key"], f["key"])] = idx
@@ -5292,7 +5291,7 @@ def progress_report_page(coach, group, athletes_data, resources=None):
     Only athletes with >= 2 sessions appear.
     resources: list of resource rows (for self-organisation tag matching).
     """
-    from constants import find_any_game, MEASUREMENT_GAMES, all_measurement_games
+    from constants import find_any_game
 
     today = _dt.date.today().strftime("%d %B %Y")
     group_name = group["name"] if group else "All Athletes"
@@ -5323,7 +5322,7 @@ def progress_report_page(coach, group, athletes_data, resources=None):
 
     col_order = {}
     idx = 0
-    for section in MEASUREMENT_GAMES:
+    for section in active_measurement_games():
         for game in section["games"]:
             for f in game.get("fields", []) + game.get("computed", []):
                 col_order[(game["key"], f["key"])] = idx
@@ -5425,7 +5424,7 @@ def group_session_page(coach, participants, groups=None, session_types=None):
     field_opts = '<option value="">— Select field —</option>'
     fields_data = {}   # composite_key -> {game_key, game_name, field_key, label, type}
 
-    for section in MEASUREMENT_GAMES:
+    for section in active_measurement_games():
         for game in section["games"]:
             field_opts += f'<optgroup label="{esc(game["name"])}">'
             for f in game["fields"]:
@@ -7214,7 +7213,6 @@ def resources_report_page(user, all_folders, org=None, orgs=None):
 
 
 def scores_import_form(user, groups=None, orgs=None, error=None):
-    from constants import MEASUREMENT_GAMES
     error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
     groups = groups or []
     orgs = orgs or []
@@ -7244,7 +7242,7 @@ def scores_import_form(user, groups=None, orgs=None, error=None):
 
     # Build a reference table of column names
     col_rows = ""
-    for section in MEASUREMENT_GAMES:
+    for section in active_measurement_games():
         for game in section["games"]:
             for field in game.get("fields", []):
                 col_rows += (

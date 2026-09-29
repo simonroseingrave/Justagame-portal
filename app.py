@@ -22,7 +22,7 @@ from core import Router, Response, App, redirect
 from urllib.parse import urlencode
 import db
 from auth import verify_password, hash_password, new_session_token, generate_temp_password
-from constants import APP_NAME, all_measurement_games, SESSION_TYPES, SESSION_LABEL_MAP
+from constants import APP_NAME, all_measurement_games, all_active_measurement_games, SESSION_TYPES, SESSION_LABEL_MAP
 import views
 import mailer
 
@@ -897,7 +897,7 @@ def session_sheet_pdf_post(req):
     coach = require_staff(req)
     if not coach:
         return redirect("/login")
-    from constants import MEASUREMENT_GAMES, SPORT_SPECIFIC_GAMES, find_measurement_game
+    from constants import active_measurement_games, SPORT_SPECIFIC_GAMES, find_measurement_game
     session_label  = req.form_get("session_label") or ""
     session_month  = req.form_get("session_month") or ""
     group_id_raw   = req.form_get("group_id") or ""
@@ -954,7 +954,7 @@ def session_sheet_pdf_post(req):
     # Group by game_key preserving order
     from collections import OrderedDict
     games_fields = OrderedDict()
-    all_games = [g for section in MEASUREMENT_GAMES for g in section["games"]]
+    all_games = [g for section in active_measurement_games() for g in section["games"]]
     for sf in selected_fields:
         if "||" not in sf:
             continue
@@ -1473,7 +1473,7 @@ def log_measurement_session(req, participant_id):
     date = (session_month + "-01") if session_month else (req.form_get("date") or db.today())
 
     results = []
-    for game in all_measurement_games():
+    for game in all_active_measurement_games():
         field_values = {}
         for field in game["fields"]:
             raw = req.form_get(f"mg__{game['key']}__{field['key']}").strip()
@@ -2700,7 +2700,7 @@ def scores_import_template(req):
     coach = require_admin(req)
     if not coach:
         return redirect("/login")
-    from constants import MEASUREMENT_GAMES
+    from constants import active_measurement_games
 
     group_id_raw = req.query.get("group_id", [""])[0].strip()
     org_id_raw   = req.query.get("org_id",   [""])[0].strip()
@@ -2740,7 +2740,7 @@ def scores_import_template(req):
 
     # Header: athlete_number, name (reference), then all score columns
     headers = ["athlete_number", "name"]
-    for section in MEASUREMENT_GAMES:
+    for section in active_measurement_games():
         for game in section["games"]:
             for field in game.get("fields", []):
                 headers.append(f"{game['key']}.{field['key']}")
@@ -2766,7 +2766,7 @@ def scores_import_template(req):
 @router.post("/coach/scores/import")
 def scores_import_post(req):
     import csv, io
-    from constants import find_any_game, all_measurement_games, MEASUREMENT_GAMES
+    from constants import find_any_game, active_measurement_games
     coach = require_admin(req)
     if not coach:
         return redirect("/login")
@@ -2883,7 +2883,7 @@ def scores_import_post(req):
             for gk, fk, val in raw_results:
                 by_game[gk][fk] = val
 
-            for section in MEASUREMENT_GAMES:
+            for section in active_measurement_games():
                 for game in section["games"]:
                     gk = game["key"]
                     if gk not in by_game:
@@ -3222,7 +3222,7 @@ def self_directed_entry_post(req, event_id):
 
         # Collect results (same pattern as formal session recording)
         results = []
-        for game in all_measurement_games():
+        for game in all_active_measurement_games():
             field_values = {}
             for field in game["fields"]:
                 raw = (req.form_get(f"mg__{game['key']}__{field['key']}") or "").strip()

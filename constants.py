@@ -208,13 +208,14 @@ def max_game_level():
 
 
 def games_for_max_level(max_level=None):
-    """Return MEASUREMENT_GAMES sections filtered to games up to max_level.
-    If max_level is None, all games are returned (no filtering).
+    """Return active (non-deprecated, non-hidden-field) game sections filtered to max_level.
+    If max_level is None, all active games are returned.
     """
+    source = active_measurement_games()  # already strips deprecated + hidden fields
     if max_level is None:
-        return MEASUREMENT_GAMES
+        return source
     result = []
-    for section in MEASUREMENT_GAMES:
+    for section in source:
         filtered_games = [g for g in section["games"] if g.get("level", 1) <= max_level]
         if filtered_games:
             result.append({"section": section["section"], "games": filtered_games})
@@ -462,6 +463,13 @@ def active_measurement_games():
         if active_games:
             result.append({"section": section["section"], "games": active_games})
     return result
+
+
+def all_active_measurement_games():
+    """Flat list of active game dicts (no deprecated, hidden fields stripped).
+    Use wherever all_measurement_games() was used for display/history rendering.
+    """
+    return [game for section in active_measurement_games() for game in section["games"]]
 
 
 def best_one_foot_score(session_data):
