@@ -1635,7 +1635,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
       <a class="btn btn-primary" href="/coach/participants/new">+ Add Participant</a>
       <button type="button" class="btn btn-primary" onclick="var p=document.getElementById('create-group-panel');p.style.display=p.style.display==='none'?'block':'none';">+ Create Group</button>
       <a class="btn btn-primary" href="/coach/session">Record Session</a>
-      {'<a class="btn btn-ghost" href="/coach/participants/import" title="Bulk-import athletes from CSV">&#8679; Import Athletes</a><a class="btn btn-ghost" href="/coach/participants/export.csv" title="Export all athletes with new temp passwords">&#8681; Export Athletes</a><a class="btn btn-ghost" href="/coach/scores/import" title="Bulk-import test scores from CSV">&#8679; Import Scores</a><a class="btn btn-ghost" href="/coach/admin/game-thresholds" title="Set XP level thresholds and run retroactive XP pass">&#9881; XP Thresholds</a>' if is_admin else ''}
+      {'<a class="btn btn-ghost" href="/coach/participants/import" title="Bulk-import athletes from CSV">&#8679; Import Athletes</a><a class="btn btn-ghost" href="/coach/participants/export.csv" title="Export all athletes with new temp passwords">&#8681; Export Athletes</a><a class="btn btn-ghost" href="/coach/scores/import" title="Bulk-import test scores from CSV">&#8679; Import Scores</a><a class="btn btn-ghost" href="/coach/admin/game-thresholds" title="Set XP level thresholds and run retroactive XP pass">&#9881; XP Thresholds</a><a class="btn btn-ghost" href="/coach/admin/score-distribution" title="View score percentile distributions to inform threshold setting">&#128202; Score Distribution</a>' if is_admin else ''}
     </div>
     {create_group_form}""" if is_admin else ""
 
@@ -8219,3 +8219,174 @@ def athlete_leaderboard_page(athlete, ranked_athletes, group_name=""):
       {rows_html}
     </div>"""
     return layout("Leaderboard", body, user=athlete, active_nav="leaderboard")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# SCORE DISTRIBUTION REPORT  (system admin only)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def score_distribution_page(coach, distributions):
+    """
+    distributions: list of dicts, one per core game:
+      {
+        game_key, display_name, field_key, lower_is_better,
+        n, min_val, max_val, mean,
+        p25, p50, p75, p90,
+        suggested: {1: val, 2: val, 3: val, 4: val, 5: val}
+      }
+    """
+    LEVEL_C = {1: ("#1EBE8B","#fff"), 2: ("#F0A82E","#2D323B"),
+               3: ("#2D323B","#fff"), 4: ("#F97316","#fff"), 5: ("#8B5CF6","#fff")}
+
+    def _fmt(v, lower=False):
+        if v is None:
+            return '<span style="color:#9CA3AF;">—</span>'
+        if lower:
+            return f'{v:.2f}s'
+        return f'{v:g}'
+
+    cards_html = ""
+    for d in distributions:
+        lower = d.get("lower_is_better", False)
+        n = d.get("n", 0)
+        if n == 0:
+            cards_html += f"""
+            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;
+                        padding:20px 24px;margin-bottom:20px;opacity:0.6;">
+              <div style="font-size:15px;font-weight:700;color:#2D323B;margin-bottom:4px;">
+                {esc(d['display_name'])}
+              </div>
+              <div style="font-size:13px;color:#9CA3AF;">No scores recorded yet.</div>
+            </div>"""
+            continue
+
+        # Distribution bar — visual spread
+        mn, mx = d.get("min_val", 0), d.get("max_val", 1)
+        rng = mx - mn or 1
+
+        def _bar_pos(v):
+            return max(0, min(100, round((v - mn) / rng * 100)))
+
+        markers = [
+            ("P25", d["p25"], "#9CA3AF"),
+            ("Mean", d["mean"], "#2D323B"),
+            ("P75", d["p75"], "#F0A82E"),
+            ("P90", d["p90"], "#F97316"),
+        ]
+        marker_html = ""
+        for label, val, col in markers:
+            if val is None:
+                continue
+            pos = _bar_pos(val)
+            marker_html += f"""
+            <div style="position:absolute;left:{pos}%;top:0;height:100%;
+                        border-left:2px solid {col};"></div>
+            <div style="position:absolute;left:{pos}%;top:-18px;
+                        transform:translateX(-50%);font-size:10px;font-weight:700;color:{col};
+                        white-space:nowrap;">{label}: {_fmt(val, lower)}</div>"""
+
+        bar_html = f"""
+        <div style="position:relative;margin:28px 0 8px;">
+          {marker_html}
+          <div style="height:10px;background:#F3F4F5;border-radius:999px;overflow:visible;
+                      border:1px solid #E5E7EB;position:relative;"></div>
+          <div style="display:flex;justify-content:space-between;font-size:10px;
+                      color:#9CA3AF;margin-top:4px;">
+            <span>Min {_fmt(mn, lower)}</span>
+            <span>Max {_fmt(mx, lower)}</span>
+          </div>
+        </div>"""
+
+        # Stats row
+        stats = [
+            ("n", str(n), "#2D323B"),
+            ("Min", _fmt(d.get("min_val"), lower), "#6E737B"),
+            ("P25", _fmt(d.get("p25"), lower), "#9CA3AF"),
+            ("Median", _fmt(d.get("p50"), lower), "#6E737B"),
+            ("Mean", _fmt(d.get("mean"), lower), "#2D323B"),
+            ("P75", _fmt(d.get("p75"), lower), "#F0A82E"),
+            ("P90", _fmt(d.get("p90"), lower), "#F97316"),
+            ("Max", _fmt(d.get("max_val"), lower), "#6E737B"),
+        ]
+        stats_html = "".join(
+            f"""<div style="text-align:center;flex:1;min-width:56px;">
+              <div style="font-size:14px;font-weight:800;color:{col};">{val}</div>
+              <div style="font-size:10px;color:#9CA3AF;margin-top:2px;">{lbl}</div>
+            </div>"""
+            for lbl, val, col in stats
+        )
+
+        # Suggested thresholds badges
+        sugg = d.get("suggested", {})
+        sugg_html = ""
+        for lvl in range(1, 6):
+            sv = sugg.get(lvl)
+            bg, fg = LEVEL_C.get(lvl, ("#E5E7EB", "#2D323B"))
+            sv_str = _fmt(sv, lower) if sv is not None else "—"
+            sugg_html += f"""
+            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;
+                        border-bottom:1px solid #F3F4F5;">
+              <span style="font-size:11px;font-weight:700;background:{bg};color:{fg};
+                           border-radius:999px;padding:1px 8px;min-width:28px;text-align:center;">
+                L{lvl}
+              </span>
+              <span style="font-size:13px;font-weight:600;color:#2D323B;">{sv_str}</span>
+              {'<span style="font-size:10px;color:#9CA3AF;">(lower is better)</span>' if lower and sv is not None else ''}
+            </div>"""
+
+        lower_note = ' <span style="font-size:11px;color:#6E737B;font-weight:400;">(lower = better)</span>' if lower else ''
+        cards_html += f"""
+        <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;
+                    padding:20px 24px;margin-bottom:20px;">
+          <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
+            <div style="font-size:16px;font-weight:800;color:#2D323B;">{esc(d['display_name'])}</div>
+            <div style="font-size:12px;color:#9CA3AF;">field: <code>{esc(d['field_key'])}</code></div>
+            {lower_note}
+          </div>
+          {bar_html}
+          <div style="display:flex;flex-wrap:wrap;gap:4px;padding:14px 0;
+                      border-top:1px solid #F3F4F5;border-bottom:1px solid #F3F4F5;
+                      margin-bottom:14px;">
+            {stats_html}
+          </div>
+          <div style="font-size:12px;font-weight:700;color:#2D323B;margin-bottom:6px;
+                      text-transform:uppercase;letter-spacing:0.05em;">
+            Suggested Thresholds
+          </div>
+          <div style="font-size:11px;color:#6E737B;margin-bottom:8px;">
+            L1 ≈ just above mean &nbsp;·&nbsp;
+            L2 ≈ P75 &nbsp;·&nbsp;
+            L3 ≈ midpoint P75–P90 &nbsp;·&nbsp;
+            L4 ≈ P90 &nbsp;·&nbsp;
+            L5 ≈ beyond P90.
+            These are starting points — set final values in
+            <a href="/coach/admin/game-thresholds" style="color:#2D323B;font-weight:600;">
+              XP Thresholds</a>.
+          </div>
+          {sugg_html}
+        </div>"""
+
+    body = f"""
+    <div style="max-width:800px;padding-top:28px;">
+      <div style="margin-bottom:24px;">
+        <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 4px;">
+          Score Distribution Report
+        </h2>
+        <p style="font-size:13px;color:#6E737B;margin:0;">
+          Percentiles calculated across all recorded scores for each core game's primary
+          level-threshold field. Use these to set JAG Standard thresholds in
+          <a href="/coach/admin/game-thresholds" style="color:#2D323B;font-weight:600;">
+            XP Thresholds</a>.
+        </p>
+      </div>
+      <div style="background:#EFF6FF;border-left:4px solid #2D323B;border-radius:8px;
+                  padding:12px 16px;margin-bottom:24px;font-size:13px;color:#2D323B;">
+        <strong>Reading this report:</strong> P25 = 25th percentile (bottom quarter of athletes),
+        P75 = top quarter threshold, P90 = top 10%. The bar shows relative spread —
+        P75 (gold) and P90 (orange) markers indicate natural level break points.
+        Suggested thresholds are computed automatically; always review against programme context.
+      </div>
+      {cards_html}
+    </div>"""
+
+    return layout("Score Distribution", body, user=coach, active_nav="dashboard")

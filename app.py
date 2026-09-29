@@ -3350,6 +3350,120 @@ def coach_participant_xp(req, participant_id):
     return Response(views.athlete_xp_page(dict(participant), xp_data, levels, coach=dict(coach)))
 
 
+@router.get("/coach/admin/score-distribution")
+def score_distribution_get(req):
+    """System admin: score percentile distribution report for all core games."""
+    coach = require_system_admin(req)
+    if not coach:
+        return redirect("/login")
+
+    from constants import CORE_AAP_GAMES, XP_GAME_CONFIG, GAME_DISPLAY_NAMES
+
+    def _percentile(sorted_vals, p):
+        n = len(sorted_vals)
+        if n == 0:
+            return None
+        i = (p / 100) * (n - 1)
+        lo = int(i)
+        hi = lo + 1
+        if hi >= n:
+            return sorted_vals[lo]
+        frac = i - lo
+        return sorted_vals[lo] + frac * (sorted_vals[hi] - sorted_vals[lo])
+
+    distributions = []
+    conn = db.get_conn()
+    try:
+        for game_key in CORE_AAP_GAMES:
+            cfg = XP_GAME_CONFIG.get(game_key, {})
+            score_fields = cfg.get("score_fields", [])
+            lower = cfg.get("lower_is_better", False)
+
+            # Primary field is the first score_field (what we threshold on)
+            if not score_fields:
+                continue
+            primary_field = score_fields[0]
+
+            rows = conn.execute(
+                """
+                SELECT mr.value
+                FROM measurement_results mr
+                JOIN measurement_sessions ms ON ms.id = mr.session_id
+                WHERE mr.game_key = ? AND mr.field_key = ? AND mr.value IS NOT NULL
+                ORDER BY ms.created_at ASC
+                """,
+                (game_key, primary_field),
+            ).fetchall()
+
+            vals = sorted([float(r["value"]) for r in rows])
+            n = len(vals)
+
+            if n == 0:
+                distributions.append({
+                    "game_key": game_key,
+                    "display_name": GAME_DISPLAY_NAMES.get(game_key, game_key),
+                    "field_key": primary_field,
+                    "lower_is_better": lower,
+                    "n": 0,
+                })
+                continue
+
+            mean = sum(vals) / n
+            p25 = _percentile(vals, 25)
+            p50 = _percentile(vals, 50)
+            p75 = _percentile(vals, 75)
+            p90 = _percentile(vals, 90)
+
+            # Suggested thresholds:
+            # Lower-is-better (Skipping Rope Sprint): smaller = better, so L1 = just below mean
+            # Higher-is-better: L1=just above mean, L2≈P75, L3=mid P75–P90, L4≈P90, L5=beyond
+            if lower:
+                # For time, lower = harder to achieve → L1 is easiest (highest time)
+                # L1 = just below mean (slightly better than average)
+                # L2 = P25 (top quarter)
+                # L3 = mid between P25 and P10
+                # L4 = P10
+                # L5 = beyond P10
+                p10 = _percentile(vals, 10)
+                suggested = {
+                    1: round(mean * 0.97, 2) if mean else None,
+                    2: round(p25, 2) if p25 else None,
+                    3: round((p25 + p10) / 2, 2) if p25 and p10 else None,
+                    4: round(p10, 2) if p10 else None,
+                    5: round(p10 * 0.92, 2) if p10 else None,
+                }
+            else:
+                mid_p75_p90 = ((p75 or 0) + (p90 or 0)) / 2 if p75 and p90 else None
+                beyond_p90 = (p90 * 1.10) if p90 else None
+                suggested = {
+                    1: round(mean * 1.03, 1) if mean else None,
+                    2: round(p75, 1) if p75 else None,
+                    3: round(mid_p75_p90, 1) if mid_p75_p90 else None,
+                    4: round(p90, 1) if p90 else None,
+                    5: round(beyond_p90, 1) if beyond_p90 else None,
+                }
+
+            distributions.append({
+                "game_key": game_key,
+                "display_name": GAME_DISPLAY_NAMES.get(game_key, game_key),
+                "field_key": primary_field,
+                "lower_is_better": lower,
+                "n": n,
+                "min_val": vals[0],
+                "max_val": vals[-1],
+                "mean": round(mean, 2),
+                "p25": round(p25, 2) if p25 is not None else None,
+                "p50": round(p50, 2) if p50 is not None else None,
+                "p75": round(p75, 2) if p75 is not None else None,
+                "p90": round(p90, 2) if p90 is not None else None,
+                "suggested": suggested,
+            })
+    finally:
+        conn.close()
+
+    return Response(views.score_distribution_page(coach, distributions))
+
+
 @router.get("/coach/admin/game-thresholds")
 def game_thresholds_get(req):
     """System admin: view and set level achievement thresholds per game."""
