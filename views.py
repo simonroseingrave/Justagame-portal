@@ -134,21 +134,57 @@ def layout(title, body, user=None, flash=None, active_nav=None):
     nav = ""
     if user:
         if user["role"] in ("practitioner", "org_admin", "system_admin"):
-            links = [("/coach", "Dashboard", "dashboard")]
-            if user.get("is_admin"):
-                links.append(("/coach/participants/new", "Add Participant", "new_participant"))
-            links.append(("/coach/session", "Record Session", "session"))
-            links.append(("/coach/attendance", "Attendance", "attendance"))
-            links.append(("/coach/group-hub", "Group Hub", "group_hub"))
-            links.append(("/coach/leaderboard", "Leaderboard", "leaderboard"))
-            links.append(("/coach/resources", "Resources", "resources"))
-            if user.get("is_admin"):
-                links.append(("/coach/coaches", "Practitioners", "coaches"))
-                links.append(("/coach/organisations", "Organisations", "organisations"))
-            links.append(("/coach/reports", "Statistics & Reports", "progress"))
-            if user.get("role") == "system_admin":
-                links.append(("/coach/admin/hub", "⚙ Admin Hub", "admin_hub"))
-            links.append(("/help", "Help", "help"))
+            is_admin = user.get("is_admin")
+            is_sys   = user.get("role") == "system_admin"
+
+            # Core nav — always visible
+            links = [
+                ("/coach",            "Dashboard",    "dashboard"),
+                ("/coach/session",    "Record Session", "session"),
+                ("/coach/attendance", "Attendance",   "attendance"),
+                ("/coach/group-hub",  "Group Hub",    "group_hub"),
+                ("/coach/leaderboard","Leaderboard",  "leaderboard"),
+                ("/coach/resources",  "Resources",    "resources"),
+                ("/coach/reports",    "Reports",      "progress"),
+                ("/help",             "Help",         "help"),
+            ]
+            nav_items = "".join(
+                f'<a class="nav-link{" active" if active_nav == key else ""}" href="{href}">{label}</a>'
+                for href, label, key in links
+            )
+
+            # "Manage" dropdown — org_admin and system_admin only
+            manage_html = ""
+            if is_admin:
+                manage_active = active_nav in ("new_participant", "coaches", "organisations", "admin_hub")
+                manage_items = [
+                    ("/coach/participants/new", "➕ Add Participant"),
+                    ("/coach/coaches",          "👤 Practitioners"),
+                    ("/coach/organisations",    "🏢 Organisations"),
+                ]
+                if is_sys:
+                    manage_items += [
+                        ("/coach/admin/hub",              "⚙ Admin Hub"),
+                        ("/coach/admin/score-distribution","📊 Score Distribution"),
+                        ("/coach/admin/game-thresholds",  "🎯 XP Thresholds"),
+                    ]
+                dropdown_links = "".join(
+                    f'<a class="nav-dropdown-item" href="{h}">{l}</a>'
+                    for h, l in manage_items
+                )
+                manage_html = f"""
+                <div class="nav-dropdown{' active' if manage_active else ''}">
+                  <button class="nav-link nav-dropdown-toggle" onclick="
+                    var d=this.nextElementSibling;
+                    var open=d.style.display==='block';
+                    document.querySelectorAll('.nav-dropdown-menu').forEach(function(m){{m.style.display='none';}});
+                    d.style.display=open?'none':'block';
+                    event.stopPropagation();">Manage ▾</button>
+                  <div class="nav-dropdown-menu" style="display:none;">
+                    {dropdown_links}
+                  </div>
+                </div>"""
+
         else:
             links = [("/dashboard", "My Dashboard", "dashboard"),
                      ("/athlete/self-directed", "Self-Directed", "self_directed"),
@@ -157,18 +193,44 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             if user.get("show_leaderboard"):
                 links.append(("/athlete/leaderboard", "Leaderboard", "leaderboard"))
             links.append(("/help", "Help", "help"))
-        nav_items = "".join(
-            f'<a class="nav-link{" active" if active_nav == key else ""}" href="{href}">{label}</a>'
-            for href, label, key in links
-        )
+            nav_items = "".join(
+                f'<a class="nav-link{" active" if active_nav == key else ""}" href="{href}">{label}</a>'
+                for href, label, key in links
+            )
+            manage_html = ""
+
         nav = f"""
+        <style>
+          .nav-dropdown {{ position: relative; display: inline-block; }}
+          .nav-dropdown-toggle {{ background: none; border: none; cursor: pointer;
+            font-size: inherit; font-family: inherit; padding: 0; }}
+          .nav-dropdown-menu {{
+            position: absolute; top: calc(100% + 8px); left: 0;
+            background: #fff; border: 1px solid #E5E7EB; border-radius: 10px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.12); min-width: 200px;
+            z-index: 999; padding: 6px 0;
+          }}
+          .nav-dropdown-item {{
+            display: block; padding: 8px 16px; font-size: 13px;
+            color: #2D323B; text-decoration: none; white-space: nowrap;
+          }}
+          .nav-dropdown-item:hover {{ background: #F4F5F7; }}
+          .nav-dropdown.active .nav-dropdown-toggle {{ color: var(--jag-gold, #F0A82E); font-weight: 700; }}
+        </style>
+        <script>
+          document.addEventListener('click', function() {{
+            document.querySelectorAll('.nav-dropdown-menu').forEach(function(m) {{
+              m.style.display = 'none';
+            }});
+          }});
+        </script>
         <header class="topbar">
           <div class="topbar-inner">
             <a class="brand" href="/">
               <img src="/static/img/logo.png" alt="Just A Game" class="brand-logo" />
               <span style="font-size:14px;letter-spacing:0.01em;">{APP_NAME}</span>
             </a>
-            <nav class="nav" id="main-nav">{nav_items}</nav>
+            <nav class="nav" id="main-nav">{nav_items}{manage_html}</nav>
             <div class="user-pill">
               <a href="/account/password" class="btn btn-ghost btn-sm">My Account</a>
               <a href="/logout" class="btn btn-ghost btn-sm">Log out</a>
