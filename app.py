@@ -2894,6 +2894,273 @@ application = App(router, STATIC_DIR)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# ATTENDANCE & SELF-DIRECTED ROUTES
+# ══════════════════════════════════════════════════════════════════════════════
+
+@router.get("/coach/attendance")
+def attendance_list(req):
+    """Practitioner: list recent session events."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        if coach["role"] == "system_admin":
+            events = db.list_session_events(conn)
+        else:
+            events = db.list_session_events_for_coach(conn, coach["id"])
+    finally:
+        conn.close()
+    return Response(views.attendance_list_page(coach, events))
+
+
+@router.get("/coach/attendance/new")
+def attendance_new_get(req):
+    """Practitioner: form to create a new session event (training day)."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        if coach["role"] == "system_admin":
+            groups = db.list_participant_groups(conn)
+        else:
+            gids = db.get_coach_group_ids(conn, coach["id"])
+            groups = [g for g in db.list_participant_groups(conn) if g["id"] in gids]
+    finally:
+        conn.close()
+    return Response(views.attendance_new_page(coach, groups))
+
+
+@router.post("/coach/attendance/new")
+def attendance_new_post(req):
+    """Create a session event and redirect to its roll-call page."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    group_id = req.form_get("group_id") or None
+    date = req.form_get("date") or db.today()
+    notes = req.form_get("notes") or None
+    try:
+        group_id = int(group_id) if group_id else None
+    except ValueError:
+        group_id = None
+    conn = db.get_conn()
+    try:
+        event_id = db.create_session_event(conn, group_id, date, coach["id"], notes)
+    finally:
+        conn.close()
+    return redirect(f"/coach/attendance/{event_id}/roll-call")
+
+
+@router.get("/coach/attendance/<int:event_id>/roll-call")
+def attendance_roll_call_get(req, event_id):
+    """Practitioner: tick which athletes attended this session event."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        event = db.get_session_event(conn, event_id)
+        if not event:
+            return flash_redirect("/coach/attendance", "Session not found.")
+        # Get all athletes in this group
+        if event["group_id"]:
+            athletes = conn.execute(
+                "SELECT * FROM users WHERE group_id = ? AND role = 'participant' AND active = 1 ORDER BY name",
+                (event["group_id"],),
+            ).fetchall()
+        else:
+            athletes = conn.execute(
+                "SELECT * FROM users WHERE role = 'participant' AND active = 1 ORDER BY name"
+            ).fetchall()
+        already_marked = {a["participant_id"] for a in db.get_attendance_for_event(conn, event_id)}
+    finally:
+        conn.close()
+    return Response(views.roll_call_page(coach, dict(event), athletes, already_marked))
+
+
+@router.post("/coach/attendance/<int:event_id>/roll-call")
+def attendance_roll_call_post(req, event_id):
+    """Save attendance marks for a session event."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    # Collect all checked athlete IDs from form
+    raw = req.form.get("athlete_ids", [])
+    if isinstance(raw, str):
+        raw = [raw]
+    try:
+        participant_ids = [int(x) for x in raw if x]
+    except ValueError:
+        participant_ids = []
+    conn = db.get_conn()
+    try:
+        event = db.get_session_event(conn, event_id)
+        if not event:
+            return flash_redirect("/coach/attendance", "Session not found.")
+        db.mark_attendance(conn, event_id, participant_ids, coach["id"])
+        # Award attendance milestone XP for each newly marked athlete
+        for pid in participant_ids:
+            try:
+                db.check_attendance_milestones(conn, pid, session_id=None)
+            except Exception:
+                pass
+    finally:
+        conn.close()
+    return flash_redirect(
+        f"/coach/attendance/{event_id}/roll-call",
+        f"Attendance saved — {len(participant_ids)} athlete{'s' if len(participant_ids) != 1 else ''} marked present.",
+    )
+
+
+@router.get("/coach/attendance/<int:event_id>")
+def attendance_view(req, event_id):
+    """Practitioner: view attendance summary for a session event."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        event = db.get_session_event(conn, event_id)
+        if not event:
+            return flash_redirect("/coach/attendance", "Session not found.")
+        attendees = db.get_attendance_for_event(conn, event_id)
+    finally:
+        conn.close()
+    return Response(views.attendance_view_page(coach, dict(event), attendees))
+
+
+@router.post("/coach/attendance/<int:event_id>/delete")
+def attendance_delete(req, event_id):
+    """System admin: delete a session event and its attendance records."""
+    coach = require_system_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        conn.execute("DELETE FROM session_events WHERE id = ?", (event_id,))
+        conn.commit()
+    finally:
+        conn.close()
+    return flash_redirect("/coach/attendance", "Session event deleted.")
+
+
+# ── Athlete self-directed routes ──────────────────────────────────────────────
+
+@router.get("/athlete/self-directed")
+def self_directed_home(req):
+    """Athlete: see pending sessions to score and completed self-directed history."""
+    user = require_role(req, "participant")
+    if not user:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        pending = db.get_pending_self_directed_events(conn, user["id"])
+        completed = db.get_self_directed_sessions(conn, user["id"])
+    finally:
+        conn.close()
+    return Response(views.self_directed_home_page(user, pending, completed))
+
+
+@router.get("/athlete/self-directed/<int:event_id>")
+def self_directed_entry_get(req, event_id):
+    """Athlete: score entry form for a specific session event."""
+    user = require_role(req, "participant")
+    if not user:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        # Verify athlete was actually marked as attending this event
+        attended = conn.execute(
+            "SELECT id FROM session_attendance WHERE event_id = ? AND participant_id = ?",
+            (event_id, user["id"]),
+        ).fetchone()
+        if not attended:
+            return flash_redirect("/athlete/self-directed", "You don't have access to that session.")
+        event = db.get_session_event(conn, event_id)
+        if not event:
+            return flash_redirect("/athlete/self-directed", "Session not found.")
+        # Check if already scored
+        already = conn.execute(
+            "SELECT id FROM measurement_sessions WHERE participant_id = ? "
+            "AND attendance_event_id = ? AND session_type = 'self_directed'",
+            (user["id"], event_id),
+        ).fetchone()
+    finally:
+        conn.close()
+    if already:
+        return flash_redirect("/athlete/self-directed", "You've already scored that session.")
+    return Response(views.self_directed_entry_page(user, dict(event)))
+
+
+@router.post("/athlete/self-directed/<int:event_id>")
+def self_directed_entry_post(req, event_id):
+    """Athlete: submit self-directed scores for a session."""
+    user = require_role(req, "participant")
+    if not user:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        # Verify attendance
+        attended = conn.execute(
+            "SELECT id FROM session_attendance WHERE event_id = ? AND participant_id = ?",
+            (event_id, user["id"]),
+        ).fetchone()
+        if not attended:
+            return flash_redirect("/athlete/self-directed", "You don't have access to that session.")
+        # Check not already scored
+        already = conn.execute(
+            "SELECT id FROM measurement_sessions WHERE participant_id = ? "
+            "AND attendance_event_id = ? AND session_type = 'self_directed'",
+            (user["id"], event_id),
+        ).fetchone()
+        if already:
+            return flash_redirect("/athlete/self-directed", "Already scored.")
+
+        # Collect results (same pattern as formal session recording)
+        results = []
+        for game in all_measurement_games():
+            field_values = {}
+            for field in game["fields"]:
+                raw = (req.form_get(f"mg__{game['key']}__{field['key']}") or "").strip()
+                if not raw:
+                    continue
+                try:
+                    value = float(raw)
+                except ValueError:
+                    continue
+                field_values[field["key"]] = value
+                results.append((game["key"], field["key"], value))
+            for computed in game.get("computed", []):
+                inputs = [field_values.get(k) for k in computed["of"]]
+                if all(v is not None for v in inputs):
+                    result = round(
+                        sum(inputs) if computed.get("formula") == "sum_of"
+                        else sum(inputs) / len(inputs), 2
+                    )
+                    results.append((game["key"], computed["key"], result))
+
+        if not results:
+            return flash_redirect(
+                f"/athlete/self-directed/{event_id}",
+                "No scores entered — fill in at least one field.",
+            )
+
+        session_id = db.create_self_directed_session(
+            conn, user["id"], event_id, results, logged_by=user["id"]
+        )
+        # Process XP — self-directed (is_formal=False)
+        try:
+            db.process_session_xp(conn, session_id, user["id"], is_formal=False)
+        except Exception:
+            pass
+    finally:
+        conn.close()
+    return flash_redirect("/athlete/self-directed", "Scores saved — XP awarded!")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # XP ENGINE ROUTES
 # ══════════════════════════════════════════════════════════════════════════════
 

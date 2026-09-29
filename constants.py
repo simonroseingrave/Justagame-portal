@@ -308,6 +308,9 @@ XP_PARTICIPATION = {
     "streak_3":          30,   # 3-session attendance streak
     "streak_5":          75,   # 5-session attendance streak
     "all_8_l1":          500,  # earned L1 in all 8 core games (cumulative milestone)
+    "milestone_10":      150,  # 10th attended session
+    "milestone_25":      300,  # 25th attended session
+    "milestone_50":      600,  # 50th attended session
 }
 
 

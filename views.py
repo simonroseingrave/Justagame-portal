@@ -134,6 +134,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             if user.get("is_admin"):
                 links.append(("/coach/participants/new", "Add Participant", "new_participant"))
             links.append(("/coach/session", "Record Session", "session"))
+            links.append(("/coach/attendance", "Attendance", "attendance"))
             links.append(("/coach/group-hub", "Group Hub", "group_hub"))
             links.append(("/coach/resources", "Resources", "resources"))
             if user.get("is_admin"):
@@ -143,6 +144,8 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             links.append(("/help", "Help", "help"))
         else:
             links = [("/dashboard", "My Dashboard", "dashboard"),
+                     ("/athlete/self-directed", "Self-Directed", "self_directed"),
+                     ("/athlete/xp", "My XP", "xp"),
                      ("/help", "Help", "help")]
         nav_items = "".join(
             f'<a class="nav-link{" active" if active_nav == key else ""}" href="{href}">{label}</a>'
@@ -7174,3 +7177,318 @@ def game_thresholds_page(coach, thresholds, core_games, xp_game_config):
     </div>"""
 
     return layout("Level Thresholds", body, user=coach, active_nav="dashboard")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ATTENDANCE & SELF-DIRECTED VIEWS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def attendance_list_page(coach, events):
+    rows = ""
+    for i, e in enumerate(events):
+        shade = "#F3F4F5" if i % 2 == 0 else "#fff"
+        date_str = e.get("date", "")[:10]
+        group = esc(e.get("group_name") or "—")
+        count = e.get("attendee_count", 0)
+        notes = esc(e.get("notes") or "")
+        rows += f"""
+        <tr style="background:{shade};">
+          <td style="padding:10px 14px;font-size:14px;color:#2D323B;">{esc(date_str)}</td>
+          <td style="padding:10px 14px;font-size:14px;color:#2D323B;">{group}</td>
+          <td style="padding:10px 14px;font-size:14px;color:#2D323B;text-align:center;">
+            <span style="background:#1EBE8B;color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;">{count}</span>
+          </td>
+          <td style="padding:10px 14px;font-size:13px;color:#6E737B;">{notes}</td>
+          <td style="padding:10px 14px;white-space:nowrap;">
+            <a href="/coach/attendance/{e['id']}/roll-call" class="btn btn-ghost btn-sm">Roll-Call</a>
+            <a href="/coach/attendance/{e['id']}" class="btn btn-ghost btn-sm">View</a>
+          </td>
+        </tr>"""
+    if not rows:
+        rows = '<tr><td colspan="5" style="padding:24px;text-align:center;color:#9CA3AF;font-size:13px;">No sessions yet — create one to get started.</td></tr>'
+
+    body = f"""
+    <div class="container" style="max-width:900px;padding-top:32px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
+        <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0;">Session Attendance</h2>
+        <a href="/coach/attendance/new" class="btn btn-primary">+ New Session</a>
+      </div>
+      <div style="border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:#2D323B;">
+              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Date</th>
+              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Group</th>
+              <th style="padding:10px 14px;text-align:center;font-size:12px;color:#fff;">Present</th>
+              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Notes</th>
+              <th style="padding:10px 14px;font-size:12px;color:#fff;"></th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </div>
+    </div>"""
+    return layout("Attendance", body, user=coach, active_nav="attendance")
+
+
+def attendance_new_page(coach, groups):
+    import datetime as _dt2
+    today = _dt2.date.today().isoformat()
+    group_opts = "".join(
+        f'<option value="{g["id"]}">{esc(g["name"])}</option>'
+        for g in groups
+    )
+    body = f"""
+    <div class="container" style="max-width:560px;padding-top:32px;">
+      <a href="/coach/attendance" class="btn btn-ghost btn-sm" style="margin-bottom:20px;">← Attendance</a>
+      <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 24px;">New Session</h2>
+      <form method="post" action="/coach/attendance/new">
+        <div style="margin-bottom:16px;">
+          <label style="display:block;font-weight:600;font-size:13px;margin-bottom:6px;">Group</label>
+          <select name="group_id" style="width:100%;">
+            <option value="">— All athletes —</option>
+            {group_opts}
+          </select>
+        </div>
+        <div style="margin-bottom:16px;">
+          <label style="display:block;font-weight:600;font-size:13px;margin-bottom:6px;">Date</label>
+          <input type="date" name="date" value="{today}" required style="width:100%;box-sizing:border-box;" />
+        </div>
+        <div style="margin-bottom:24px;">
+          <label style="display:block;font-weight:600;font-size:13px;margin-bottom:6px;">Notes (optional)</label>
+          <input type="text" name="notes" placeholder="e.g. Wet weather session" style="width:100%;box-sizing:border-box;" />
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button type="submit" class="btn btn-primary">Create & Take Roll-Call →</button>
+          <a href="/coach/attendance" class="btn btn-ghost">Cancel</a>
+        </div>
+      </form>
+    </div>"""
+    return layout("New Session", body, user=coach, active_nav="attendance")
+
+
+def roll_call_page(coach, event, athletes, already_marked):
+    date_str = event.get("date", "")[:10]
+    group_name = esc(event.get("group_name") or "All athletes")
+    event_id = event["id"]
+
+    athlete_checks = ""
+    for a in athletes:
+        pid = a["id"]
+        checked = "checked" if pid in already_marked else ""
+        name = esc(a.get("name", ""))
+        num = esc(a.get("athlete_number") or "")
+        athlete_checks += f"""
+        <label style="display:flex;align-items:center;gap:12px;padding:11px 16px;
+          cursor:pointer;border-radius:8px;transition:background 0.15s;"
+          onmouseover="this.style.background='#F3F4F5'" onmouseout="this.style.background=''">
+          <input type="checkbox" name="athlete_ids" value="{pid}" {checked}
+            style="width:18px;height:18px;accent-color:#2D323B;cursor:pointer;" />
+          <span style="flex:1;font-size:14px;color:#2D323B;font-weight:500;">{name}</span>
+          {f'<span style="font-size:12px;color:#6E737B;">#{num}</span>' if num else ''}
+        </label>"""
+
+    if not athlete_checks:
+        athlete_checks = '<p style="color:#9CA3AF;font-size:13px;padding:16px;">No athletes in this group.</p>'
+
+    body = f"""
+    <div class="container" style="max-width:600px;padding-top:32px;">
+      <a href="/coach/attendance" class="btn btn-ghost btn-sm" style="margin-bottom:20px;">← Attendance</a>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;">
+        <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0;">Roll-Call</h2>
+        <span style="font-size:13px;color:#6E737B;">{group_name}</span>
+      </div>
+      <div style="font-size:15px;color:#2D323B;margin-bottom:24px;">
+        <strong>{esc(date_str)}</strong>
+        {f' — {esc(event.get("notes",""))}' if event.get("notes") else ""}
+      </div>
+      <form method="post" action="/coach/attendance/{event_id}/roll-call">
+        <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;
+          overflow:hidden;margin-bottom:20px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;
+            padding:10px 16px;background:#F3F4F5;border-bottom:1px solid #E5E7EB;">
+            <span style="font-size:12px;font-weight:600;color:#6E737B;text-transform:uppercase;letter-spacing:0.06em;">Athletes</span>
+            <button type="button" onclick="toggleAll(this)"
+              style="font-size:12px;color:#2D323B;background:none;border:none;cursor:pointer;font-weight:600;">
+              Select all
+            </button>
+          </div>
+          {athlete_checks}
+        </div>
+        <div style="display:flex;gap:10px;">
+          <button type="submit" class="btn btn-primary">Save Attendance</button>
+          <a href="/coach/attendance/{event_id}" class="btn btn-ghost">View</a>
+        </div>
+      </form>
+    </div>
+    <script>
+    function toggleAll(btn) {{
+      var boxes = document.querySelectorAll('input[name="athlete_ids"]');
+      var allChecked = Array.from(boxes).every(b => b.checked);
+      boxes.forEach(b => b.checked = !allChecked);
+      btn.textContent = allChecked ? 'Select all' : 'Deselect all';
+    }}
+    </script>"""
+    return layout("Roll-Call", body, user=coach, active_nav="attendance")
+
+
+def attendance_view_page(coach, event, attendees):
+    date_str = event.get("date", "")[:10]
+    group_name = esc(event.get("group_name") or "All athletes")
+    event_id = event["id"]
+    rows = "".join(
+        f'<tr style="background:{"#F3F4F5" if i%2==0 else "#fff"};">'
+        f'<td style="padding:9px 14px;font-size:14px;color:#2D323B;">{esc(a.get("name",""))}</td>'
+        f'<td style="padding:9px 14px;font-size:13px;color:#6E737B;">#{esc(a.get("athlete_number") or "")}</td>'
+        f'<td style="padding:9px 14px;font-size:13px;color:#6E737B;">{esc((a.get("marked_at") or "")[:10])}</td>'
+        f'</tr>'
+        for i, a in enumerate(attendees)
+    ) or '<tr><td colspan="3" style="padding:20px;text-align:center;color:#9CA3AF;font-size:13px;">No athletes marked present.</td></tr>'
+
+    body = f"""
+    <div class="container" style="max-width:700px;padding-top:32px;">
+      <a href="/coach/attendance" class="btn btn-ghost btn-sm" style="margin-bottom:20px;">← Attendance</a>
+      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
+        <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0;">
+          Session — {esc(date_str)}
+        </h2>
+        <span style="font-size:13px;color:#6E737B;">{group_name}</span>
+      </div>
+      {f'<p style="font-size:13px;color:#6E737B;margin:0 0 20px;">{esc(event.get("notes",""))}</p>' if event.get("notes") else '<div style="margin-bottom:20px;"></div>'}
+      <div style="display:flex;gap:10px;margin-bottom:24px;">
+        <a href="/coach/attendance/{event_id}/roll-call" class="btn btn-primary btn-sm">Edit Roll-Call</a>
+      </div>
+      <div style="border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:#2D323B;">
+              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Athlete</th>
+              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">#</th>
+              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Marked</th>
+            </tr>
+          </thead>
+          <tbody>{rows}</tbody>
+        </table>
+      </div>
+      <p style="font-size:12px;color:#9CA3AF;margin-top:12px;text-align:right;">
+        {len(attendees)} athlete{'s' if len(attendees) != 1 else ''} present
+      </p>
+    </div>"""
+    return layout("Session Attendance", body, user=coach, active_nav="attendance")
+
+
+def self_directed_home_page(athlete, pending_events, completed_sessions):
+    name = esc(athlete.get("name", ""))
+
+    pending_html = ""
+    if pending_events:
+        for e in pending_events:
+            date_str = esc(e.get("date", "")[:10])
+            group = esc(e.get("group_name") or "")
+            pending_html += f"""
+            <a href="/athlete/self-directed/{e['id']}"
+               style="display:flex;align-items:center;justify-content:space-between;
+                 padding:14px 18px;background:#fff;border:1px solid #E5E7EB;
+                 border-radius:10px;text-decoration:none;margin-bottom:10px;
+                 transition:box-shadow 0.15s;"
+               onmouseover="this.style.boxShadow='0 2px 12px rgba(0,0,0,0.08)'"
+               onmouseout="this.style.boxShadow=''">
+              <div>
+                <div style="font-size:15px;font-weight:600;color:#2D323B;">{date_str}</div>
+                {f'<div style="font-size:12px;color:#6E737B;margin-top:2px;">{group}</div>' if group else ''}
+              </div>
+              <span style="font-size:13px;color:#F0A82E;font-weight:600;">Record scores →</span>
+            </a>"""
+    else:
+        pending_html = '<p style="font-size:14px;color:#9CA3AF;padding:16px 0;">No sessions waiting to be scored.</p>'
+
+    completed_html = ""
+    if completed_sessions:
+        for s in completed_sessions[:10]:
+            date_str = esc(s.get("date", "")[:10])
+            game_count = len({k[0] for k in s.get("results", {}).keys()})
+            completed_html += f"""
+            <div style="display:flex;align-items:center;justify-content:space-between;
+              padding:10px 16px;background:#F3F4F5;border-radius:8px;margin-bottom:8px;">
+              <span style="font-size:14px;color:#2D323B;">{date_str}</span>
+              <span style="font-size:12px;color:#6E737B;">{game_count} game{'s' if game_count != 1 else ''} scored</span>
+            </div>"""
+    else:
+        completed_html = '<p style="font-size:13px;color:#9CA3AF;">No self-directed scores recorded yet.</p>'
+
+    body = f"""
+    <div class="container" style="max-width:680px;padding-top:32px;">
+      <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 6px;">Self-Directed Sessions</h2>
+      <p style="font-size:14px;color:#6E737B;margin:0 0 28px;">
+        After attending a training session, record your own scores here to earn XP.
+        Only sessions you were marked present for are available.
+      </p>
+
+      <h3 style="font-size:15px;font-weight:700;color:#2D323B;margin:0 0 12px;">
+        Ready to score
+        {f'<span style="font-size:12px;background:#F0A82E;color:#2D323B;border-radius:999px;padding:2px 8px;margin-left:8px;">{len(pending_events)}</span>' if pending_events else ''}
+      </h3>
+      {pending_html}
+
+      <h3 style="font-size:15px;font-weight:700;color:#2D323B;margin:24px 0 12px;">Recent self-directed scores</h3>
+      {completed_html}
+
+      <div style="margin-top:28px;">
+        <a href="/athlete/xp" class="btn btn-ghost btn-sm">View my XP →</a>
+      </div>
+    </div>"""
+    return layout("Self-Directed Sessions", body, user=athlete, active_nav="self_directed")
+
+
+def self_directed_entry_page(athlete, event):
+    from constants import MEASUREMENT_GAMES
+    date_str = esc(event.get("date", "")[:10])
+    group = esc(event.get("group_name") or "")
+    event_id = event["id"]
+
+    # Build game entry cards — same pattern as group session recording
+    game_cards = ""
+    for section in MEASUREMENT_GAMES:
+        for game in section["games"]:
+            fields_html = ""
+            for field in game["fields"]:
+                ftype = field.get("type", "number")
+                unit = esc(field.get("unit", ""))
+                input_type = "number"
+                step = "0.01" if ftype == "time" else "1"
+                fields_html += f"""
+                <div style="margin-bottom:12px;">
+                  <label style="display:block;font-size:13px;font-weight:600;margin-bottom:5px;color:#2D323B;">
+                    {esc(field['label'])}
+                    {f'<span style="font-size:11px;color:#6E737B;font-weight:400;"> {unit}</span>' if unit else ''}
+                  </label>
+                  <input type="{input_type}" step="{step}" min="0"
+                    name="mg__{esc(game['key'])}__{esc(field['key'])}"
+                    style="width:120px;font-size:14px;" placeholder="—" />
+                </div>"""
+            game_cards += f"""
+            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;
+              padding:16px 20px;margin-bottom:14px;">
+              <div style="font-size:14px;font-weight:700;color:#2D323B;margin-bottom:12px;">
+                {esc(game['name'])}
+              </div>
+              {fields_html}
+            </div>"""
+
+    body = f"""
+    <div class="container" style="max-width:640px;padding-top:32px;">
+      <a href="/athlete/self-directed" class="btn btn-ghost btn-sm" style="margin-bottom:20px;">← Self-Directed</a>
+      <h2 style="font-size:20px;font-weight:700;color:#2D323B;margin:0 0 4px;">Record Your Scores</h2>
+      <p style="font-size:14px;color:#6E737B;margin:0 0 24px;">
+        Session: <strong>{date_str}</strong>{f" · {group}" if group else ""}
+        &nbsp;·&nbsp; Only fill in the games you actually played.
+      </p>
+      <form method="post" action="/athlete/self-directed/{event_id}">
+        {game_cards}
+        <div style="display:flex;gap:10px;margin-top:8px;">
+          <button type="submit" class="btn btn-primary">Save & Earn XP</button>
+          <a href="/athlete/self-directed" class="btn btn-ghost">Cancel</a>
+        </div>
+      </form>
+    </div>"""
+    return layout("Self-Directed Entry", body, user=athlete, active_nav="self_directed")

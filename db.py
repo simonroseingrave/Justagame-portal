@@ -131,6 +131,30 @@ CREATE TABLE IF NOT EXISTS resource_tag_assignments (
     PRIMARY KEY (resource_id, tag_id)
 );
 
+-- ── Attendance & Self-Directed Sessions ──────────────────────────────────
+
+-- A practitioner-created session event (one per training date per group).
+-- Serves as the validity gate for athlete self-directed score entry.
+CREATE TABLE IF NOT EXISTS session_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    group_id INTEGER REFERENCES participant_groups(id) ON DELETE SET NULL,
+    date TEXT NOT NULL,
+    notes TEXT,
+    created_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL
+);
+
+-- Which athletes attended a session event. Marked by a practitioner.
+-- One row per athlete per event. UNIQUE prevents double-marking.
+CREATE TABLE IF NOT EXISTS session_attendance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id INTEGER NOT NULL REFERENCES session_events(id) ON DELETE CASCADE,
+    participant_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    marked_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
+    created_at TEXT NOT NULL,
+    UNIQUE (event_id, participant_id)
+);
+
 -- ── XP Engine ─────────────────────────────────────────────────────────────
 
 -- Append-only XP ledger. Every XP award is a separate row.
@@ -302,6 +326,8 @@ def init_db():
         "ALTER TABLE resources ADD COLUMN self_organisation TEXT",
         "ALTER TABLE measurement_sessions ADD COLUMN session_label TEXT",
         "ALTER TABLE measurement_sessions ADD COLUMN session_month TEXT",
+        "ALTER TABLE measurement_sessions ADD COLUMN session_type TEXT NOT NULL DEFAULT 'formal'",
+        "ALTER TABLE measurement_sessions ADD COLUMN attendance_event_id INTEGER REFERENCES session_events(id)",
     ]:
         try:
             conn.execute(sql)
@@ -1581,6 +1607,195 @@ def process_session_xp(conn, session_id, participant_id, is_formal=True):
             for a in awarded
         ],
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ATTENDANCE & SELF-DIRECTED SESSION FUNCTIONS
+# ══════════════════════════════════════════════════════════════════════════════
+
+def create_session_event(conn, group_id, date, created_by, notes=None):
+    """Create a new session event (training day). Returns event_id."""
+    eid = conn.execute(
+        "INSERT INTO session_events (group_id, date, notes, created_by, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (group_id or None, date, notes or None, created_by, now()),
+    ).lastrowid
+    conn.commit()
+    return eid
+
+
+def get_session_event(conn, event_id):
+    """Return a session event dict with group name joined in."""
+    return conn.execute(
+        "SELECT se.*, pg.name AS group_name, u.name AS created_by_name "
+        "FROM session_events se "
+        "LEFT JOIN participant_groups pg ON pg.id = se.group_id "
+        "LEFT JOIN users u ON u.id = se.created_by "
+        "WHERE se.id = ?",
+        (event_id,),
+    ).fetchone()
+
+
+def list_session_events(conn, group_id=None, limit=30):
+    """List recent session events, optionally filtered by group."""
+    if group_id:
+        return conn.execute(
+            "SELECT se.*, pg.name AS group_name, "
+            "(SELECT COUNT(*) FROM session_attendance sa WHERE sa.event_id = se.id) AS attendee_count "
+            "FROM session_events se "
+            "LEFT JOIN participant_groups pg ON pg.id = se.group_id "
+            "WHERE se.group_id = ? ORDER BY se.date DESC, se.id DESC LIMIT ?",
+            (group_id, limit),
+        ).fetchall()
+    return conn.execute(
+        "SELECT se.*, pg.name AS group_name, "
+        "(SELECT COUNT(*) FROM session_attendance sa WHERE sa.event_id = se.id) AS attendee_count "
+        "FROM session_events se "
+        "LEFT JOIN participant_groups pg ON pg.id = se.group_id "
+        "ORDER BY se.date DESC, se.id DESC LIMIT ?",
+        (limit,),
+    ).fetchall()
+
+
+def list_session_events_for_coach(conn, coach_id, limit=30):
+    """Session events for groups assigned to a specific coach."""
+    group_ids = get_coach_group_ids(conn, coach_id)
+    if not group_ids:
+        return []
+    placeholders = ",".join("?" * len(group_ids))
+    return conn.execute(
+        f"SELECT se.*, pg.name AS group_name, "
+        f"(SELECT COUNT(*) FROM session_attendance sa WHERE sa.event_id = se.id) AS attendee_count "
+        f"FROM session_events se "
+        f"LEFT JOIN participant_groups pg ON pg.id = se.group_id "
+        f"WHERE se.group_id IN ({placeholders}) "
+        f"ORDER BY se.date DESC, se.id DESC LIMIT ?",
+        group_ids + [limit],
+    ).fetchall()
+
+
+def mark_attendance(conn, event_id, participant_ids, marked_by):
+    """Replace attendance for an event with the given list of participant IDs.
+    Idempotent — safe to call multiple times (replaces previous marks)."""
+    conn.execute("DELETE FROM session_attendance WHERE event_id = ?", (event_id,))
+    for pid in participant_ids:
+        conn.execute(
+            "INSERT OR IGNORE INTO session_attendance (event_id, participant_id, marked_by, created_at) "
+            "VALUES (?, ?, ?, ?)",
+            (event_id, pid, marked_by, now()),
+        )
+    conn.commit()
+
+
+def get_attendance_for_event(conn, event_id):
+    """Return list of participant dicts who attended a session event."""
+    return conn.execute(
+        "SELECT u.*, sa.created_at AS marked_at "
+        "FROM session_attendance sa "
+        "JOIN users u ON u.id = sa.participant_id "
+        "WHERE sa.event_id = ? ORDER BY u.name",
+        (event_id,),
+    ).fetchall()
+
+
+def get_attended_event_ids(conn, participant_id):
+    """Return set of event_ids the athlete has been marked present for."""
+    rows = conn.execute(
+        "SELECT event_id FROM session_attendance WHERE participant_id = ?",
+        (participant_id,),
+    ).fetchall()
+    return {r["event_id"] for r in rows}
+
+
+def count_attendance(conn, participant_id):
+    """Total number of sessions the athlete has been marked present for."""
+    row = conn.execute(
+        "SELECT COUNT(*) AS c FROM session_attendance WHERE participant_id = ?",
+        (participant_id,),
+    ).fetchone()
+    return row["c"]
+
+
+def get_pending_self_directed_events(conn, participant_id):
+    """Return session events the athlete attended but hasn't yet scored self-directed results for."""
+    return conn.execute(
+        "SELECT se.*, pg.name AS group_name "
+        "FROM session_attendance sa "
+        "JOIN session_events se ON se.id = sa.event_id "
+        "LEFT JOIN participant_groups pg ON pg.id = se.group_id "
+        "WHERE sa.participant_id = ? "
+        "AND NOT EXISTS ("
+        "  SELECT 1 FROM measurement_sessions ms "
+        "  WHERE ms.participant_id = ? AND ms.attendance_event_id = se.id "
+        "  AND ms.session_type = 'self_directed'"
+        ") "
+        "ORDER BY se.date DESC",
+        (participant_id, participant_id),
+    ).fetchall()
+
+
+def get_self_directed_sessions(conn, participant_id):
+    """Return all self-directed measurement sessions for an athlete, most recent first."""
+    sessions = conn.execute(
+        "SELECT ms.*, se.date AS event_date, pg.name AS group_name "
+        "FROM measurement_sessions ms "
+        "LEFT JOIN session_events se ON se.id = ms.attendance_event_id "
+        "LEFT JOIN participant_groups pg ON pg.id = se.group_id "
+        "WHERE ms.participant_id = ? AND ms.session_type = 'self_directed' "
+        "ORDER BY ms.date DESC, ms.id DESC",
+        (participant_id,),
+    ).fetchall()
+    out = []
+    for s in sessions:
+        rows = conn.execute(
+            "SELECT game_key, field_key, value FROM measurement_results WHERE session_id = ?",
+            (s["id"],),
+        ).fetchall()
+        d = dict(s)
+        d["results"] = {(r["game_key"], r["field_key"]): r["value"] for r in rows}
+        out.append(d)
+    return out
+
+
+def create_self_directed_session(conn, participant_id, event_id, results, logged_by=None):
+    """Create a self-directed measurement session linked to an attendance event.
+    results: iterable of (game_key, field_key, value) tuples.
+    Returns session_id."""
+    # Get the date from the event
+    event = conn.execute("SELECT date, group_id FROM session_events WHERE id = ?", (event_id,)).fetchone()
+    if not event:
+        raise ValueError(f"Session event {event_id} not found")
+    date = event["date"]
+    group_id = event["group_id"]
+
+    session_id = conn.execute(
+        "INSERT INTO measurement_sessions "
+        "(participant_id, group_id, date, logged_by, created_at, session_type, attendance_event_id) "
+        "VALUES (?, ?, ?, ?, ?, 'self_directed', ?)",
+        (participant_id, group_id, date, logged_by or participant_id, now(), event_id),
+    ).lastrowid
+    for game_key, field_key, value in results:
+        conn.execute(
+            "INSERT INTO measurement_results (session_id, game_key, field_key, value) VALUES (?, ?, ?, ?)",
+            (session_id, game_key, field_key, value),
+        )
+    conn.commit()
+    return session_id
+
+
+def check_attendance_milestones(conn, participant_id, session_id):
+    """Check and award XP for attendance-based session milestones (10th/25th/50th session).
+    Called after marking attendance. Returns list of (xp_type, amount) tuples awarded."""
+    total = count_attendance(conn, participant_id)
+    awarded = []
+    milestones = [(10, "milestone_10", 150), (25, "milestone_25", 300), (50, "milestone_50", 600)]
+    for threshold, xp_type, amount in milestones:
+        if total >= threshold and not _has_awarded_xp_type(conn, participant_id, xp_type):
+            award_xp(conn, participant_id, xp_type, amount,
+                     session_id=session_id,
+                     notes=f"{threshold}th session milestone")
+            awarded.append((xp_type, amount))
+    return awarded
 
 
 def retroactive_xp_pass(conn):
