@@ -500,8 +500,12 @@ def coach_participant_detail(req, participant_id):
         measurement_sessions = db.measurement_sessions_for(conn, participant_id)
         groups = db.list_participant_groups(conn)
         message = req.get_query("flash")
+        xp_data = db.get_athlete_xp(conn, participant_id)
+        levels = db.get_all_athlete_levels(conn, participant_id)
+        att_count = db.count_attendance(conn, participant_id)
         return Response(views.coach_participant_detail(
             coach, dict(participant), measurement_sessions, groups=groups, message=message,
+            xp_data=xp_data, levels=levels, attendance_count=att_count,
         ))
     finally:
         conn.close()
@@ -3056,10 +3060,14 @@ def attendance_roll_call_post(req, event_id):
         if not event:
             return flash_redirect("/coach/attendance", "Session not found.")
         db.mark_attendance(conn, event_id, participant_ids, coach["id"])
-        # Award attendance milestone XP for each newly marked athlete
+        # Award attendance milestone + streak XP for each newly marked athlete
         for pid in participant_ids:
             try:
                 db.check_attendance_milestones(conn, pid, session_id=None)
+            except Exception:
+                pass
+            try:
+                db.check_attendance_streak(conn, pid)
             except Exception:
                 pass
     finally:

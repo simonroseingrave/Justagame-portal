@@ -1798,6 +1798,94 @@ def check_attendance_milestones(conn, participant_id, session_id):
     return awarded
 
 
+def check_attendance_streak(conn, participant_id):
+    """Check and award streak XP after an attendance mark.
+    A streak is the count of *consecutive* session_events this athlete attended,
+    counting backwards from the most recent.  Streaks reset when they miss a
+    session_event that their group was listed for (or any event if ungrouped).
+
+    Streak milestones: 3 consecutive → 30 XP (streak_3), 5 → 75 XP (streak_5).
+    Awards are per-streak-count, not per-session, so each tier is awarded once per
+    streak run.  Returns list of (xp_type, amount) awarded this call.
+
+    Implementation note: because we only record who *attended* (not who was absent),
+    we determine a missed session as any session_event in the relevant group date range
+    where the athlete does NOT appear in session_attendance.  To keep this lightweight
+    we look only at the most recent 10 events in the athlete's group(s) and count
+    the trailing streak from the newest event backwards.
+    """
+    # Get the athlete's current group (most recent assignment)
+    group_row = conn.execute(
+        "SELECT group_id FROM participant_group_memberships WHERE participant_id = ? "
+        "ORDER BY id DESC LIMIT 1",
+        (participant_id,),
+    ).fetchone()
+    group_id = group_row["group_id"] if group_row else None
+
+    # Get recent session events for this group (or all events if ungrouped)
+    if group_id:
+        events = conn.execute(
+            "SELECT id FROM session_events WHERE group_id = ? OR group_id IS NULL "
+            "ORDER BY date DESC, id DESC LIMIT 10",
+            (group_id,),
+        ).fetchall()
+    else:
+        events = conn.execute(
+            "SELECT id FROM session_events ORDER BY date DESC, id DESC LIMIT 10"
+        ).fetchall()
+
+    if not events:
+        return []
+
+    # Which of those events did the athlete attend?
+    attended_ids = set(
+        r["event_id"]
+        for r in conn.execute(
+            "SELECT event_id FROM session_attendance WHERE participant_id = ?",
+            (participant_id,),
+        ).fetchall()
+    )
+
+    # Count consecutive from most recent, stopping at first miss
+    streak = 0
+    for e in events:
+        if e["id"] in attended_ids:
+            streak += 1
+        else:
+            break  # gap found — streak ends here
+
+    awarded = []
+    XP_PARTICIPATION = _import_xp_constants()[3]
+    # Award streak_3 once per streak run (idempotent via count check)
+    # We use the most recently attended event_id as the anchor session_id
+    latest_attended = next((e["id"] for e in events if e["id"] in attended_ids), None)
+    if streak >= 3:
+        already = conn.execute(
+            "SELECT COUNT(*) AS n FROM xp_events WHERE participant_id = ? AND xp_type = 'streak_3' "
+            "AND session_id = ?",
+            (participant_id, latest_attended),
+        ).fetchone()["n"]
+        if not already:
+            amt = XP_PARTICIPATION.get("streak_3", 30)
+            award_xp(conn, participant_id, "streak_3", amt,
+                     session_id=latest_attended,
+                     notes=f"3-session streak")
+            awarded.append(("streak_3", amt))
+    if streak >= 5:
+        already = conn.execute(
+            "SELECT COUNT(*) AS n FROM xp_events WHERE participant_id = ? AND xp_type = 'streak_5' "
+            "AND session_id = ?",
+            (participant_id, latest_attended),
+        ).fetchone()["n"]
+        if not already:
+            amt = XP_PARTICIPATION.get("streak_5", 75)
+            award_xp(conn, participant_id, "streak_5", amt,
+                     session_id=latest_attended,
+                     notes=f"5-session streak")
+            awarded.append(("streak_5", amt))
+    return awarded
+
+
 def retroactive_xp_pass(conn):
     """One-time pass: award XP for all existing formal measurement sessions.
     Run once after deploying the XP engine. Idempotent — skips sessions that

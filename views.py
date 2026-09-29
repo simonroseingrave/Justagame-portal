@@ -374,12 +374,36 @@ def _measurement_game_fieldset(game):
     """
 
 
-def measurement_games_form(participant_id, selected_label=None, selected_month=None):
+def measurement_games_form(participant_id, selected_label=None, selected_month=None,
+                           athlete_levels=None):
     """The coach-facing entry form for recording a Measurement Games test
     session -- one date, with a fieldset per game grouped under each
     section. Each field has its own quick-save button; the session is
     created lazily on the first save. A bulk-submit fallback is also
-    available via the full form."""
+    available via the full form.
+
+    athlete_levels: optional dict {game_key: highest_level} — when supplied,
+    a coloured level badge is shown next to each game name so the coach can
+    see at a glance where the athlete currently stands.
+    """
+    athlete_levels = athlete_levels or {}
+    LEVEL_COLOURS_FORM = {
+        0: ("#E5E7EB", "#6E737B"),
+        1: ("#1EBE8B", "#fff"),
+        2: ("#F0A82E", "#2D323B"),
+        3: ("#2D323B", "#fff"),
+        4: ("#F97316", "#fff"),
+        5: ("#8B5CF6", "#fff"),
+    }
+
+    def _level_badge_html(game_key):
+        lvl = athlete_levels.get(game_key, 0)
+        if lvl == 0:
+            return ""
+        bg, fg = LEVEL_COLOURS_FORM.get(lvl, ("#6E737B", "#fff"))
+        return (f'<span style="font-size:10px;font-weight:700;background:{bg};color:{fg};'
+                f'border-radius:999px;padding:1px 7px;margin-left:6px;">L{lvl}</span>')
+
     # Build game chip list and sections HTML together (Level 1 only for recording)
     all_games_for_chips = []
     for section in games_for_max_level(1):
@@ -391,7 +415,7 @@ def measurement_games_form(participant_id, selected_label=None, selected_month=N
         f' onclick="toggleChip(this)"'
         f' style="padding:5px 14px;border-radius:999px;border:2px solid #2D323B;background:#2D323B;'
         f'color:#F0A82E;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s;">'
-        f'{esc(g["name"])}</button>'
+        f'{esc(g["name"])}{_level_badge_html(g["key"])}</button>'
         for g in all_games_for_chips
     )
 
@@ -424,12 +448,28 @@ def measurement_games_form(participant_id, selected_label=None, selected_month=N
       <div id="mg-strip-pills" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
     </div>"""
 
+    def _fieldset_with_level(g):
+        """Wrap _measurement_game_fieldset and inject a level badge into the header."""
+        html = _measurement_game_fieldset(g)
+        lvl = athlete_levels.get(g["key"], 0)
+        if lvl > 0:
+            bg, fg = LEVEL_COLOURS_FORM.get(lvl, ("#6E737B", "#fff"))
+            badge = (f'<span style="font-size:10px;font-weight:700;background:{bg};color:{fg};'
+                     f'border-radius:999px;padding:1px 8px;margin-left:6px;vertical-align:middle;">L{lvl}</span>')
+            # Insert badge after the game name span in the header
+            html = html.replace(
+                f'<span style="font-size:14px;font-weight:700;color:#2D323B;">{esc(g["name"])}</span>',
+                f'<span style="font-size:14px;font-weight:700;color:#2D323B;">{esc(g["name"])}</span>{badge}',
+                1,
+            )
+        return html
+
     sections_html = completion_strip_html + chip_panel_html + "".join(f"""
     <div class="mg-section" style="margin-bottom:24px;">
       <div style="border-left:4px solid #F0A82E;padding-left:10px;margin-bottom:12px;">
         <h4 style="margin:0;font-size:15px;font-weight:700;color:var(--jag-navy);">{esc(section['section'])}</h4>
       </div>
-      {''.join(_measurement_game_fieldset(g) for g in section['games'])}
+      {''.join(_fieldset_with_level(g) for g in section['games'])}
     </div>
     """ for section in games_for_max_level(1))
 
@@ -1828,7 +1868,8 @@ def new_participant_form(user, error=None, groups=None):
     return layout("Add Participant", body, user=user, active_nav="new_participant")
 
 
-def coach_participant_detail(coach, participant, measurement_sessions, groups=None, message=None):
+def coach_participant_detail(coach, participant, measurement_sessions, groups=None, message=None,
+                             xp_data=None, levels=None, attendance_count=None):
     message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
     groups = groups or []
     current_group_id = participant.get("group_id")
@@ -1879,6 +1920,69 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
     org_val = participant.get("organisation") or ""
     org_text = (f'<p style="margin:0;font-size:13px;color:var(--jag-muted);">{esc(org_val)}</p>') if org_val else ""
     session_count = len(measurement_sessions)
+    att_count = attendance_count or 0
+
+    # ── XP summary card ───────────────────────────────────────────────────────
+    from constants import CORE_AAP_GAMES
+    xp_data = xp_data or {}
+    levels = levels or {}
+    total_xp = xp_data.get("total", 0)
+    tier = xp_data.get("tier") or {"label": "Starter", "colour": "#6E737B"}
+    tier_colour = tier["colour"]
+    tier_label = esc(tier["label"])
+    games_with_level = sum(1 for g in CORE_AAP_GAMES if levels.get(g, 0) >= 1)
+    LEVEL_COLOURS = {
+        0: ("#E5E7EB", "#6E737B"),
+        1: ("#1EBE8B", "#fff"),
+        2: ("#F0A82E", "#2D323B"),
+        3: ("#2D323B", "#fff"),
+        4: ("#F97316", "#fff"),
+        5: ("#8B5CF6", "#fff"),
+    }
+    level_badges = ""
+    from constants import find_measurement_game
+    for gk in CORE_AAP_GAMES:
+        gdef = find_measurement_game(gk)
+        gname = esc(gdef["name"][:22] + ("…" if len(gdef["name"]) > 22 else "")) if gdef else esc(gk)
+        lvl = levels.get(gk, 0)
+        bg, fg = LEVEL_COLOURS.get(lvl, ("#E5E7EB", "#6E737B"))
+        label = f"L{lvl}" if lvl > 0 else "—"
+        level_badges += (
+            f'<div style="display:flex;align-items:center;justify-content:space-between;'
+            f'padding:5px 10px;background:#F3F4F5;border-radius:6px;">'
+            f'<span style="font-size:12px;color:#2D323B;">{gname}</span>'
+            f'<span style="font-size:11px;font-weight:700;background:{bg};color:{fg};'
+            f'border-radius:999px;padding:1px 8px;">{label}</span></div>'
+        )
+    xp_card = f"""
+    <div style="background:#2D323B;border-radius:14px;padding:18px 20px;margin-bottom:20px;
+                display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start;">
+      <div style="flex:0 0 auto;text-align:center;padding-right:20px;
+                  border-right:1px solid rgba(255,255,255,0.1);">
+        <div style="font-size:28px;font-weight:800;color:#F0A82E;line-height:1;">{total_xp:,}</div>
+        <div style="font-size:10px;color:#9CA3AF;letter-spacing:0.06em;margin-bottom:8px;">TOTAL XP</div>
+        <span style="font-size:11px;font-weight:700;background:{tier_colour};color:#fff;
+                     border-radius:999px;padding:2px 10px;">{tier_label}</span>
+        <div style="font-size:11px;color:#9CA3AF;margin-top:8px;">{att_count} sessions attended</div>
+      </div>
+      <div style="flex:1;min-width:240px;">
+        <div style="font-size:10px;font-weight:700;color:#9CA3AF;letter-spacing:0.06em;
+                    margin-bottom:8px;text-transform:uppercase;">
+          Game Levels &nbsp;
+          <span style="background:rgba(255,255,255,0.1);color:#fff;border-radius:999px;
+                       padding:1px 7px;">{games_with_level}/8</span>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+          {level_badges}
+        </div>
+      </div>
+      <div style="flex:0 0 auto;align-self:flex-end;">
+        <a href="/coach/participants/{participant['id']}/xp"
+           style="font-size:12px;color:#F0A82E;text-decoration:none;font-weight:600;">
+          Full XP history →
+        </a>
+      </div>
+    </div>"""
 
     # Build group transfer history notice
     group_lookup = {g["id"]: g["name"] for g in groups} if groups else {}
@@ -1920,15 +2024,20 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
     {message_html}
     {group_form}
     {transfer_notice}
+    {xp_card}
 
-    <section class="stat-row">
+    <section class="stat-row" style="margin-bottom:20px;">
       <div class="card stat-card">
         <div class="stat-number">{session_count}</div>
         <div class="stat-label">Test Sessions (all groups)</div>
       </div>
+      <div class="card stat-card">
+        <div class="stat-number">{att_count}</div>
+        <div class="stat-label">Sessions Attended</div>
+      </div>
     </section>
 
-    {measurement_games_form(participant['id'])}
+    {measurement_games_form(participant['id'], athlete_levels=levels)}
 
     <h2 class="section-title">Measurement Games History</h2>
     {measurement_games_history(measurement_sessions, show_delete=True, participant_id=participant['id'])}
