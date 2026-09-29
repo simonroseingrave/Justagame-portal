@@ -1073,12 +1073,12 @@ def _calc_improvement_pct(measurement_sessions):
 
 
 def participant_dashboard(user, measurement_sessions,
-                           xp_data=None, levels=None,
+                           xp_data=None, levels=None, levels_by_area=None,
                            pending_self_directed=None, thresholds=None,
                            resources=None, attendance_count=None,
                            active_window=None, already_submitted=False):
     """Full athlete dashboard: rank hero, XP progress, game level grid, guided steps, nudge."""
-    from constants import CORE_AAP_GAMES, XP_GAME_CONFIG, find_measurement_game
+    from constants import CORE_AAP_GAMES, XP_GAME_CONFIG, find_measurement_game, SCORING_AREAS, threshold_field_key
 
     first_name = esc(user['name'].split(' ')[0])
     name = user['name']
@@ -1241,33 +1241,42 @@ def participant_dashboard(user, measurement_sessions,
 
     # ── Game level grid + guided steps ───────────────────────────────────────
     thresholds = thresholds or {}
+    levels_by_area = levels_by_area or {}
     game_cards = ""
-    for game_key in CORE_AAP_GAMES:
+    for area in SCORING_AREAS:
+        game_key = area["game_key"]
+        area_field_key = area["field_key"]  # None = pooled
+        achievement_fk = area_field_key or ""
+        stored_fk = threshold_field_key(area)
+
         game_def = find_measurement_game(game_key)
-        if not game_def:
-            continue
-        game_name = esc(game_def["name"])
-        current_level = levels.get(game_key, 0)
+        area_name = esc(area["display_name"])
+
+        # Look up level by (game_key, field_key) for per-area resolution
+        current_level = levels_by_area.get((game_key, achievement_fk), 0)
         next_level = current_level + 1
         bg_col, txt_col = LEVEL_COLOURS.get(current_level, ("#6E737B", "#fff"))
         level_label = f"L{current_level}" if current_level > 0 else "—"
 
-        # Guided step: what's needed for next level
+        # Guided step: what's needed for next level (keyed by game_key|field_key|level)
         cfg = XP_GAME_CONFIG.get(game_key, {})
-        primary_field = cfg.get("primary_field")
         guide_html = ""
-        if next_level <= 5 and primary_field:
-            threshold_key = f"{game_key}|{next_level}"
+        if current_level >= 5:
+            guide_html = '<div style="font-size:11px;color:#8B5CF6;font-weight:700;margin-top:6px;">Max level reached!</div>'
+        elif next_level <= 5:
+            threshold_key = f"{game_key}|{stored_fk}|{next_level}"
             threshold_val = thresholds.get(threshold_key)
             if threshold_val is not None:
-                lower_better = cfg.get("lower_is_better", False)
+                lower_better = area["lower_is_better"]
                 direction = "or lower" if lower_better else "or more"
-                # Find field label
-                field_label = primary_field.replace("_", " ").title()
-                for f in game_def.get("fields", []) + game_def.get("computed", []):
-                    if f["key"] == primary_field:
-                        field_label = f["label"]
-                        break
+                # Find field label for the display field
+                display_field = achievement_fk or stored_fk
+                field_label = display_field.replace("_", " ").title()
+                if game_def:
+                    for f in game_def.get("fields", []) + game_def.get("computed", []):
+                        if f["key"] == display_field:
+                            field_label = f["label"]
+                            break
                 guide_html = (
                     f'<div style="font-size:11px;color:#6E737B;margin-top:6px;line-height:1.4;">'
                     f'Next level: <strong style="color:#2D323B;">{threshold_val} {direction}</strong>'
@@ -1275,16 +1284,13 @@ def participant_dashboard(user, measurement_sessions,
                     f'</div>'
                 )
             else:
-                if next_level <= 5:
-                    guide_html = '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">Thresholds not yet set</div>'
-        elif current_level >= 5:
-            guide_html = '<div style="font-size:11px;color:#8B5CF6;font-weight:700;margin-top:6px;">Max level reached!</div>'
+                guide_html = '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">Thresholds not yet set</div>'
 
         game_cards += f"""
         <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;
                     padding:14px 16px;display:flex;flex-direction:column;gap:4px;">
           <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-            <div style="font-size:13px;font-weight:600;color:#2D323B;line-height:1.3;">{game_name}</div>
+            <div style="font-size:13px;font-weight:600;color:#2D323B;line-height:1.3;">{area_name}</div>
             <div style="font-size:13px;font-weight:800;background:{bg_col};color:{txt_col};
                         border-radius:999px;padding:2px 10px;white-space:nowrap;flex-shrink:0;">{level_label}</div>
           </div>
@@ -7738,20 +7744,26 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
                   active_nav="dashboard" if coach else "dashboard")
 
 
-def game_thresholds_page(coach, thresholds, core_games, xp_game_config):
-    """System admin page for managing per-game level thresholds."""
+def game_thresholds_page(coach, thresholds, scoring_areas, xp_game_config, threshold_field_key_fn=None):
+    """System admin page for managing per-scoring-area level thresholds."""
     from constants import find_measurement_game, GAME_LEVEL_DESCRIPTIONS
-    # Build a dict for easy lookup
+    if threshold_field_key_fn is None:
+        from constants import threshold_field_key as threshold_field_key_fn
+
+    # Build a dict for easy lookup keyed by (game_key, field_key, level)
     existing = {}
     for t in thresholds:
-        existing[(t["game_key"], t["level"])] = dict(t)
+        existing[(t["game_key"], t["field_key"] or "", t["level"])] = dict(t)
 
     rows_html = ""
-    for game_key in core_games:
-        display = GAME_DISPLAY_NAMES.get(game_key, game_key)
-        cfg = xp_game_config.get(game_key, {})
-        primary_field = cfg.get("primary_field", "")
-        lower = cfg.get("lower_is_better", False)
+    for area in scoring_areas:
+        game_key = area["game_key"]
+        area_field_key = area["field_key"]  # None = pooled
+        lower = area["lower_is_better"]
+        stored_fk = threshold_field_key_fn(area)  # field_key stored in DB
+
+        display = esc(area["display_name"])
+        pooled_note = ' <span style="font-size:10px;color:#9CA3AF;">(combined groups)</span>' if area_field_key is None else ""
         game_def = find_measurement_game(game_key) or {}
         hint = game_def.get("level_threshold_hint", "")
         level_descs = GAME_LEVEL_DESCRIPTIONS.get(game_key, [])
@@ -7761,19 +7773,18 @@ def game_thresholds_page(coach, thresholds, core_games, xp_game_config):
 
         rows_html += f"""
         <tr>
-          <td colspan="5" style="padding:12px 14px 4px;background:#2D323B;">
-            <div style="font-size:13px;font-weight:700;color:#F0A82E;letter-spacing:0.04em;">{esc(display)}</div>
+          <td colspan="4" style="padding:12px 14px 4px;background:#2D323B;">
+            <div style="font-size:13px;font-weight:700;color:#F0A82E;letter-spacing:0.04em;">{display}{pooled_note}</div>
+            <div style="font-size:11px;color:#9CA3AF;margin-top:2px;">field: {esc(stored_fk)}</div>
             {hint_html}
           </td>
         </tr>"""
 
         for level in range(1, 6):
             bg, fg = _LEVEL_COLOURS.get(level, ("#E5E7EB", "#2D323B"))
-            t = existing.get((game_key, level))
+            t = existing.get((game_key, stored_fk, level))
             curr_val = f'{t["threshold_value"]:g}' if t else ""
-            curr_field = t["field_key"] if t else primary_field
             shade = "#F3F4F5" if level % 2 == 0 else "#fff"
-            # Level description hint for practitioners
             lvl_desc = level_descs[level - 1] if level_descs and level <= len(level_descs) else ""
             desc_html = (f'<div style="font-size:11px;color:#6E737B;margin-top:2px;">{esc(lvl_desc)}</div>'
                          if lvl_desc else "")
@@ -7784,7 +7795,6 @@ def game_thresholds_page(coach, thresholds, core_games, xp_game_config):
                   background:{bg};color:{fg};">L{level}</span>
                 {desc_html}
               </td>
-              <td style="padding:8px 14px;font-size:13px;color:#6E737B;vertical-align:middle;">{esc(curr_field)}</td>
               <td style="padding:8px 14px;font-size:13px;color:#2D323B;vertical-align:middle;">
                 {f'<strong>{curr_val}</strong>' if curr_val else '<em style="color:#9CA3AF;">not set</em>'}
               </td>
@@ -7792,18 +7802,18 @@ def game_thresholds_page(coach, thresholds, core_games, xp_game_config):
                 <form method="post" action="/coach/admin/game-thresholds/set"
                       style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
                   <input type="hidden" name="game_key" value="{esc(game_key)}" />
+                  <input type="hidden" name="field_key" value="{esc(stored_fk)}" />
                   <input type="hidden" name="level" value="{level}" />
                   <input type="hidden" name="lower_is_better" value="{'1' if lower else '0'}" />
-                  <input type="text" name="field_key" value="{esc(curr_field)}"
-                         style="width:180px;font-size:12px;" placeholder="field key" />
                   <input type="number" name="threshold_value" value="{esc(curr_val)}"
-                         step="0.01" style="width:90px;font-size:12px;" placeholder="value" />
+                         step="0.01" style="width:100px;font-size:12px;" placeholder="value" />
                   <button type="submit" class="btn btn-primary btn-sm" style="font-size:12px;">Save</button>
                 </form>
               </td>
               <td style="padding:8px 14px;vertical-align:middle;">
                 {f'''<form method="post" action="/coach/admin/game-thresholds/delete">
                   <input type="hidden" name="game_key" value="{esc(game_key)}" />
+                  <input type="hidden" name="field_key" value="{esc(stored_fk)}" />
                   <input type="hidden" name="level" value="{level}" />
                   <button class="btn btn-ghost btn-sm" style="font-size:12px;color:#DC2626;"
                     onclick="return confirm('Remove this threshold?')">Remove</button>
@@ -7839,7 +7849,6 @@ def game_thresholds_page(coach, thresholds, core_games, xp_game_config):
           <thead>
             <tr style="background:#2D323B;">
               <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Level</th>
-              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Field</th>
               <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Threshold</th>
               <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Update</th>
               <th style="padding:10px 14px;font-size:12px;color:#fff;"></th>

@@ -645,3 +645,80 @@ def get_improvement_level(pct):
         "current_threshold": current_threshold,
         "baseline_only": False,
     }
+
+
+# ── Scoring Areas ─────────────────────────────────────────────────────────────
+# Canonical list of all individually scored entities shown in the score
+# distribution report, threshold admin, and athlete level grid.
+#
+# field_key = None  → "pooled" game: all score_fields from XP_GAME_CONFIG are
+#                     combined for the distribution, and any one of them meeting
+#                     the threshold earns the level. The threshold is stored in
+#                     game_level_thresholds using the primary (first) score_field.
+# field_key = str   → single-field area, including both Balance Ball variants
+#                     which share a game_key but have separate achievements.
+SCORING_AREAS = [
+    {
+        "display_name": "Skipping Rope Sprint",
+        "game_key":     "skipping_rope_sprint",
+        "field_key":    "average",
+        "lower_is_better": True,
+    },
+    {
+        "display_name": "Balance Ball — Two Feet",
+        "game_key":     "balance_ball_catching",
+        "field_key":    "large_ball_wall_bounce",
+        "lower_is_better": False,
+    },
+    {
+        "display_name": "Balance Ball — One Foot",
+        "game_key":     "balance_ball_catching",
+        "field_key":    "one_foot_balance_catch",
+        "lower_is_better": False,
+    },
+    {
+        "display_name": "Grid Leap",
+        "game_key":     "leap_catching_throwing",
+        "field_key":    "points",
+        "lower_is_better": False,
+    },
+    {
+        "display_name": "Split Step",
+        "game_key":     "split_step",
+        "field_key":    "catches",
+        "lower_is_better": False,
+    },
+    {
+        "display_name": "Diamond Gates",
+        "game_key":     "diamond_games",
+        "field_key":    None,   # pooled: small_group + large_group combined
+        "lower_is_better": False,
+    },
+    {
+        "display_name": "Diamond Dribble",
+        "game_key":     "diamond_dribble",
+        "field_key":    None,   # pooled: small_group + large_group combined
+        "lower_is_better": False,
+    },
+    {
+        "display_name": "Step Up",
+        "game_key":     "diamond_gym",
+        "field_key":    "step_bench",
+        "lower_is_better": False,
+    },
+    {
+        "display_name": "Lob Scotch",
+        "game_key":     "lob_scotch",
+        "field_key":    "squares_scored",
+        "lower_is_better": False,
+    },
+]
+
+def threshold_field_key(area):
+    """Return the field_key used to store/retrieve thresholds for a scoring area.
+    Pooled areas store against the primary score_field from XP_GAME_CONFIG."""
+    if area["field_key"] is not None:
+        return area["field_key"]
+    cfg = XP_GAME_CONFIG.get(area["game_key"], {})
+    fields = cfg.get("score_fields", [])
+    return fields[0] if fields else ""

@@ -172,31 +172,34 @@ CREATE TABLE IF NOT EXISTS xp_events (
     created_at TEXT NOT NULL
 );
 
--- Append-only level achievement record. One row per (athlete × game × level).
+-- Append-only level achievement record. One row per (athlete × game × field_key × level).
+-- field_key='' for games with a single scoring area; specific value for multi-field games (Balance Ball).
 -- UNIQUE constraint prevents double-awarding. Never deleted.
 CREATE TABLE IF NOT EXISTS level_achievements (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     participant_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     game_key TEXT NOT NULL,
+    field_key TEXT NOT NULL DEFAULT '',
     level INTEGER NOT NULL,
     session_id INTEGER REFERENCES measurement_sessions(id) ON DELETE SET NULL,
     awarded_at TEXT NOT NULL,
-    UNIQUE (participant_id, game_key, level)
+    UNIQUE (participant_id, game_key, field_key, level)
 );
 
--- Admin-configurable threshold per (game × level).
+-- Admin-configurable threshold per (game × field_key × level).
+-- field_key identifies the scoring area within a game (matches SCORING_AREAS).
 -- Score at or above this value earns the level.
 -- For skipping_rope_sprint (lower_is_better), score at or BELOW earns the level.
 CREATE TABLE IF NOT EXISTS game_level_thresholds (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     game_key TEXT NOT NULL,
+    field_key TEXT NOT NULL DEFAULT '',
     level INTEGER NOT NULL,
-    field_key TEXT NOT NULL,
     threshold_value REAL NOT NULL,
     lower_is_better INTEGER NOT NULL DEFAULT 0,
     set_by INTEGER REFERENCES users(id),
     updated_at TEXT NOT NULL,
-    UNIQUE (game_key, level)
+    UNIQUE (game_key, field_key, level)
 );
 
 -- Per-athlete, per-game personal best tracking.
@@ -357,6 +360,11 @@ def init_db():
             conn.commit()
         except Exception:
             pass  # column already exists
+    # Migration: rebuild level_achievements and game_level_thresholds to add
+    # field_key discriminator column and updated UNIQUE constraints.
+    # This is safe because both tables are empty until thresholds are set and
+    # the retroactive XP pass runs. The migration is idempotent via column check.
+    _migrate_level_tables(conn)
     # Retroactively assign athlete numbers to any participants added before
     # this feature was introduced.
     assign_missing_athlete_numbers(conn)
@@ -372,6 +380,77 @@ def init_db():
     except Exception:
         pass
     conn.close()
+
+
+def _migrate_level_tables(conn):
+    """Rebuild level_achievements and game_level_thresholds to add field_key column
+    and update UNIQUE constraints to include it.
+
+    SQLite cannot ALTER TABLE to change a UNIQUE constraint, so we use the
+    standard CREATE NEW → COPY → DROP OLD → RENAME approach.
+
+    Safe to run on a fresh DB (tables are already correct from SCHEMA) and
+    idempotent on an already-migrated DB (column check skips the work).
+    """
+    # Check if level_achievements already has field_key
+    cols_la = {row[1] for row in conn.execute("PRAGMA table_info(level_achievements)").fetchall()}
+    if "field_key" not in cols_la:
+        conn.executescript("""
+            BEGIN;
+            CREATE TABLE IF NOT EXISTS level_achievements_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                participant_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+                game_key TEXT NOT NULL,
+                field_key TEXT NOT NULL DEFAULT '',
+                level INTEGER NOT NULL,
+                session_id INTEGER REFERENCES measurement_sessions(id) ON DELETE SET NULL,
+                awarded_at TEXT NOT NULL,
+                UNIQUE (participant_id, game_key, field_key, level)
+            );
+            INSERT INTO level_achievements_new
+                (id, participant_id, game_key, field_key, level, session_id, awarded_at)
+            SELECT id, participant_id, game_key, '', level, session_id, awarded_at
+            FROM level_achievements;
+            DROP TABLE level_achievements;
+            ALTER TABLE level_achievements_new RENAME TO level_achievements;
+            COMMIT;
+        """)
+
+    # Check if game_level_thresholds already has the correct UNIQUE
+    # (field_key column is already in the old schema, but UNIQUE was (game_key, level))
+    # We detect by checking if a duplicate (game_key, field_key, level) insert would fail
+    # in a way consistent with the new constraint — easiest is to check the index name.
+    idx_rows = conn.execute(
+        "SELECT name, sql FROM sqlite_master WHERE type='index' "
+        "AND tbl_name='game_level_thresholds'"
+    ).fetchall()
+    has_new_unique = any(
+        r["sql"] and "field_key" in r["sql"]
+        for r in idx_rows
+    )
+    if not has_new_unique:
+        conn.executescript("""
+            BEGIN;
+            CREATE TABLE IF NOT EXISTS game_level_thresholds_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                game_key TEXT NOT NULL,
+                field_key TEXT NOT NULL DEFAULT '',
+                level INTEGER NOT NULL,
+                threshold_value REAL NOT NULL,
+                lower_is_better INTEGER NOT NULL DEFAULT 0,
+                set_by INTEGER REFERENCES users(id),
+                updated_at TEXT NOT NULL,
+                UNIQUE (game_key, field_key, level)
+            );
+            INSERT INTO game_level_thresholds_new
+                (id, game_key, field_key, level, threshold_value, lower_is_better, set_by, updated_at)
+            SELECT id, game_key, COALESCE(field_key, ''), level, threshold_value,
+                   lower_is_better, set_by, updated_at
+            FROM game_level_thresholds;
+            DROP TABLE game_level_thresholds;
+            ALTER TABLE game_level_thresholds_new RENAME TO game_level_thresholds;
+            COMMIT;
+        """)
 
 
 def migrate_roles(conn):
@@ -1300,17 +1379,22 @@ def update_personal_best(conn, participant_id, game_key, field_key, value,
 
 # ── Level Achievements ────────────────────────────────────────────────────────
 
-def get_athlete_level(conn, participant_id, game_key):
-    """Return the highest level the athlete has earned for a game, or 0."""
+def get_athlete_level(conn, participant_id, game_key, field_key=""):
+    """Return the highest level the athlete has earned for a scoring area, or 0.
+    field_key="" means a game-level achievement (most games).
+    Pass the specific field_key for Balance Ball Two Feet / One Foot."""
     row = conn.execute(
-        "SELECT MAX(level) AS lvl FROM level_achievements WHERE participant_id = ? AND game_key = ?",
-        (participant_id, game_key),
+        "SELECT MAX(level) AS lvl FROM level_achievements "
+        "WHERE participant_id = ? AND game_key = ? AND field_key = ?",
+        (participant_id, game_key, field_key),
     ).fetchone()
     return row["lvl"] or 0
 
 
 def get_all_athlete_levels(conn, participant_id):
-    """Return dict {game_key: highest_level} for all games this athlete has levels in."""
+    """Return dict {game_key: highest_level} for all games this athlete has levels in.
+    For games with multiple scoring areas (Balance Ball), returns the max across all areas.
+    Backward-compatible format for all existing callers that key by game_key only."""
     rows = conn.execute(
         "SELECT game_key, MAX(level) AS lvl FROM level_achievements "
         "WHERE participant_id = ? GROUP BY game_key",
@@ -1319,14 +1403,28 @@ def get_all_athlete_levels(conn, participant_id):
     return {r["game_key"]: r["lvl"] for r in rows}
 
 
-def award_level(conn, participant_id, game_key, level, session_id=None):
-    """Award a level to an athlete. Idempotent (UNIQUE constraint, silently skips duplicates).
-    Returns True if a new level was awarded, False if already held."""
+def get_all_athlete_levels_by_area(conn, participant_id):
+    """Return dict keyed by (game_key, field_key) → highest level.
+    Use this for the per-scoring-area level grid (Balance Ball has two separate entries)."""
+    rows = conn.execute(
+        "SELECT game_key, field_key, MAX(level) AS lvl FROM level_achievements "
+        "WHERE participant_id = ? GROUP BY game_key, field_key",
+        (participant_id,),
+    ).fetchall()
+    return {(r["game_key"], r["field_key"] or ""): r["lvl"] for r in rows}
+
+
+def award_level(conn, participant_id, game_key, level, field_key="", session_id=None):
+    """Award a level to an athlete for a specific scoring area.
+    Idempotent (UNIQUE constraint, silently skips duplicates).
+    Returns True if a new level was awarded, False if already held.
+    field_key="" for standard games; specific field_key for multi-field games (Balance Ball)."""
     try:
         conn.execute(
-            "INSERT INTO level_achievements (participant_id, game_key, level, session_id, awarded_at) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (participant_id, game_key, level, session_id, now()),
+            "INSERT INTO level_achievements "
+            "(participant_id, game_key, field_key, level, session_id, awarded_at) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (participant_id, game_key, field_key, level, session_id, now()),
         )
         conn.commit()
         return True
@@ -1336,86 +1434,134 @@ def award_level(conn, participant_id, game_key, level, session_id=None):
 
 # ── Level Thresholds ──────────────────────────────────────────────────────────
 
-def get_game_threshold(conn, game_key, level):
-    """Return threshold row or None. Threshold has: threshold_value, field_key, lower_is_better."""
+def get_game_threshold(conn, game_key, level, field_key=None):
+    """Return threshold row or None. Looks up by (game_key, field_key, level).
+    If field_key is None, returns the first threshold for (game_key, level)."""
+    if field_key is not None:
+        return conn.execute(
+            "SELECT * FROM game_level_thresholds WHERE game_key = ? AND field_key = ? AND level = ?",
+            (game_key, field_key, level),
+        ).fetchone()
     return conn.execute(
-        "SELECT * FROM game_level_thresholds WHERE game_key = ? AND level = ?",
+        "SELECT * FROM game_level_thresholds WHERE game_key = ? AND level = ? LIMIT 1",
         (game_key, level),
     ).fetchone()
 
 
 def get_all_thresholds(conn):
-    """Return all threshold rows ordered by game_key, level."""
+    """Return all threshold rows ordered by game_key, field_key, level."""
     return conn.execute(
-        "SELECT * FROM game_level_thresholds ORDER BY game_key, level"
+        "SELECT * FROM game_level_thresholds ORDER BY game_key, field_key, level"
     ).fetchall()
 
 
 def set_game_threshold(conn, game_key, level, field_key, threshold_value,
                        lower_is_better=False, set_by=None):
-    """Insert or update a threshold. Only system_admin should call this."""
+    """Insert or update a threshold keyed by (game_key, field_key, level).
+    Only system_admin should call this."""
     existing = conn.execute(
-        "SELECT id FROM game_level_thresholds WHERE game_key = ? AND level = ?",
-        (game_key, level),
+        "SELECT id FROM game_level_thresholds WHERE game_key = ? AND field_key = ? AND level = ?",
+        (game_key, field_key, level),
     ).fetchone()
     if existing:
         conn.execute(
-            "UPDATE game_level_thresholds SET field_key = ?, threshold_value = ?, "
+            "UPDATE game_level_thresholds SET threshold_value = ?, "
             "lower_is_better = ?, set_by = ?, updated_at = ? WHERE id = ?",
-            (field_key, threshold_value, 1 if lower_is_better else 0, set_by, now(), existing["id"]),
+            (threshold_value, 1 if lower_is_better else 0, set_by, now(), existing["id"]),
         )
     else:
         conn.execute(
             "INSERT INTO game_level_thresholds "
-            "(game_key, level, field_key, threshold_value, lower_is_better, set_by, updated_at) "
+            "(game_key, field_key, level, threshold_value, lower_is_better, set_by, updated_at) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (game_key, level, field_key, threshold_value, 1 if lower_is_better else 0, set_by, now()),
+            (game_key, field_key, level, threshold_value, 1 if lower_is_better else 0, set_by, now()),
         )
     conn.commit()
 
 
-def delete_game_threshold(conn, game_key, level):
-    conn.execute(
-        "DELETE FROM game_level_thresholds WHERE game_key = ? AND level = ?",
-        (game_key, level),
-    )
+def delete_game_threshold(conn, game_key, level, field_key=None):
+    """Delete threshold(s) for a game+level. Pass field_key to delete one specific row."""
+    if field_key is not None:
+        conn.execute(
+            "DELETE FROM game_level_thresholds WHERE game_key = ? AND field_key = ? AND level = ?",
+            (game_key, field_key, level),
+        )
+    else:
+        conn.execute(
+            "DELETE FROM game_level_thresholds WHERE game_key = ? AND level = ?",
+            (game_key, level),
+        )
     conn.commit()
 
 
 def _check_level_thresholds(conn, participant_id, game_key, results_for_game, session_id):
-    """Check if this session's results earn any new levels. Awards them and returns
-    list of newly earned level ints."""
-    XP_GAME_CONFIG, LEVEL_XP_AWARDS = _import_xp_constants()[:2]
-    new_levels = []
-    current_level = get_athlete_level(conn, participant_id, game_key)
+    """Check if this session's results earn any new levels across all scoring areas
+    for this game_key. Awards them and returns list of (field_key, level) tuples earned.
 
-    for target_level in range(1, 6):
-        if target_level <= current_level:
-            continue  # already have it
-        threshold = get_game_threshold(conn, game_key, target_level)
-        if not threshold:
-            continue  # no threshold set yet by admin
-        field_key = threshold["field_key"]
-        threshold_val = threshold["threshold_value"]
-        lower_is_better = bool(threshold["lower_is_better"])
-        score = results_for_game.get(field_key)
-        if score is None:
-            continue  # this field wasn't recorded in the session
-        try:
-            score = float(score)
-        except (TypeError, ValueError):
-            continue
-        earned = (score <= threshold_val) if lower_is_better else (score >= threshold_val)
-        if earned:
-            awarded = award_level(conn, participant_id, game_key, target_level, session_id)
-            if awarded:
-                new_levels.append(target_level)
-                # Award XP for the level achievement
-                xp_amount = LEVEL_XP_AWARDS.get(target_level, 0)
-                if xp_amount:
-                    award_xp(conn, participant_id, "level_achievement", xp_amount,
-                             game_key=game_key, session_id=session_id,
-                             notes=f"Earned Level {target_level} in {game_key}")
+    Handles two cases:
+    - Standard games (field_key != ''): one threshold per level, one achievement per level.
+    - Multi-field games (Balance Ball): separate threshold + achievement per field_key.
+    - Pooled games (Diamond Gates/Dribble): any score_field meeting the threshold earns the level.
+    """
+    from constants import SCORING_AREAS, XP_GAME_CONFIG, threshold_field_key
+    XP_GAME_CONFIG_local, LEVEL_XP_AWARDS = _import_xp_constants()[:2]
+
+    new_levels = []
+
+    # Find all scoring areas for this game_key
+    areas_for_game = [a for a in SCORING_AREAS if a["game_key"] == game_key]
+    if not areas_for_game:
+        return new_levels
+
+    for area in areas_for_game:
+        area_field_key = area["field_key"]  # None = pooled, str = specific field
+        stored_field_key = threshold_field_key(area)  # key used in thresholds table
+        # field_key stored in level_achievements for this area
+        achievement_field_key = area_field_key or ""
+
+        current_level = get_athlete_level(conn, participant_id, game_key, achievement_field_key)
+
+        for target_level in range(1, 6):
+            if target_level <= current_level:
+                continue
+            threshold = get_game_threshold(conn, game_key, target_level, stored_field_key)
+            if not threshold:
+                continue
+            threshold_val = threshold["threshold_value"]
+            lower_is_better = bool(threshold["lower_is_better"])
+
+            # Determine which fields to check
+            if area_field_key is None:
+                # Pooled: check all score_fields from XP_GAME_CONFIG
+                cfg = XP_GAME_CONFIG_local.get(game_key, {})
+                fields_to_check = cfg.get("score_fields", [])
+            else:
+                fields_to_check = [area_field_key]
+
+            earned = False
+            for fk in fields_to_check:
+                score = results_for_game.get(fk)
+                if score is None:
+                    continue
+                try:
+                    score = float(score)
+                except (TypeError, ValueError):
+                    continue
+                if (score <= threshold_val) if lower_is_better else (score >= threshold_val):
+                    earned = True
+                    break
+
+            if earned:
+                awarded = award_level(conn, participant_id, game_key, target_level,
+                                      field_key=achievement_field_key, session_id=session_id)
+                if awarded:
+                    new_levels.append((achievement_field_key, target_level))
+                    xp_amount = LEVEL_XP_AWARDS.get(target_level, 0)
+                    if xp_amount:
+                        notes_area = area["display_name"]
+                        award_xp(conn, participant_id, "level_achievement", xp_amount,
+                                 game_key=game_key, session_id=session_id,
+                                 notes=f"Earned Level {target_level} in {notes_area}")
     return new_levels
 
 

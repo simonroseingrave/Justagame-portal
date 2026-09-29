@@ -246,9 +246,11 @@ def dashboard(req):
         measurement_sessions = db.measurement_sessions_for(conn, pid)
         xp_data = db.get_athlete_xp(conn, pid)
         levels = db.get_all_athlete_levels(conn, pid)
+        levels_by_area = db.get_all_athlete_levels_by_area(conn, pid)
         pending_sd = db.get_pending_self_directed_events(conn, pid)
         thresholds_raw = db.get_all_thresholds(conn)
-        thresholds = {f"{r['game_key']}|{r['level']}": r["threshold_value"]
+        # Key: "game_key|field_key|level" for per-area lookups in the level grid
+        thresholds = {f"{r['game_key']}|{r['field_key']}|{r['level']}": r["threshold_value"]
                       for r in thresholds_raw}
         att_count = db.count_attendance(conn, pid)
         # Active measurement window for this athlete's group
@@ -271,6 +273,7 @@ def dashboard(req):
         return Response(views.participant_dashboard(
             user, measurement_sessions,
             xp_data=xp_data, levels=levels,
+            levels_by_area=levels_by_area,
             pending_self_directed=pending_sd,
             thresholds=thresholds,
             resources=resources,
@@ -3386,12 +3389,12 @@ def admin_hub_get(req):
 
 @router.get("/coach/admin/score-distribution")
 def score_distribution_get(req):
-    """System admin: score percentile distribution report for all core games."""
+    """System admin: score percentile distribution report for all scoring areas."""
     coach = require_system_admin(req)
     if not coach:
         return redirect("/login")
 
-    from constants import CORE_AAP_GAMES, XP_GAME_CONFIG, GAME_DISPLAY_NAMES
+    from constants import SCORING_AREAS, XP_GAME_CONFIG, threshold_field_key
 
     def _percentile(sorted_vals, p):
         n = len(sorted_vals)
@@ -3408,25 +3411,35 @@ def score_distribution_get(req):
     distributions = []
     conn = db.get_conn()
     try:
-        for game_key in CORE_AAP_GAMES:
+        for area in SCORING_AREAS:
+            game_key = area["game_key"]
+            area_field_key = area["field_key"]  # None = pooled
+            lower = area["lower_is_better"]
+            stored_fk = threshold_field_key(area)  # field_key used in thresholds table
+
             cfg = XP_GAME_CONFIG.get(game_key, {})
-            score_fields = cfg.get("score_fields", [])
-            lower = cfg.get("lower_is_better", False)
+            # Determine which DB field_keys to pool for this scoring area
+            if area_field_key is None:
+                # Pooled: use ALL score_fields (small+large group combined)
+                fields_to_query = cfg.get("score_fields", [])
+            else:
+                fields_to_query = [area_field_key]
 
-            # Primary field is the first score_field (what we threshold on)
-            if not score_fields:
+            if not fields_to_query:
                 continue
-            primary_field = score_fields[0]
 
+            # Build parameterized IN clause
+            placeholders = ",".join("?" * len(fields_to_query))
             rows = conn.execute(
-                """
+                f"""
                 SELECT mr.value
                 FROM measurement_results mr
                 JOIN measurement_sessions ms ON ms.id = mr.session_id
-                WHERE mr.game_key = ? AND mr.field_key = ? AND mr.value IS NOT NULL
+                WHERE mr.game_key = ? AND mr.field_key IN ({placeholders})
+                  AND mr.value IS NOT NULL
                 ORDER BY ms.created_at ASC
                 """,
-                (game_key, primary_field),
+                [game_key] + fields_to_query,
             ).fetchall()
 
             vals = sorted([float(r["value"]) for r in rows])
@@ -3435,9 +3448,10 @@ def score_distribution_get(req):
             if n == 0:
                 distributions.append({
                     "game_key": game_key,
-                    "display_name": GAME_DISPLAY_NAMES.get(game_key, game_key),
-                    "field_key": primary_field,
+                    "display_name": area["display_name"],
+                    "field_key": stored_fk,
                     "lower_is_better": lower,
+                    "pooled": area_field_key is None,
                     "n": 0,
                 })
                 continue
@@ -3448,16 +3462,7 @@ def score_distribution_get(req):
             p75 = _percentile(vals, 75)
             p90 = _percentile(vals, 90)
 
-            # Suggested thresholds:
-            # Lower-is-better (Skipping Rope Sprint): smaller = better, so L1 = just below mean
-            # Higher-is-better: L1=just above mean, L2≈P75, L3=mid P75–P90, L4≈P90, L5=beyond
             if lower:
-                # For time, lower = harder to achieve → L1 is easiest (highest time)
-                # L1 = just below mean (slightly better than average)
-                # L2 = P25 (top quarter)
-                # L3 = mid between P25 and P10
-                # L4 = P10
-                # L5 = beyond P10
                 p10 = _percentile(vals, 10)
                 suggested = {
                     1: round(mean * 0.97, 2) if mean else None,
@@ -3479,9 +3484,10 @@ def score_distribution_get(req):
 
             distributions.append({
                 "game_key": game_key,
-                "display_name": GAME_DISPLAY_NAMES.get(game_key, game_key),
-                "field_key": primary_field,
+                "display_name": area["display_name"],
+                "field_key": stored_fk,
                 "lower_is_better": lower,
+                "pooled": area_field_key is None,
                 "n": n,
                 "min_val": vals[0],
                 "max_val": vals[-1],
@@ -3500,7 +3506,7 @@ def score_distribution_get(req):
 
 @router.get("/coach/admin/game-thresholds")
 def game_thresholds_get(req):
-    """System admin: view and set level achievement thresholds per game."""
+    """System admin: view and set level achievement thresholds per scoring area."""
     coach = require_system_admin(req)
     if not coach:
         return redirect("/login")
@@ -3509,8 +3515,9 @@ def game_thresholds_get(req):
         thresholds = db.get_all_thresholds(conn)
     finally:
         conn.close()
-    from constants import CORE_AAP_GAMES, XP_GAME_CONFIG
-    return Response(views.game_thresholds_page(coach, thresholds, CORE_AAP_GAMES, XP_GAME_CONFIG))
+    from constants import SCORING_AREAS, XP_GAME_CONFIG, threshold_field_key
+    return Response(views.game_thresholds_page(
+        coach, thresholds, SCORING_AREAS, XP_GAME_CONFIG, threshold_field_key))
 
 
 @router.post("/coach/admin/game-thresholds/set")
@@ -3546,13 +3553,14 @@ def game_thresholds_delete(req):
     if not coach:
         return redirect("/login")
     game_key = req.form_get("game_key")
+    field_key = req.form_get("field_key") or None
     try:
         level = int(req.form_get("level"))
     except (TypeError, ValueError):
         return flash_redirect("/coach/admin/game-thresholds", "Invalid level.")
     conn = db.get_conn()
     try:
-        db.delete_game_threshold(conn, game_key, level)
+        db.delete_game_threshold(conn, game_key, level, field_key=field_key)
     finally:
         conn.close()
     return flash_redirect("/coach/admin/game-thresholds",
