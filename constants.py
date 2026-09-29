@@ -76,20 +76,30 @@ MEASUREMENT_GAMES = [
         "section": "Points Events",
         "games": [
             {
+                # Balance Ball Catching — 1 minute
+                # Fields restructured v2:
+                #   large_ball_wall_bounce  → "Large Ball Two Feet (Wall Bounce)"  [ACTIVE — primary level field]
+                #   one_foot_balance_catch  → "Large Ball One Foot"                [ACTIVE — single foot entry]
+                #   opposite_foot_balance_catch → hidden (historical only; best-of-two computed at display time)
+                #   small_ball_wall_bounce  → hidden (historical data preserved, not entered on new forms)
                 "key": "balance_ball_catching",
-                "name": "Balance Catching - 1 minute",
+                "name": "Balance Ball Catching",
                 "level": 1,
+                # level_threshold_hint: describes the primary field used for L1–L5 thresholds
+                "level_threshold_hint": "Catches per minute — Large Ball Two Feet (Wall Bounce). Set thresholds for each level based on number of successful catches.",
                 "fields": [
-                    {"key": "one_foot_balance_catch",      "label": "One Foot Balance Catch (athlete's choice of ball)",      "type": "number"},
-                    {"key": "opposite_foot_balance_catch", "label": "Opposite Foot Balance Catch (athlete's choice of ball)", "type": "number"},
-                    {"key": "large_ball_wall_bounce",      "label": "Large Ball - Wall Bounce",                               "type": "number"},
-                    {"key": "small_ball_wall_bounce",      "label": "Small Ball - Wall Bounce",                               "type": "number"},
+                    {"key": "large_ball_wall_bounce",      "label": "Large Ball Two Feet (Wall Bounce)",  "type": "number"},
+                    {"key": "one_foot_balance_catch",      "label": "Large Ball One Foot",                "type": "number"},
+                    # Hidden fields — preserved for historical data; not shown on new recording forms
+                    {"key": "opposite_foot_balance_catch", "label": "Opposite Foot (historical)",         "type": "number", "hidden": True},
+                    {"key": "small_ball_wall_bounce",      "label": "Small Ball Wall Bounce (historical)", "type": "number", "hidden": True},
                 ],
             },
             {
                 "key": "leap_catching_throwing",
                 "name": "Grid Leap — 50cm Cones (20 attempts)",
                 "level": 1,
+                "level_threshold_hint": "Points scored out of 20 attempts. Set thresholds for each level based on successful leap-and-catch count.",
                 "fields": [
                     {"key": "points", "label": "Points", "type": "points", "unit": "out of 20"},
                 ],
@@ -98,6 +108,7 @@ MEASUREMENT_GAMES = [
                 "key": "split_step",
                 "name": "Split Step",
                 "level": 1,
+                "level_threshold_hint": "Volleyed catches in 1 minute. Set thresholds for each level based on catch count.",
                 "fields": [
                     {"key": "catches", "label": "Volleyed Catches (1 minute)", "type": "points"},
                 ],
@@ -107,6 +118,7 @@ MEASUREMENT_GAMES = [
                 "name": "Diamond Gates - 1 minute",
                 "level": 1,
                 "either_or": True,
+                "level_threshold_hint": "Gates completed in 1 minute. Either Small Group (3–5) or Large Group (6–8) score counts — enter whichever applies. Set thresholds based on gate count.",
                 "fields": [
                     {"key": "small_group", "label": "Small Group (3–5 athletes)", "type": "number", "unit": "Number of Gates"},
                     {"key": "large_group", "label": "Large Group (6–8 athletes)", "type": "number", "unit": "Number of Gates"},
@@ -117,27 +129,35 @@ MEASUREMENT_GAMES = [
                 "name": "Diamond Dribble - 1 minute",
                 "level": 1,
                 "either_or": True,
+                "level_threshold_hint": "Gates completed in 1 minute. Either Small Group (3–5) or Large Group (6–8) score counts. Set thresholds based on gate count.",
                 "fields": [
                     {"key": "small_group", "label": "Small Group (3–5 athletes)", "type": "number", "unit": "Number of Gates"},
                     {"key": "large_group", "label": "Large Group (6–8 athletes)", "type": "number", "unit": "Number of Gates"},
                 ],
             },
             {
+                # Step Up (internal key: diamond_gym — retained for DB compatibility)
+                # step_bench_small (Small Ball) hidden from new forms; historical data preserved.
                 "key": "diamond_gym",
                 "name": "Step Up",
                 "level": 1,
+                "level_threshold_hint": "Successful step-ups in 1 minute — Large Ball only. Set thresholds for each level based on count.",
                 "fields": [
-                    {"key": "step_bench",      "label": "Large Ball", "type": "number", "unit": "Number of Gates"},
-                    {"key": "step_bench_small", "label": "Small Ball", "type": "number", "unit": "Number of Gates"},
+                    {"key": "step_bench",       "label": "Large Ball", "type": "number", "unit": "Count"},
+                    # Hidden — Small Ball no longer recorded; historical data preserved
+                    {"key": "step_bench_small", "label": "Small Ball (historical)", "type": "number", "unit": "Count", "hidden": True},
                 ],
             },
             {
+                # Step Over — DEPRECATED. Removed from programme.
+                # DB rows retained for historical reference; game hidden from all new recording forms.
                 "key": "step_over",
                 "name": "Step Over",
                 "level": 2,
+                "deprecated": True,
                 "fields": [
-                    {"key": "low_hurdle",       "label": "Large Ball", "type": "number", "unit": "Number of Gates"},
-                    {"key": "low_hurdle_small",  "label": "Small Ball", "type": "number", "unit": "Number of Gates"},
+                    {"key": "low_hurdle",      "label": "Large Ball", "type": "number", "unit": "Count"},
+                    {"key": "low_hurdle_small", "label": "Small Ball", "type": "number", "unit": "Count"},
                 ],
             },
         ],
@@ -146,9 +166,12 @@ MEASUREMENT_GAMES = [
         "section": "Throw Down",
         "games": [
             {
+                # Throw Down — DEPRECATED. Removed from programme.
+                # DB rows retained for historical reference; game hidden from all new recording forms.
                 "key": "throw_down",
                 "name": "Throw Down",
                 "level": 1,
+                "deprecated": True,
                 "fields": [
                     {"key": "10m_front_balance", "label": "10m Front On — Balance Equipment", "type": "points"},
                 ],
@@ -240,11 +263,11 @@ XP_GAME_CONFIG = {
     "balance_ball_catching": {
         "xp_type": "count",
         "multiplier": 1,
-        "score_fields": [
-            "large_ball_wall_bounce", "small_ball_wall_bounce",
-            "one_foot_balance_catch", "opposite_foot_balance_catch",
-        ],
-        "primary_field": "large_ball_wall_bounce",
+        # Active score fields only — hidden/historical fields excluded from XP calculation
+        "score_fields": ["large_ball_wall_bounce", "one_foot_balance_catch"],
+        # Historical one-foot fields — both checked when computing best score for display/PB
+        "one_foot_fields": ["one_foot_balance_catch", "opposite_foot_balance_catch"],
+        "primary_field": "large_ball_wall_bounce",   # Large Ball Two Feet — used for level thresholds
     },
     "leap_catching_throwing": {
         "xp_type": "count",
@@ -273,8 +296,9 @@ XP_GAME_CONFIG = {
     "diamond_gym": {
         "xp_type": "count",
         "multiplier": 1,
-        "score_fields": ["step_bench", "step_bench_small"],
-        "primary_field": "step_bench",
+        # step_bench_small hidden from new forms; excluded from active XP calculation
+        "score_fields": ["step_bench"],
+        "primary_field": "step_bench",   # Large Ball — used for level thresholds
     },
     "lob_scotch": {
         "xp_type": "count",
@@ -329,6 +353,135 @@ def get_next_rank_tier(total_xp):
         if total_xp < t["min_xp"]:
             return t
     return None
+
+
+# ----------------------------------------------------------------------
+# Game Display Names — canonical short names used in reports, athlete
+# dashboard, threshold admin UI, and any user-facing copy.
+# Internal DB keys are kept stable; display names live here.
+# ----------------------------------------------------------------------
+GAME_DISPLAY_NAMES = {
+    "skipping_rope_sprint":   "Skipping Rope Sprint",
+    "balance_ball_catching":  "Balance Ball Catching",
+    "leap_catching_throwing": "Grid Leap",
+    "split_step":             "Split Step",
+    "diamond_games":          "Diamond Gates",
+    "diamond_dribble":        "Diamond Dribble",
+    "diamond_gym":            "Step Up",
+    "lob_scotch":             "Lob Scotch",
+    # Deprecated games — kept for historical display
+    "step_over":              "Step Over",
+    "throw_down":             "Throw Down",
+}
+
+# Per-game level progression descriptions used in athlete reports and
+# the threshold admin UI. Indexed by game_key → list of 5 strings (L1–L5).
+# Practitioners read these when setting thresholds so they know what
+# score target to enter for each level.
+GAME_LEVEL_DESCRIPTIONS = {
+    "skipping_rope_sprint": [
+        "L1 — Completes 25m with consistent rope rhythm",
+        "L2 — Achieving a solid average time across 3 runs",
+        "L3 — Consistent speed; minimal time variance between runs",
+        "L4 — Strong pace; approaching personal ceiling",
+        "L5 — Elite speed with full rope control across all 3 runs",
+    ],
+    "balance_ball_catching": [
+        "L1 — Catching reliably on two feet from a wall bounce",
+        "L2 — Two-feet catching consistent; beginning single-foot control",
+        "L3 — Single-foot catches achieved on preferred side",
+        "L4 — Single-foot catches on both sides; increasing difficulty",
+        "L5 — High-volume catching on either foot with control",
+    ],
+    "leap_catching_throwing": [
+        "L1 — Landing and returning with basic control (out of 20)",
+        "L2 — Consistent catching and throwing rhythm through cones",
+        "L3 — Smooth transitions; increasing points per attempt",
+        "L4 — High success rate across all 20 attempts",
+        "L5 — Near-maximum points with full athletic expression",
+    ],
+    "split_step": [
+        "L1 — Initiating split step before each catch",
+        "L2 — Timing improving; catches per minute increasing",
+        "L3 — Consistent split step rhythm with good catch count",
+        "L4 — High catch volume; reading and reacting to ball",
+        "L5 — Elite reaction and volley count in 1 minute",
+    ],
+    "diamond_games": [
+        "L1 — Moving through gates with awareness of group",
+        "L2 — Increasing gate count; reading the diamond shape",
+        "L3 — Smooth movement; consistent gate count per minute",
+        "L4 — High gate count with decision-making under pressure",
+        "L5 — Maximum gates; leading and adapting within the group",
+    ],
+    "diamond_dribble": [
+        "L1 — Dribbling through gates with basic ball control",
+        "L2 — Gate count increasing; fewer losses of possession",
+        "L3 — Smooth dribbling; consistent count across the diamond",
+        "L4 — High gate count with close ball control",
+        "L5 — Elite gate count; full ball mastery in group context",
+    ],
+    "diamond_gym": [
+        "L1 — Completing step-ups with large ball control",
+        "L2 — Increasing step-up count; rhythm developing",
+        "L3 — Consistent step-up count; strong balance",
+        "L4 — High step-up volume with full control",
+        "L5 — Maximum step-ups; elite balance and coordination",
+    ],
+    "lob_scotch": [
+        "L1 — Scoring squares with basic lob trajectory",
+        "L2 — Increasing squares scored; trajectory improving",
+        "L3 — Consistent scoring; adapting angle and power",
+        "L4 — High square count; reading the grid confidently",
+        "L5 — Maximum squares; elite lob control and placement",
+    ],
+}
+
+
+# ----------------------------------------------------------------------
+# Helper: active_measurement_games()
+# Returns MEASUREMENT_GAMES sections filtered to exclude:
+#   - deprecated games (deprecated=True) → removed from programme
+#   - hidden fields within active games → not entered on new forms
+# Historical data for these games/fields remains in the DB and is
+# still queryable for display; only new data entry is blocked.
+# ----------------------------------------------------------------------
+def active_measurement_games():
+    """Return MEASUREMENT_GAMES with deprecated games removed and hidden fields stripped."""
+    result = []
+    for section in MEASUREMENT_GAMES:
+        active_games = []
+        for game in section["games"]:
+            if game.get("deprecated"):
+                continue
+            # Strip hidden fields — keep computed fields and all non-hidden
+            active_fields = [f for f in game.get("fields", []) if not f.get("hidden")]
+            active_game = dict(game)
+            active_game["fields"] = active_fields
+            active_games.append(active_game)
+        if active_games:
+            result.append({"section": section["section"], "games": active_games})
+    return result
+
+
+def best_one_foot_score(session_data):
+    """Return the best single-foot Balance Ball Catching score from a session dict.
+
+    Handles both old data (one_foot_balance_catch + opposite_foot_balance_catch)
+    and new single-field data (one_foot_balance_catch only).
+    Returns None if no one-foot data exists.
+    """
+    cfg = XP_GAME_CONFIG.get("balance_ball_catching", {})
+    one_foot_fields = cfg.get("one_foot_fields", ["one_foot_balance_catch", "opposite_foot_balance_catch"])
+    scores = []
+    for field in one_foot_fields:
+        val = session_data.get(field)
+        if val is not None:
+            try:
+                scores.append(float(val))
+            except (TypeError, ValueError):
+                pass
+    return max(scores) if scores else None
 
 
 # ----------------------------------------------------------------------

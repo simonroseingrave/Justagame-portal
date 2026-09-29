@@ -12,10 +12,13 @@ from constants import (
     MEASUREMENT_GAMES,
     SPORT_SPECIFIC_GAMES,
     all_measurement_games,
+    active_measurement_games,
     games_for_max_level,
     max_game_level,
     SESSION_TYPES,
     SESSION_LABEL_MAP,
+    GAME_DISPLAY_NAMES,
+    GAME_LEVEL_DESCRIPTIONS,
 )
 
 
@@ -407,9 +410,10 @@ def measurement_games_form(participant_id, selected_label=None, selected_month=N
         return (f'<span style="font-size:10px;font-weight:700;background:{bg};color:{fg};'
                 f'border-radius:999px;padding:1px 7px;margin-left:6px;">L{lvl}</span>')
 
-    # Build game chip list and sections HTML together (Level 1 only for recording)
+    # Build game chip list and sections HTML together — active games only
+    # (deprecated games and hidden fields excluded via active_measurement_games())
     all_games_for_chips = []
-    for section in games_for_max_level(1):
+    for section in active_measurement_games():
         for g in section["games"]:
             all_games_for_chips.append(g)
 
@@ -474,7 +478,7 @@ def measurement_games_form(participant_id, selected_label=None, selected_month=N
       </div>
       {''.join(_fieldset_with_level(g) for g in section['games'])}
     </div>
-    """ for section in games_for_max_level(1))
+    """ for section in active_measurement_games())
 
     # Build hidden sport-specific sections (revealed by JS when checkbox ticked)
     sport_sections_html = ""
@@ -7534,6 +7538,7 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
 
 def game_thresholds_page(coach, thresholds, core_games, xp_game_config):
     """System admin page for managing per-game level thresholds."""
+    from constants import find_measurement_game, GAME_LEVEL_DESCRIPTIONS
     # Build a dict for easy lookup
     existing = {}
     for t in thresholds:
@@ -7541,15 +7546,23 @@ def game_thresholds_page(coach, thresholds, core_games, xp_game_config):
 
     rows_html = ""
     for game_key in core_games:
-        display = _GAME_DISPLAY_NAMES.get(game_key, game_key)
+        display = GAME_DISPLAY_NAMES.get(game_key, game_key)
         cfg = xp_game_config.get(game_key, {})
         primary_field = cfg.get("primary_field", "")
         lower = cfg.get("lower_is_better", False)
+        game_def = find_measurement_game(game_key) or {}
+        hint = game_def.get("level_threshold_hint", "")
+        level_descs = GAME_LEVEL_DESCRIPTIONS.get(game_key, [])
+
+        hint_html = (f'<div style="font-size:11px;color:#9CA3AF;margin-top:2px;">{esc(hint)}</div>'
+                     if hint else "")
 
         rows_html += f"""
         <tr>
-          <td colspan="5" style="padding:10px 14px 4px;font-size:12px;font-weight:700;
-            color:#fff;background:#2D323B;letter-spacing:0.06em;">{esc(display)}</td>
+          <td colspan="5" style="padding:12px 14px 4px;background:#2D323B;">
+            <div style="font-size:13px;font-weight:700;color:#F0A82E;letter-spacing:0.04em;">{esc(display)}</div>
+            {hint_html}
+          </td>
         </tr>"""
 
         for level in range(1, 6):
@@ -7558,17 +7571,22 @@ def game_thresholds_page(coach, thresholds, core_games, xp_game_config):
             curr_val = f'{t["threshold_value"]:g}' if t else ""
             curr_field = t["field_key"] if t else primary_field
             shade = "#F3F4F5" if level % 2 == 0 else "#fff"
+            # Level description hint for practitioners
+            lvl_desc = level_descs[level - 1] if level_descs and level <= len(level_descs) else ""
+            desc_html = (f'<div style="font-size:11px;color:#6E737B;margin-top:2px;">{esc(lvl_desc)}</div>'
+                         if lvl_desc else "")
             rows_html += f"""
             <tr style="background:{shade};">
-              <td style="padding:8px 14px;">
+              <td style="padding:8px 14px;vertical-align:top;">
                 <span style="font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;
                   background:{bg};color:{fg};">L{level}</span>
+                {desc_html}
               </td>
-              <td style="padding:8px 14px;font-size:13px;color:#6E737B;">{esc(curr_field)}</td>
-              <td style="padding:8px 14px;font-size:13px;color:#2D323B;">
+              <td style="padding:8px 14px;font-size:13px;color:#6E737B;vertical-align:middle;">{esc(curr_field)}</td>
+              <td style="padding:8px 14px;font-size:13px;color:#2D323B;vertical-align:middle;">
                 {f'<strong>{curr_val}</strong>' if curr_val else '<em style="color:#9CA3AF;">not set</em>'}
               </td>
-              <td style="padding:8px 14px;">
+              <td style="padding:8px 14px;vertical-align:middle;">
                 <form method="post" action="/coach/admin/game-thresholds/set"
                       style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
                   <input type="hidden" name="game_key" value="{esc(game_key)}" />
@@ -7581,7 +7599,7 @@ def game_thresholds_page(coach, thresholds, core_games, xp_game_config):
                   <button type="submit" class="btn btn-primary btn-sm" style="font-size:12px;">Save</button>
                 </form>
               </td>
-              <td style="padding:8px 14px;">
+              <td style="padding:8px 14px;vertical-align:middle;">
                 {f'''<form method="post" action="/coach/admin/game-thresholds/delete">
                   <input type="hidden" name="game_key" value="{esc(game_key)}" />
                   <input type="hidden" name="level" value="{level}" />
@@ -7597,8 +7615,9 @@ def game_thresholds_page(coach, thresholds, core_games, xp_game_config):
         <div>
           <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 4px;">Game Level Thresholds</h2>
           <p style="font-size:13px;color:#6E737B;margin:0;">
-            Set the score required to earn each level for each core game.
-            Thresholds are updateable — once earned, an athlete's level is permanent.
+            Set the score required for each level in each core game.
+            Each game shows its threshold field and a plain-English description of what the level means.
+            Thresholds can be updated at any time — once earned, an athlete's level is permanent.
           </p>
         </div>
         <form method="post" action="/coach/admin/xp-retroactive"
@@ -7606,12 +7625,12 @@ def game_thresholds_page(coach, thresholds, core_games, xp_game_config):
           <button class="btn btn-primary">Run Retroactive XP Pass</button>
         </form>
       </div>
-      <div style="background:#FFF3EB;border-left:4px solid #F97316;border-radius:8px;padding:12px 16px;
+      <div style="background:#EFF6FF;border-left:4px solid #2D323B;border-radius:8px;padding:12px 16px;
         margin-bottom:24px;font-size:13px;color:#2D323B;">
-        <strong>Field keys</strong> must match the field keys defined in <code>constants.py</code>.
-        The <em>primary_field</em> for each game is pre-filled.
-        For Skipping Rope Sprint (lower is better), the system checks whether the score is
-        at or below the threshold.
+        <strong>How to set a threshold:</strong> enter the minimum score an athlete must reach on the
+        listed field to earn that level. The field key is pre-filled from the game definition —
+        only change it if you intentionally want a different field to drive the level check.
+        For Skipping Rope Sprint, lower times are better (the system checks score ≤ threshold).
       </div>
       <div style="border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">
         <table style="width:100%;border-collapse:collapse;">
@@ -7894,17 +7913,17 @@ def self_directed_home_page(athlete, pending_events, completed_sessions):
 
 
 def self_directed_entry_page(athlete, event):
-    from constants import MEASUREMENT_GAMES
     date_str = esc(event.get("date", "")[:10])
     group = esc(event.get("group_name") or "")
     event_id = event["id"]
 
-    # Build game entry cards — same pattern as group session recording
+    # Build game entry cards — active games only (deprecated + hidden fields excluded)
     game_cards = ""
-    for section in MEASUREMENT_GAMES:
+    for section in active_measurement_games():
         for game in section["games"]:
             fields_html = ""
             for field in game["fields"]:
+                # active_measurement_games() already strips hidden fields
                 ftype = field.get("type", "number")
                 unit = esc(field.get("unit", ""))
                 input_type = "number"
@@ -7923,7 +7942,7 @@ def self_directed_entry_page(athlete, event):
             <div style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;
               padding:16px 20px;margin-bottom:14px;">
               <div style="font-size:14px;font-weight:700;color:#2D323B;margin-bottom:12px;">
-                {esc(game['name'])}
+                {esc(GAME_DISPLAY_NAMES.get(game['key'], game['name']))}
               </div>
               {fields_html}
             </div>"""
