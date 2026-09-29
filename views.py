@@ -166,7 +166,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
                     manage_items += [
                         ("/coach/admin/hub",              "⚙ Admin Hub"),
                         ("/coach/admin/score-distribution","📊 Score Distribution"),
-                        ("/coach/admin/game-thresholds",  "🎯 XP Thresholds"),
+                        ("/coach/admin/game-thresholds",  "🎯 AAXP Thresholds"),
                     ]
                 dropdown_links = "".join(
                     f'<a class="nav-dropdown-item" href="{h}">{l}</a>'
@@ -188,7 +188,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
         else:
             links = [("/dashboard", "My Dashboard", "dashboard"),
                      ("/athlete/self-directed", "Self-Directed", "self_directed"),
-                     ("/athlete/xp", "My XP", "xp"),
+                     ("/athlete/xp", "My AXP", "xp"),
                      ("/athlete/resources", "Resources", "resources")]
             if user.get("show_leaderboard"):
                 links.append(("/athlete/leaderboard", "Leaderboard", "leaderboard"))
@@ -1102,7 +1102,7 @@ def participant_dashboard(user, measurement_sessions,
     if next_tier:
         xp_to_next = next_tier["min_xp"] - total_xp
         xp_next_label = (f'<span style="font-size:12px;color:#6E737B;">'
-                         f'{xp_to_next:,} XP to {esc(next_tier["label"])}</span>')
+                         f'{xp_to_next:,} AXP to {esc(next_tier["label"])}</span>')
     else:
         xp_next_label = '<span style="font-size:12px;color:#1EBE8B;font-weight:700;">Max rank reached!</span>'
 
@@ -1120,7 +1120,7 @@ def participant_dashboard(user, measurement_sessions,
       <div>
         <div style="font-weight:700;color:#fff;font-size:15px;">Scores submitted{label_part}</div>
         <div style="color:#A7F3D0;font-size:13px;margin-top:2px;">
-          Your scores have been recorded. XP will be awarded when your practitioner closes the session.
+          Your scores have been recorded. AAXP will be awarded when your practitioner closes the session.
         </div>
       </div>
     </div>"""
@@ -1170,7 +1170,7 @@ def participant_dashboard(user, measurement_sessions,
         <!-- XP block -->
         <div style="text-align:right;flex-shrink:0;">
           <div style="font-size:32px;font-weight:800;color:#F0A82E;line-height:1;">{total_xp:,}</div>
-          <div style="font-size:11px;color:#9CA3AF;margin-bottom:8px;letter-spacing:0.05em;">TOTAL XP</div>
+          <div style="font-size:11px;color:#9CA3AF;margin-bottom:8px;letter-spacing:0.05em;">TOTAL AXP</div>
           {xp_next_label}
         </div>
       </div>
@@ -1198,7 +1198,7 @@ def participant_dashboard(user, measurement_sessions,
                 {count} self-directed session{'s' if count > 1 else ''} ready to score
               </div>
               <div style="font-size:12px;color:#6E737B;margin-top:2px;">
-                Tap to record your scores and earn XP →
+                Tap to record your scores and earn AXP →
               </div>
             </div>
           </div>
@@ -1494,7 +1494,7 @@ def edit_group_page(user, group, error=None):
             <span>
               <strong style="font-size:14px;color:#2D323B;">Show group leaderboard to athletes</strong>
               <span style="display:block;font-size:12px;color:#6E737B;margin-top:2px;">
-                When enabled, athletes in this group can view a ranked XP leaderboard
+                When enabled, athletes in this group can view a ranked AXP leaderboard
                 for their group. Leave off for programmes focused on individual progress.
               </span>
             </span>
@@ -1738,7 +1738,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
       <a class="btn btn-primary" href="/coach/participants/new">+ Add Participant</a>
       <button type="button" class="btn btn-primary" onclick="var p=document.getElementById('create-group-panel');p.style.display=p.style.display==='none'?'block':'none';">+ Create Group</button>
       <a class="btn btn-primary" href="/coach/session">Record Session</a>
-      {'<a class="btn btn-ghost" href="/coach/participants/import" title="Bulk-import athletes from CSV">&#8679; Import Athletes</a><a class="btn btn-ghost" href="/coach/participants/export.csv" title="Export all athletes with new temp passwords">&#8681; Export Athletes</a><a class="btn btn-ghost" href="/coach/scores/import" title="Bulk-import test scores from CSV">&#8679; Import Scores</a><a class="btn btn-ghost" href="/coach/admin/game-thresholds" title="Set XP level thresholds and run retroactive XP pass">&#9881; XP Thresholds</a><a class="btn btn-ghost" href="/coach/admin/score-distribution" title="View score percentile distributions to inform threshold setting">&#128202; Score Distribution</a>' if is_admin else ''}
+      {'<a class="btn btn-ghost" href="/coach/participants/import" title="Bulk-import athletes from CSV">&#8679; Import Athletes</a><a class="btn btn-ghost" href="/coach/participants/export.csv" title="Export all athletes with new temp passwords">&#8681; Export Athletes</a><a class="btn btn-ghost" href="/coach/scores/import" title="Bulk-import test scores from CSV">&#8679; Import Scores</a><a class="btn btn-ghost" href="/coach/admin/game-thresholds" title="Set XP level thresholds and run retroactive AXP pass">&#9881; AXP Thresholds</a><a class="btn btn-ghost" href="/coach/admin/score-distribution" title="View score percentile distributions to inform threshold setting">&#128202; Score Distribution</a>' if is_admin else ''}
     </div>
     {create_group_form}""" if is_admin else ""
 
@@ -2085,7 +2085,7 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
       <div style="flex:0 0 auto;text-align:center;padding-right:20px;
                   border-right:1px solid rgba(255,255,255,0.1);">
         <div style="font-size:28px;font-weight:800;color:#F0A82E;line-height:1;">{total_xp:,}</div>
-        <div style="font-size:10px;color:#9CA3AF;letter-spacing:0.06em;margin-bottom:8px;">TOTAL XP</div>
+        <div style="font-size:10px;color:#9CA3AF;letter-spacing:0.06em;margin-bottom:8px;">TOTAL AXP</div>
         <span style="font-size:11px;font-weight:700;background:{tier_colour};color:#fff;
                      border-radius:999px;padding:2px 10px;">{tier_label}</span>
         <div style="font-size:11px;color:#9CA3AF;margin-top:8px;">{att_count} sessions attended</div>
@@ -2104,7 +2104,7 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
       <div style="flex:0 0 auto;align-self:flex-end;">
         <a href="/coach/participants/{participant['id']}/xp"
            style="font-size:12px;color:#F0A82E;text-decoration:none;font-weight:600;">
-          Full XP history →
+          Full AXP history →
         </a>
       </div>
     </div>"""
@@ -4254,7 +4254,7 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
               <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
                 <span style="font-size:10px;font-weight:700;background:{tier_colour};color:#fff;
                              border-radius:999px;padding:1px 7px;">{esc(tier['label'])}</span>
-                <span style="font-size:11px;color:#6E737B;">{total_xp:,} XP</span>
+                <span style="font-size:11px;color:#6E737B;">{total_xp:,} AXP</span>
               </div>
               <div style="display:flex;flex-wrap:wrap;gap:3px;">{dots}</div>
             </a>"""
@@ -4674,7 +4674,7 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
           </a>
           <form method="post" action="/coach/window/{wid}/close" style="margin:0;">
             <button type="submit"
-                    onclick="return confirm('Close window? This commits all submitted scores and awards XP. Athletes who haven\\'t submitted will be excluded (you can re-open later).')"
+                    onclick="return confirm('Close window? This commits all submitted scores and awards AXP. Athletes who haven\\'t submitted will be excluded (you can re-open later).')"
                     style="background:#F97316;color:#fff;font-weight:600;font-size:13px;
                            border:none;border-radius:8px;padding:8px 16px;cursor:pointer;">
               Close &amp; Commit
@@ -4722,7 +4722,7 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
       </div>
       <p style="font-size:13px;color:#6E737B;margin:0 0 14px;">
         Open a window so athletes can self-score from their dashboard.
-        XP is awarded when you close the window.
+        AXP is awarded when you close the window.
       </p>
       <form method="post" action="/coach/groups/{selected_group_id}/window/open"
             style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;">
@@ -7620,7 +7620,7 @@ def _xp_event_row(event, i):
     <tr style="background:{shade};">
       <td style="padding:9px 14px;font-size:13px;color:#2D323B;">{esc(label)}{game_chip}</td>
       <td style="padding:9px 14px;font-size:13px;color:#6E737B;">{esc(created)}</td>
-      <td style="padding:9px 14px;font-size:13px;font-weight:700;color:#2D323B;text-align:right;">+{amount:,} XP</td>
+      <td style="padding:9px 14px;font-size:13px;font-weight:700;color:#2D323B;text-align:right;">+{amount:,} AXP</td>
     </tr>"""
 
 
@@ -7649,13 +7649,13 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
             <div style="width:{int(progress*100)}%;background:#fff;height:100%;border-radius:999px;transition:width 0.6s;"></div>
           </div>
           <div style="text-align:right;font-size:12px;color:rgba(255,255,255,0.75);margin-top:5px;">
-            {xp_to_next:,} XP to {esc(next_label)}
+            {xp_to_next:,} AXP to {esc(next_label)}
           </div>
         </div>"""
     else:
         progress_bar = f"""
         <div style="margin-top:16px;font-size:13px;color:rgba(255,255,255,0.8);">
-          Maximum rank achieved — keep earning XP!
+          Maximum rank achieved — keep earning AXP!
         </div>"""
 
     hero = f"""
@@ -7668,7 +7668,7 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
         </div>
         <div style="text-align:right;">
           <div style="font-size:48px;font-weight:900;line-height:1;">{total:,}</div>
-          <div style="font-size:14px;opacity:0.8;">XP total</div>
+          <div style="font-size:14px;opacity:0.8;">AXP total</div>
         </div>
       </div>
       {progress_bar}
@@ -7699,18 +7699,18 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
     # ── Recent XP events ──────────────────────────────────────────────────────
     rows = "".join(_xp_event_row(e, i) for i, e in enumerate(events))
     if not rows:
-        rows = '<tr><td colspan="3" style="padding:20px;text-align:center;color:#9CA3AF;font-size:13px;">No XP earned yet — complete a measurement session to get started.</td></tr>'
+        rows = '<tr><td colspan="3" style="padding:20px;text-align:center;color:#9CA3AF;font-size:13px;">No AXP earned yet — complete a measurement session to get started.</td></tr>'
 
     events_section = f"""
     <div style="margin-bottom:32px;">
-      <h3 style="font-size:16px;font-weight:700;color:#2D323B;margin:0 0 14px;">Recent XP Events</h3>
+      <h3 style="font-size:16px;font-weight:700;color:#2D323B;margin:0 0 14px;">Recent AXP Events</h3>
       <div style="border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">
         <table style="width:100%;border-collapse:collapse;">
           <thead>
             <tr style="background:#2D323B;">
               <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;font-weight:600;">Event</th>
               <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;font-weight:600;">Date</th>
-              <th style="padding:10px 14px;text-align:right;font-size:12px;color:#fff;font-weight:600;">XP</th>
+              <th style="padding:10px 14px;text-align:right;font-size:12px;color:#fff;font-weight:600;">AXP</th>
             </tr>
           </thead>
           <tbody>{rows}</tbody>
@@ -7726,7 +7726,7 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
     <div class="container" style="max-width:860px;padding-top:32px;">
       {back_link}
       <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 24px;">
-        {"XP Profile — " + name if coach else "My XP Profile"}
+        {"AAXP Profile — " + name if coach else "My AXP Profile"}
       </h2>
       {hero}
       {levels_section}
@@ -7734,7 +7734,7 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
     </div>"""
 
     user = coach if coach else athlete
-    return layout("XP Profile", body, user=user,
+    return layout("AXP Profile", body, user=user,
                   active_nav="dashboard" if coach else "dashboard")
 
 
@@ -7823,8 +7823,8 @@ def game_thresholds_page(coach, thresholds, core_games, xp_game_config):
           </p>
         </div>
         <form method="post" action="/coach/admin/xp-retroactive"
-              onsubmit="return confirm('Run retroactive XP pass over ALL existing sessions? This is safe to run multiple times but may take a moment.')">
-          <button class="btn btn-primary">Run Retroactive XP Pass</button>
+              onsubmit="return confirm('Run retroactive AXP pass over ALL existing sessions? This is safe to run multiple times but may take a moment.')">
+          <button class="btn btn-primary">Run Retroactive AXP Pass</button>
         </form>
       </div>
       <div style="background:#EFF6FF;border-left:4px solid #2D323B;border-radius:8px;padding:12px 16px;
@@ -8094,7 +8094,7 @@ def self_directed_home_page(athlete, pending_events, completed_sessions):
     <div class="container" style="max-width:680px;padding-top:32px;">
       <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 6px;">Self-Directed Sessions</h2>
       <p style="font-size:14px;color:#6E737B;margin:0 0 28px;">
-        After attending a training session, record your own scores here to earn XP.
+        After attending a training session, record your own scores here to earn AXP.
         Only sessions you were marked present for are available.
       </p>
 
@@ -8108,7 +8108,7 @@ def self_directed_home_page(athlete, pending_events, completed_sessions):
       {completed_html}
 
       <div style="margin-top:28px;">
-        <a href="/athlete/xp" class="btn btn-ghost btn-sm">View my XP →</a>
+        <a href="/athlete/xp" class="btn btn-ghost btn-sm">View my AXP →</a>
       </div>
     </div>"""
     return layout("Self-Directed Sessions", body, user=athlete, active_nav="self_directed")
@@ -8160,7 +8160,7 @@ def self_directed_entry_page(athlete, event):
       <form method="post" action="/athlete/self-directed/{event_id}">
         {game_cards}
         <div style="display:flex;gap:10px;margin-top:8px;">
-          <button type="submit" class="btn btn-primary">Save & Earn XP</button>
+          <button type="submit" class="btn btn-primary">Save & Earn AXP</button>
           <a href="/athlete/self-directed" class="btn btn-ghost">Cancel</a>
         </div>
       </form>
@@ -8173,7 +8173,7 @@ def self_directed_entry_page(athlete, event):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def group_leaderboard_page(coach, groups, selected_group_id=None, ranked_athletes=None):
-    """XP leaderboard for a group — ranked by total XP with rank badge and level count."""
+    """AXP leaderboard for a group — ranked by total AXP with rank badge and level count."""
     from constants import CORE_AAP_GAMES
 
     # Group selector
@@ -8203,7 +8203,7 @@ def group_leaderboard_page(coach, groups, selected_group_id=None, ranked_athlete
     ranked_html = ""
     if ranked_athletes is not None:
         if not ranked_athletes:
-            ranked_html = '<p style="color:#9CA3AF;font-size:14px;padding:16px 0;">No athletes with XP in this group yet.</p>'
+            ranked_html = '<p style="color:#9CA3AF;font-size:14px;padding:16px 0;">No athletes with AXP in this group yet.</p>'
         else:
             LEVEL_COLOURS_LB = {
                 0: ("#E5E7EB", "#6E737B"),
@@ -8249,7 +8249,7 @@ def group_leaderboard_page(coach, groups, selected_group_id=None, ranked_athlete
                            title="{esc(a['name'])}">{esc(a['name'].split()[0])}</div>
                       <span style="font-size:10px;font-weight:700;background:{tier['colour']};color:#fff;
                                    border-radius:999px;padding:1px 7px;">{esc(tier['label'])}</span>
-                      <div style="font-size:12px;font-weight:600;color:#6E737B;">{a['total_xp']:,} XP</div>
+                      <div style="font-size:12px;font-weight:600;color:#6E737B;">{a['total_xp']:,} AXP</div>
                       <div style="width:100%;height:{bar_h};background:{medal_col};border-radius:8px 8px 0 0;
                                   display:flex;align-items:flex-start;justify-content:center;
                                   padding-top:6px;">
@@ -8306,7 +8306,7 @@ def group_leaderboard_page(coach, groups, selected_group_id=None, ranked_athlete
                   </div>
                   <div style="text-align:right;flex-shrink:0;">
                     <div style="font-size:13px;font-weight:800;color:#2D323B;">{a['total_xp']:,}</div>
-                    <div style="font-size:10px;color:#9CA3AF;">XP</div>
+                    <div style="font-size:10px;color:#9CA3AF;">AXP</div>
                   </div>
                   <div style="flex-shrink:0;">
                     <span style="font-size:11px;font-weight:700;background:{tier['colour']};
@@ -8353,7 +8353,7 @@ def athlete_leaderboard_page(athlete, ranked_athletes, group_name=""):
     }
 
     if not ranked_athletes:
-        rows_html = '<p style="color:#9CA3AF;font-size:14px;padding:16px 0;">No athletes with XP yet — get scoring!</p>'
+        rows_html = '<p style="color:#9CA3AF;font-size:14px;padding:16px 0;">No athletes with AXP yet — get scoring!</p>'
     else:
         rows_html = ""
         own_id = athlete["id"]
@@ -8396,7 +8396,7 @@ def athlete_leaderboard_page(athlete, ranked_athletes, group_name=""):
               </div>
               <div style="text-align:right;flex-shrink:0;">
                 <div style="font-size:13px;font-weight:800;color:#2D323B;">{a['total_xp']:,}</div>
-                <div style="font-size:10px;color:#9CA3AF;">XP</div>
+                <div style="font-size:10px;color:#9CA3AF;">AXP</div>
               </div>
               <div style="flex-shrink:0;">
                 <span style="font-size:11px;font-weight:700;background:{tier['colour']};
@@ -8413,7 +8413,7 @@ def athlete_leaderboard_page(athlete, ranked_athletes, group_name=""):
         Group Leaderboard{group_label}
       </h2>
       <p style="font-size:13px;color:#6E737B;margin:0 0 20px;">
-        Ranked by total XP earned — your position is highlighted.
+        Ranked by total AXP earned — your position is highlighted.
       </p>
       <div style="font-size:11px;color:#9CA3AF;margin-bottom:10px;padding:0 4px;">
         Dots = game levels (grey=none · green=L1 · gold=L2 · navy=L3 · orange=L4 · purple=L5)
@@ -8563,7 +8563,7 @@ def score_distribution_page(coach, distributions):
             L5 ≈ beyond P90.
             These are starting points — set final values in
             <a href="/coach/admin/game-thresholds" style="color:#2D323B;font-weight:600;">
-              XP Thresholds</a>.
+              AXP Thresholds</a>.
           </div>
           {sugg_html}
         </div>"""
@@ -8578,7 +8578,7 @@ def score_distribution_page(coach, distributions):
           Percentiles calculated across all recorded scores for each core game's primary
           level-threshold field. Use these to set JAG Standard thresholds in
           <a href="/coach/admin/game-thresholds" style="color:#2D323B;font-weight:600;">
-            XP Thresholds</a>.
+            AXP Thresholds</a>.
         </p>
       </div>
       <div style="background:#EFF6FF;border-left:4px solid #2D323B;border-radius:8px;
@@ -8627,7 +8627,7 @@ def system_admin_hub_page(user):
         _card("/coach/admin/score-distribution", "Score Distribution",
               "Percentile breakdown per game — P25, mean, P75, P90, max. Use to decide threshold values.",
               "#F0A82E", "📊") +
-        _card("/coach/admin/game-thresholds", "XP Thresholds",
+        _card("/coach/admin/game-thresholds", "AAXP Thresholds",
               "Set the official JAG Standard level thresholds (L1–L5) for all 8 core games.",
               "#2D323B", "⚙")
     )
@@ -8644,12 +8644,12 @@ def system_admin_hub_page(user):
               "#1EBE8B", "⬆")
     )
 
-    xp_tools = _section("XP Engine", "⚡",
-        _card("/coach/admin/game-thresholds#retroactive", "Retroactive XP Pass",
-              "Re-run the XP engine across all historical sessions. Use after changing thresholds.",
+    xp_tools = _section("AXP Engine", "⚡",
+        _card("/coach/admin/game-thresholds#retroactive", "Retroactive AXP Pass",
+              "Re-run the AXP engine across all historical sessions. Use after changing thresholds.",
               "#F97316", "🔄") +
         _card("/coach/leaderboard", "Group Leaderboard",
-              "View XP rankings within any group. Toggle per-group leaderboard visibility in group settings.",
+              "View AXP rankings within any group. Toggle per-group leaderboard visibility in group settings.",
               "#8B5CF6", "🏆")
     )
 
@@ -8746,14 +8746,14 @@ def measurement_window_status_page(coach, window, group, athletes, submissions, 
         if missing_count > 0:
             warning_js = f"return confirm('{missing_count} athlete(s) haven\\'t submitted yet. Close anyway and skip them? (You can re-open later for missing entries.)')"
         else:
-            warning_js = "return confirm('All athletes have submitted. Close window and award XP?')"
+            warning_js = "return confirm('All athletes have submitted. Close window and award AXP?')"
         actions = f"""
         <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">
           <form method="post" action="/coach/window/{wid}/close" style="margin:0;">
             <button type="submit" onclick="{warning_js}"
                     style="background:#F97316;color:#fff;font-weight:700;font-size:14px;
                            border:none;border-radius:10px;padding:11px 22px;cursor:pointer;">
-              Close &amp; Award XP
+              Close &amp; Award AXP
             </button>
           </form>
           <a href="/coach/group-hub?group_id={group['id']}"
@@ -8861,7 +8861,7 @@ def athlete_window_submit_page(user, window, games, already_submitted=False):
           <div style="font-size:48px;margin-bottom:16px;">✅</div>
           <h1 style="color:#2D323B;">Scores already submitted{label_h}</h1>
           <p style="color:#6E737B;font-size:15px;">
-            Your scores have been recorded. XP will be awarded when your practitioner closes the session.
+            Your scores have been recorded. AAXP will be awarded when your practitioner closes the session.
           </p>
           <a href="/dashboard"
              style="display:inline-block;margin-top:20px;background:#2D323B;color:#F0A82E;
@@ -8970,7 +8970,7 @@ def athlete_window_submit_page(user, window, games, already_submitted=False):
         if (j.ok) {{
           btn.style.background = '#065F46';
           btn.textContent = '✓ Scores Submitted!';
-          msg.textContent = 'Your scores have been saved. XP will be awarded when the session closes.';
+          msg.textContent = 'Your scores have been saved. AAXP will be awarded when the session closes.';
           msg.style.display = 'block';
           setTimeout(() => window.location.href = '/dashboard', 2000);
         }} else if (j.error === 'already_submitted') {{
