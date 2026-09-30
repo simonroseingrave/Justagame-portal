@@ -9505,30 +9505,53 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
 
 def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_raw):
     """
-    Plain-English movement report for the athlete's own login.
-    Splits areas into 'tracking well' vs 'focus areas', uses motivational
-    athlete_what / athlete_why / athlete_games / athlete_sc language from SC_GAP_LANGUAGE.
+    Rebuilt athlete-facing movement report.
+    CLA-informed language, Perception-Action callout, family-grouped strengths/work-ons,
+    next-level self-test targets, plain-English S&C ideas.
     """
     from constants import SCORING_AREAS, SC_GAP_LANGUAGE, threshold_field_key
 
     name = esc(athlete.get("name", "Athlete"))
+    first_name = esc(athlete.get("name", "Athlete").split()[0])
     sport = athlete.get("sport") or ""
 
-    # Build thresholds lookup
-    thresholds = {}
+    FAMILY_META = {
+        "Balance & Postural Control": {
+            "icon": "⚖️", "colour": "#6366F1",
+            "plain": "Balance & Body Control",
+            "desc": "How steady you are — especially when something else is happening at the same time.",
+        },
+        "Explosive & Landing": {
+            "icon": "🚀", "colour": "#F59E0B",
+            "plain": "Power & Landing",
+            "desc": "Your ability to project force — jumping, leaping — and land safely.",
+        },
+        "Dynamic Locomotor": {
+            "icon": "⚡", "colour": "#10B981",
+            "plain": "Speed & Movement",
+            "desc": "How fast and efficiently you move — straight lines, changing direction, with or without a ball.",
+        },
+        "Perceptual-Motor Speed": {
+            "icon": "👁️", "colour": "#EF4444",
+            "plain": "Read & React",
+            "desc": "Your ability to pick up movement cues and respond — before your brain has time to think.",
+        },
+    }
+
+    # ── Build thresholds lookup (game_key, field_key, level) → value ──────────
+    thresh_by_level = {}
     for row in (thresholds_raw or []):
-        thresholds[(row["game_key"], row["field_key"])] = row["threshold_value"]
+        thresh_by_level[(row["game_key"], row["field_key"], row["level"])] = row["threshold_value"]
 
-    # Pull latest achievement per area
-    latest = {}
-    for row in (levels_by_area or []):
-        k = (row["game_key"], row["field_key"])
-        if k not in latest:
-            latest[k] = row
+    # Also flat lookup for gap detection
+    thresholds_flat = {}
+    for row in (thresholds_raw or []):
+        thresholds_flat[(row["game_key"], row["field_key"])] = row["threshold_value"]
 
-    # Sort areas into good / focus
-    well = []
-    focus = []
+    # ── Classify each area ────────────────────────────────────────────────────
+    well = []    # strengths
+    focus = []   # work-ons
+    no_data = []
 
     for area in SCORING_AREAS:
         gk = area["game_key"]
@@ -9538,139 +9561,196 @@ def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_r
         if not lang:
             continue
 
-        # find achievement row
-        ach = latest.get((gk, stored)) or latest.get((gk, fk))
-        score = ach["achievement_value"] if ach else None
-        threshold = thresholds.get((gk, stored)) or thresholds.get((gk, fk))
+        ach = (levels_by_area or {}).get((gk, stored or "")) or (levels_by_area or {}).get((gk, fk or ""))
+        current_level = ach if isinstance(ach, int) else 0
 
-        if score is None:
-            continue  # no data yet — skip
-
-        if threshold is not None:
-            lower_is_better = area.get("lower_is_better", False)
-            gap = (score > threshold) if lower_is_better else (score < threshold)
-        else:
-            gap = False
+        threshold = thresholds_flat.get((gk, stored)) or thresholds_flat.get((gk, fk))
+        next_level = current_level + 1
+        next_threshold = (thresh_by_level.get((gk, stored, next_level))
+                          or thresh_by_level.get((gk, fk, next_level)))
+        lower_is_better = area.get("lower_is_better", False)
 
         entry = {
             "display": lang["display"],
             "family": lang["family"],
-            "score": score,
-            "threshold": threshold,
+            "current_level": current_level,
+            "next_level": next_level,
+            "next_threshold": next_threshold,
+            "lower_is_better": lower_is_better,
             "athlete_what": lang.get("athlete_what", ""),
             "athlete_why": lang.get("athlete_why", ""),
             "athlete_games": lang.get("athlete_games", []),
             "athlete_sc": lang.get("athlete_sc", ""),
+            "self_test": (lang.get("athlete_games") or [""])[0],
         }
 
-        if gap:
+        if threshold is None:
+            no_data.append(entry)
+        elif current_level == 0:
             focus.append(entry)
         else:
             well.append(entry)
 
-    # ── Strengths section ─────────────────────────────────────────────────────
+    # ── Synopsis ──────────────────────────────────────────────────────────────
+    n_well = len(well)
+    n_focus = len(focus)
+    if n_well == 0 and n_focus == 0:
+        synopsis = "No measurement data yet — once you've been tested your report will appear here."
+    elif n_focus == 0:
+        synopsis = f"You're tracking well across all your tested areas, {first_name}. Keep playing, keep challenging yourself."
+    elif n_well == 0:
+        synopsis = f"You've got some clear areas to grow into, {first_name}. That's a good thing — it means there's a lot of progress ahead of you."
+    else:
+        synopsis = (f"You're tracking well in {n_well} area{'s' if n_well != 1 else ''} "
+                    f"and have {n_focus} area{'s' if n_focus != 1 else ''} to develop. "
+                    f"Use this as a guide for what to work on between sessions.")
+
+    # ── Perception-Action callout ─────────────────────────────────────────────
+    pa_callout = """
+    <div style="background:linear-gradient(135deg,#2D323B 0%,#3D434F 100%);border-radius:14px;
+                padding:20px 24px;margin-bottom:28px;">
+      <div style="font-size:12px;font-weight:700;color:#F0A82E;text-transform:uppercase;
+                  letter-spacing:.06em;margin-bottom:8px;">Remember this 💡</div>
+      <p style="font-size:14px;color:#fff;line-height:1.7;margin:0;">
+        Whatever you're doing, movement and skill happen at the same time.
+        This is called <strong style="color:#F0A82E;">Perception-Action</strong> —
+        your body and senses work together, not separately.
+        When you train or move at home, <strong style="color:#F0A82E;">get a ball involved</strong>.
+        Even just bouncing, catching, or throwing against a wall while you move is making you better.
+      </p>
+    </div>"""
+
+    # ── Family summary ────────────────────────────────────────────────────────
+    family_status = {}
+    for entry in well:
+        fam = entry["family"]
+        family_status.setdefault(fam, {"well": 0, "focus": 0})
+        family_status[fam]["well"] += 1
+    for entry in focus:
+        fam = entry["family"]
+        family_status.setdefault(fam, {"well": 0, "focus": 0})
+        family_status[fam]["focus"] += 1
+
+    family_cards = ""
+    for fam, meta in FAMILY_META.items():
+        counts = family_status.get(fam, {})
+        fw = counts.get("well", 0)
+        ff = counts.get("focus", 0)
+        if fw == 0 and ff == 0:
+            continue
+        if ff == 0:
+            tag = f'<span style="font-size:11px;font-weight:700;color:#065F46;background:#D1FAE5;border-radius:999px;padding:2px 10px;">Strength</span>'
+        elif fw == 0:
+            tag = f'<span style="font-size:11px;font-weight:700;color:#991B1B;background:#FEF2F2;border-radius:999px;padding:2px 10px;">Focus area</span>'
+        else:
+            tag = f'<span style="font-size:11px;font-weight:700;color:#92400E;background:#FEF3C7;border-radius:999px;padding:2px 10px;">Mixed</span>'
+
+        family_cards += f"""
+        <div style="border:1px solid #E5E7EB;border-left:4px solid {meta['colour']};border-radius:0 10px 10px 0;
+                    padding:14px 16px;background:#fff;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
+            <span style="font-size:18px;">{meta['icon']}</span>
+            <span style="font-size:13px;font-weight:700;color:#2D323B;">{esc(meta['plain'])}</span>
+            {tag}
+          </div>
+          <div style="font-size:12px;color:#6B7280;">{esc(meta['desc'])}</div>
+        </div>"""
+
+    families_html = f"""
+    <div style="margin-bottom:28px;">
+      <h2 style="font-size:14px;font-weight:700;color:#2D323B;margin:0 0 12px;">Your Movement Families</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;">
+        {family_cards}
+      </div>
+    </div>""" if family_cards else ""
+
+    # ── Strengths ─────────────────────────────────────────────────────────────
     if well:
         well_cards = ""
         for item in well:
             well_cards += f"""
             <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;
                         background:#fff;border:1px solid #D1FAE5;border-radius:10px;margin-bottom:8px;">
-              <span style="font-size:20px;">✅</span>
+              <span style="font-size:18px;">✅</span>
               <div>
                 <div style="font-size:13px;font-weight:700;color:#065F46;">{esc(item['display'])}</div>
-                <div style="font-size:12px;color:#6B7280;">You're tracking well here — keep it going.</div>
+                <div style="font-size:12px;color:#6B7280;">Level {item['current_level']} — you're tracking well here. Keep playing and pushing the level.</div>
               </div>
             </div>"""
         strengths_html = f"""
-        <div style="margin-bottom:32px;">
-          <h2 style="font-size:16px;font-weight:800;color:#2D323B;margin:0 0 12px;display:flex;align-items:center;gap:8px;">
-            <span style="background:#D1FAE5;color:#065F46;border-radius:50%;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;">✓</span>
-            Tracking Well
-          </h2>
+        <div style="margin-bottom:28px;">
+          <h2 style="font-size:14px;font-weight:700;color:#2D323B;margin:0 0 12px;">✅ Tracking Well</h2>
           {well_cards}
         </div>"""
     else:
         strengths_html = ""
 
-    # ── Focus areas section ───────────────────────────────────────────────────
+    # ── Focus areas ───────────────────────────────────────────────────────────
+    def _focus_card(item):
+        # Next level self-test tip
+        nt = item["next_threshold"]
+        direction = "or lower" if item["lower_is_better"] else "or more"
+        if nt is not None:
+            test_tip = (f'<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;'
+                        f'padding:10px 14px;margin-top:10px;">'
+                        f'<div style="font-size:11px;font-weight:700;color:#1E40AF;margin-bottom:4px;">🎯 Self-Test Challenge</div>'
+                        f'<div style="font-size:12px;color:#1E3A8A;line-height:1.6;">'
+                        f'Try the <strong>{esc(item["self_test"])}</strong> self-test. '
+                        f'Level {item["next_level"]} target is <strong>{nt} {direction}</strong>. '
+                        f'Do it once normally, then try to hit that number — see how close you are.'
+                        f'</div></div>')
+        else:
+            games_list = " · ".join(item["athlete_games"])
+            test_tip = (f'<div style="font-size:12px;color:#6B7280;margin-top:8px;">'
+                        f'<strong>Games to try:</strong> {esc(games_list)}</div>') if games_list else ""
+
+        sc_html = ""
+        if item["athlete_sc"]:
+            sc_html = (f'<div style="margin-top:10px;background:#FFFBEB;border-left:3px solid #F0A82E;'
+                       f'border-radius:0 6px 6px 0;padding:10px 12px;font-size:12px;color:#78350F;line-height:1.6;">'
+                       f'<strong>💪 If you\'re doing gym work:</strong> {esc(item["athlete_sc"])}</div>')
+
+        return f"""
+        <div style="border:1px solid #E5E7EB;border-radius:12px;padding:16px 18px;margin-bottom:14px;background:#fff;">
+          <div style="font-size:14px;font-weight:800;color:#2D323B;margin-bottom:4px;">{esc(item['display'])}</div>
+          <div style="font-size:12px;color:#374151;line-height:1.6;margin-bottom:6px;">{esc(item['athlete_what'])}</div>
+          <div style="font-size:12px;color:#6B7280;line-height:1.5;font-style:italic;margin-bottom:4px;">{esc(item['athlete_why'])}</div>
+          {test_tip}
+          {sc_html}
+        </div>"""
+
     if focus:
-        focus_cards = ""
-        for item in focus:
-            games_html = ""
-            if item["athlete_games"]:
-                chips = "".join(
-                    f'<span style="font-size:11px;background:#F3F4F5;border:1px solid #E5E7EB;'
-                    f'border-radius:999px;padding:3px 10px;color:#2D323B;font-weight:600;">{esc(g)}</span>'
-                    for g in item["athlete_games"]
-                )
-                games_html = f"""
-                <div style="margin-top:10px;">
-                  <div style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Games & Tests to Try</div>
-                  <div style="display:flex;flex-wrap:wrap;gap:6px;">{chips}</div>
-                </div>"""
-
-            sc_html = ""
-            if item["athlete_sc"]:
-                sc_html = f"""
-                <div style="margin-top:10px;background:#FFFBEB;border-left:3px solid #F0A82E;
-                            border-radius:0 6px 6px 0;padding:10px 12px;font-size:12px;color:#78350F;line-height:1.6;">
-                  <strong>💪 If you're doing gym or S&amp;C work:</strong> {esc(item['athlete_sc'])}
-                </div>"""
-
-            focus_cards += f"""
-            <div style="border:1px solid #E5E7EB;border-radius:12px;padding:18px 20px;margin-bottom:16px;background:#fff;">
-              <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
-                <span style="font-size:20px;flex-shrink:0;">🎯</span>
-                <div>
-                  <div style="font-size:14px;font-weight:800;color:#2D323B;margin-bottom:4px;">{esc(item['display'])}</div>
-                  <div style="font-size:13px;color:#374151;line-height:1.6;margin-bottom:6px;">{esc(item['athlete_what'])}</div>
-                  <div style="font-size:12px;color:#6B7280;line-height:1.5;font-style:italic;">{esc(item['athlete_why'])}</div>
-                </div>
-              </div>
-              {games_html}
-              {sc_html}
-            </div>"""
-
+        focus_cards = "".join(_focus_card(item) for item in focus)
         focus_html = f"""
-        <div style="margin-bottom:32px;">
-          <h2 style="font-size:16px;font-weight:800;color:#2D323B;margin:0 0 12px;display:flex;align-items:center;gap:8px;">
-            <span style="background:#FEF3C7;color:#92400E;border-radius:50%;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;">🎯</span>
-            Your Focus Areas
-          </h2>
+        <div style="margin-bottom:28px;">
+          <h2 style="font-size:14px;font-weight:700;color:#2D323B;margin:0 0 12px;">🎯 Your Development Areas</h2>
           {focus_cards}
         </div>"""
-    elif not well:
+    elif well:
         focus_html = """
-        <div class="card" style="text-align:center;padding:32px;">
-          <p style="color:#6B7280;margin:0;">No measurement data yet — once you've completed some tests your report will appear here.</p>
+        <div style="background:#D1FAE5;border-radius:12px;padding:20px 24px;margin-bottom:28px;text-align:center;">
+          <div style="font-size:22px;margin-bottom:6px;">🏆</div>
+          <div style="font-size:14px;font-weight:700;color:#065F46;">Above threshold in all tested areas — keep pushing the next level!</div>
         </div>"""
     else:
         focus_html = """
-        <div style="background:#D1FAE5;border-radius:12px;padding:20px 24px;margin-bottom:32px;text-align:center;">
-          <div style="font-size:24px;margin-bottom:8px;">🏆</div>
-          <div style="font-size:15px;font-weight:700;color:#065F46;">You're above threshold in all tested areas — excellent work!</div>
+        <div class="card" style="text-align:center;padding:32px;">
+          <p style="color:#6B7280;margin:0;">No measurement results yet — once you've been tested your report will show here.</p>
         </div>"""
 
     sport_line = f" · {esc(sport)}" if sport else ""
     body = f"""
     <div class="container" style="max-width:700px;padding-top:32px;padding-bottom:48px;">
 
-      <div style="margin-bottom:28px;">
-        <a href="/athlete" class="btn btn-ghost btn-sm" style="margin-bottom:16px;">&larr; Back to Dashboard</a>
-        <h1 style="font-size:26px;font-weight:800;color:#2D323B;margin:0 0 4px;">Your Movement Report</h1>
-        <p style="font-size:14px;color:#6B7280;margin:0;">{name}{sport_line}</p>
+      <div style="margin-bottom:20px;">
+        <a href="/athlete" class="btn btn-ghost btn-sm" style="margin-bottom:12px;">&larr; Back to Dashboard</a>
+        <h1 style="font-size:24px;font-weight:800;color:#2D323B;margin:0 0 4px;">Your Movement Report</h1>
+        <p style="font-size:13px;color:#6B7280;margin:0 0 12px;">{name}{sport_line}</p>
+        <p style="font-size:14px;color:#374151;line-height:1.7;margin:0;">{esc(synopsis)}</p>
       </div>
 
-      <div style="background:linear-gradient(135deg,#2D323B 0%,#3D434F 100%);border-radius:14px;padding:20px 24px;
-                  margin-bottom:28px;color:#fff;">
-        <div style="font-size:13px;font-weight:600;color:#F0A82E;margin-bottom:6px;">HOW TO USE THIS REPORT</div>
-        <p style="font-size:13px;line-height:1.7;margin:0;color:rgba(255,255,255,0.85);">
-          This report is based on your measurement results. The <strong style="color:#4ADE80;">Tracking Well</strong> section
-          shows where you're performing strongly. The <strong style="color:#FCD34D;">Focus Areas</strong> section highlights
-          where you can make the biggest gains — with specific games and activities to help you get there.
-        </p>
-      </div>
-
+      {pa_callout}
+      {families_html}
       {strengths_html}
       {focus_html}
 
@@ -9685,6 +9765,7 @@ def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_r
     </style>"""
 
     return layout("My Movement Report", body, user=athlete, active_nav="dashboard")
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -10032,6 +10113,68 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw):
     if not area_analysis:
         plan_html = '<div class="card"><p class="muted">No measurement data or thresholds set yet — complete a testing round to generate a session plan.</p></div>'
 
+    # ── Family summary cards ──────────────────────────────────────────────────
+    FAMILY_META = {
+        "Balance & Postural Control": {"icon": "⚖️", "colour": "#6366F1"},
+        "Explosive & Landing":        {"icon": "🚀", "colour": "#F59E0B"},
+        "Dynamic Locomotor":          {"icon": "⚡", "colour": "#10B981"},
+        "Perceptual-Motor Speed":     {"icon": "👁️", "colour": "#EF4444"},
+    }
+    family_buckets = {}
+    for a in area_analysis:
+        fam = a["family"]
+        family_buckets.setdefault(fam, {"gap": [], "strength": [], "mixed": []})
+        if a["pct_gap"] >= 50:
+            family_buckets[fam]["gap"].append(a["display"])
+        elif a["pct_gap"] < 30:
+            family_buckets[fam]["strength"].append(a["display"])
+        else:
+            family_buckets[fam]["mixed"].append(a["display"])
+
+    family_cards_html = ""
+    for fam, meta in FAMILY_META.items():
+        b = family_buckets.get(fam, {})
+        gaps = b.get("gap", [])
+        strengths = b.get("strength", [])
+        mixed = b.get("mixed", [])
+        if not gaps and not strengths and not mixed:
+            continue
+        if gaps and not strengths:
+            status_tag = '<span style="font-size:11px;font-weight:700;color:#991B1B;background:#FEF2F2;border-radius:999px;padding:2px 10px;">Focus area</span>'
+        elif strengths and not gaps:
+            status_tag = '<span style="font-size:11px;font-weight:700;color:#065F46;background:#D1FAE5;border-radius:999px;padding:2px 10px;">Strength</span>'
+        else:
+            status_tag = '<span style="font-size:11px;font-weight:700;color:#92400E;background:#FEF3C7;border-radius:999px;padding:2px 10px;">Mixed</span>'
+
+        detail_parts = []
+        if gaps:
+            detail_parts.append(f'<span style="color:#EF4444;">▼ {", ".join(gaps)}</span>')
+        if strengths:
+            detail_parts.append(f'<span style="color:#10B981;">✓ {", ".join(strengths)}</span>')
+        if mixed:
+            detail_parts.append(f'<span style="color:#F59E0B;">~ {", ".join(mixed)}</span>')
+
+        family_cards_html += f"""
+        <div style="border:1px solid #E5E7EB;border-left:4px solid {meta['colour']};
+                    border-radius:0 10px 10px 0;padding:14px 16px;background:#fff;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+            <span style="font-size:18px;">{meta['icon']}</span>
+            <span style="font-size:13px;font-weight:700;color:#2D323B;">{esc(fam)}</span>
+            {status_tag}
+          </div>
+          <div style="font-size:11px;line-height:1.8;display:flex;flex-direction:column;gap:2px;">
+            {"".join(f"<span>{p}</span>" for p in detail_parts)}
+          </div>
+        </div>"""
+
+    families_section = f"""
+    <div style="margin-bottom:28px;">
+      <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#9CA3AF;margin-bottom:12px;">Movement Families Overview</h2>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">
+        {family_cards_html}
+      </div>
+    </div>""" if family_cards_html else ""
+
     body = f"""
     <div style="max-width:900px;margin:0 auto;padding:32px 16px 48px;">
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:12px;">
@@ -10056,6 +10199,7 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw):
         </p>
       </div>
 
+      {families_section}
       {snapshot_html}
       {outliers_html}
       {plan_html}

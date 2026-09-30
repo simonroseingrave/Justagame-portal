@@ -685,7 +685,7 @@ SC_GAP_LANGUAGE = {
             "Avoid premature loading on unstable surfaces — build a stable base first. "
             "Calf and ankle stability work underpins the postural hold."
         ),
-        "d2_focus": ["Bilateral balance", "Proprioception", "Hand-eye coordination"],
+        "d2_focus": ["Bilateral balance", "Proprioception", "Perceptual-action coupling"],
         "athlete_what": "Staying balanced while catching is something to develop — when your base is solid, everything else gets easier.",
         "athlete_why": "In your sport, staying steady when a ball comes to you — or when someone puts you under pressure — makes a real difference. This is the foundation.",
         "athlete_games": ["Balance Ball Catching (self-test)", "Lob Scotch", "Step Up"],
@@ -705,7 +705,7 @@ SC_GAP_LANGUAGE = {
             "once stable ground control is consistent. Hip abductor and ankle stability "
             "work (single-leg deadlifts, lateral band walks) directly supports this area."
         ),
-        "d2_focus": ["Unilateral balance", "Proprioception", "Core stability"],
+        "d2_focus": ["Unilateral balance", "Proprioception", "Perceptual-action coupling"],
         "athlete_what": "Balancing on one leg while tracking a ball is a real skill — and it's very trainable.",
         "athlete_why": "Most sport happens on one leg — cutting, landing, holding your position. Getting comfortable here makes you more robust and harder to knock off balance.",
         "athlete_games": ["Balance Ball Catching (self-test)", "Step Up", "Grid Leap"],
@@ -747,7 +747,7 @@ SC_GAP_LANGUAGE = {
             "to reactive catch-and-jump sequences. Include spatial target work alongside "
             "power development — accuracy and distance should develop in parallel, not in series."
         ),
-        "d2_focus": ["Horizontal power", "Landing mechanics", "Hand-eye coordination"],
+        "d2_focus": ["Horizontal power", "Landing mechanics", "Perceptual-action coupling"],
         "athlete_what": "Combining a big leap with a catch and throw is tough — this is an exciting area to develop because the gains are very visible.",
         "athlete_why": "Leaping to take a mark, jumping to intercept, or driving through space under pressure — this is where physical power meets game reading.",
         "athlete_games": ["Grid Leap (self-test)", "Diamond Gates", "Lob Scotch"],
@@ -768,7 +768,7 @@ SC_GAP_LANGUAGE = {
             "loaded step-ups, calf raises) supports the locomotor demand and reduces "
             "cognitive load on the movement pattern."
         ),
-        "d2_focus": ["Vertical power", "Rhythmic coordination", "Hand-eye coordination"],
+        "d2_focus": ["Vertical power", "Rhythmic coordination", "Perceptual-action coupling"],
         "athlete_what": "Keeping your rhythm while doing two things at once — stepping and catching — is a great skill to build.",
         "athlete_why": "Athletes who can keep moving consistently while tracking a ball have a real edge. This tests whether your body can run on autopilot so your mind can focus on the game.",
         "athlete_games": ["Step Up (self-test)", "Skipping Rope Sprint", "Diamond Gates"],
@@ -833,7 +833,7 @@ SC_GAP_LANGUAGE = {
             "Combine only once the movement pattern is sufficiently automatic that it "
             "no longer competes for attentional resources."
         ),
-        "d2_focus": ["Change of direction speed", "Ball manipulation / dribbling", "Foot-eye coordination"],
+        "d2_focus": ["Change of direction speed", "Ball manipulation", "Ball-foot perceptual coupling"],
         "athlete_what": "Moving quickly with the ball while changing direction is something to develop — your movement and ball control will start to click together.",
         "athlete_why": "Being able to move with the ball without thinking about it frees your mind to read the game. This area is about making ball movement feel automatic.",
         "athlete_games": ["Diamond Dribble (self-test & programme)", "Diamond Gates", "Skipping Rope Sprint"],
@@ -854,7 +854,7 @@ SC_GAP_LANGUAGE = {
             "ground contact time. Critically: avoid choreographed agility patterns. "
             "The S&C adaptation must occur under genuine unpredictability to transfer."
         ),
-        "d2_focus": ["Reactive agility", "Hand-eye coordination"],
+        "d2_focus": ["Reactive agility", "Perceptual-action coupling"],
         "athlete_what": "Reacting quickly to a ball that you can't predict is something to sharpen — this is one of the most sport-specific skills there is.",
         "athlete_why": "The best athletes read play early and move before anyone else. This test measures exactly that — your ability to pick up cues and react instantly.",
         "athlete_games": ["Split Step (self-test)", "Split Decision", "Diamond Gates"],
