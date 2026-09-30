@@ -2236,7 +2236,7 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
         {reset_btn}
         <a class="btn btn-primary" href="/coach/participants/{participant['id']}/progress">&#128200; Achievement Statistics</a>
-        <a class="btn btn-ghost" href="/coach/participants/{participant['id']}/report" target="_blank">&#128196; S&amp;C Report</a>
+        <a class="btn btn-ghost" href="/coach/participants/{participant['id']}/report" target="_blank">&#128196; Adaptability Progress Report</a>
         <a class="btn btn-ghost" href="/coach">&larr; Back</a>
       </div>
     </div>
@@ -9459,6 +9459,7 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
 
       <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px;">
         <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#F0A82E;margin-bottom:4px;">Adaptability Progress Report</div>
           <h1 style="font-size:24px;font-weight:800;color:#2D323B;margin:0 0 4px;">{name}</h1>
           <p style="font-size:13px;color:#6E737B;margin:0;">{athlete_meta}</p>
         </div>
@@ -9475,7 +9476,7 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
         Gap Analysis{"" if has_thresholds else " (all areas — no thresholds set)"}
       </h2>
       <p style="font-size:13px;color:#6E737B;margin-bottom:16px;line-height:1.5;">
-        {"Areas where this athlete is below their next level threshold, with S&C language to support programme integration." if has_thresholds else "Once thresholds are set, only areas below threshold will appear here."}
+        {"Areas where this athlete is below their next level threshold — use these to guide programme game selection and development focus." if has_thresholds else "Once thresholds are set, only areas below threshold will appear here."}
       </p>
       {gap_html}
 
@@ -9492,7 +9493,7 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
     }}
     </style>"""
 
-    return layout(f"Report — {athlete.get('name','Athlete')}", body, user=coach, active_nav="progress")
+    return layout(f"Adaptability Progress Report — {athlete.get('name','Athlete')}", body, user=coach, active_nav="progress")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
