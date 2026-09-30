@@ -503,7 +503,7 @@ def coach_dashboard(req):
 
 @router.get("/coach/participants/new")
 def new_participant_get(req):
-    coach = require_admin(req)
+    coach = require_staff(req)
     if not coach:
         return redirect("/login")
     conn = db.get_conn()
@@ -516,7 +516,7 @@ def new_participant_get(req):
 
 @router.post("/coach/participants/new")
 def new_participant_post(req):
-    coach = require_admin(req)
+    coach = require_staff(req)
     if not coach:
         return redirect("/login")
     name = req.form_get("name").strip()
@@ -1861,8 +1861,8 @@ def admin_athletes_delete_ungrouped(req):
 
 @router.post("/coach/admin/sessions/delete")
 def admin_sessions_delete(req):
-    """System-admin: delete a specific measurement session."""
-    coach = require_system_admin(req)
+    """Delete a specific measurement session — all staff."""
+    coach = require_staff(req)
     if not coach:
         return redirect("/login")
     session_id_str = req.form_get("session_id").strip()
@@ -2836,7 +2836,7 @@ def participant_import_post(req):
 
 @router.get("/coach/scores/import")
 def scores_import_get(req):
-    coach = require_admin(req)
+    coach = require_staff(req)
     if not coach:
         return redirect("/login")
     conn = db.get_conn()
@@ -2853,7 +2853,7 @@ def scores_import_get(req):
 @router.get("/coach/scores/import/template.csv")
 def scores_import_template(req):
     import csv, io
-    coach = require_admin(req)
+    coach = require_staff(req)
     if not coach:
         return redirect("/login")
     from constants import active_measurement_games
@@ -2923,7 +2923,7 @@ def scores_import_template(req):
 def scores_import_post(req):
     import csv, io
     from constants import find_any_game, active_measurement_games
-    coach = require_admin(req)
+    coach = require_staff(req)
     if not coach:
         return redirect("/login")
 
