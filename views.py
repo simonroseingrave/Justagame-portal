@@ -139,13 +139,13 @@ def layout(title, body, user=None, flash=None, active_nav=None):
 
             # Core nav — always visible
             links = [
-                ("/coach",            "Dashboard",    "dashboard"),
-                ("/coach/session",    "Record Session", "session"),
+                ("/coach",            "Home",         "home"),
+                ("/coach/groups",     "Groups",       "dashboard"),
+                ("/coach/session",    "Record",       "session"),
                 ("/coach/attendance", "Attendance",   "attendance"),
                 ("/coach/group-hub",  "Group Hub",    "group_hub"),
                 ("/coach/leaderboard","Leaderboard",  "leaderboard"),
-                ("/coach/resources",  "Resources",    "resources"),
-                ("/coach/reports",    "Reports",      "progress"),
+                ("/coach/progress",   "Reports",      "progress"),
                 ("/help",             "Help",         "help"),
             ]
             nav_items = "".join(
@@ -252,6 +252,14 @@ def layout(title, body, user=None, flash=None, active_nav=None):
 
     flash_html = f'<div class="flash">{esc(flash)}</div>' if flash else ""
 
+    if user and user.get("role") != "participant" and active_nav != "home":
+        home_btn = ('<div style="margin-bottom:12px;">'
+                    '<a href="/coach" class="return-home-btn">'
+                    '&#8962; Return to Home'
+                    '</a></div>')
+    else:
+        home_btn = ""
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -275,6 +283,17 @@ def layout(title, body, user=None, flash=None, active_nav=None):
     .res-folder-chevron {{ font-size: 16px; color: #2D323B; }}
     .res-folder-tab--ungrouped .res-folder-chevron {{ color: #6E737B; }}
     .res-folder-toggle:hover .res-folder-name {{ text-decoration: underline; }}
+    .return-home-btn {{
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.55);
+      text-decoration: none; padding: 5px 12px; border-radius: 20px;
+      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
+      transition: background 0.15s, color 0.15s;
+    }}
+    .return-home-btn:hover {{
+      background: rgba(255,255,255,0.12) !important;
+      color: #F0A82E !important;
+    }}
   </style>
 
   <!-- Add to Home Screen / PWA -->
@@ -308,6 +327,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
   </div>''' if user and user.get("_view_as") else ""}
   <main class="container">
     {flash_html}
+    {home_btn}
     {body}
   </main>
   <footer class="footer">
@@ -1575,6 +1595,161 @@ def edit_group_page(user, group, error=None):
     return layout(f"Edit Group — {group['name']}", body, user=user, active_nav="dashboard")
 
 
+def practitioner_home_page(coach):
+    """Landing page for practitioners — large card links to each main area."""
+    name = coach.get("name", "").split()[0] if coach.get("name") else "there"
+    is_admin = coach.get("role") in {"org_admin", "system_admin"}
+
+    CARDS = [
+        {
+            "icon": "&#128101;",
+            "title": "View Groups &amp; Athletes",
+            "sub":   "Browse your groups and individual athlete profiles",
+            "href":  "/coach/groups",
+            "color": "#6366F1",
+        },
+        {
+            "icon": "&#9989;",
+            "title": "Record Attendance",
+            "sub":   "Mark attendance and open self-test exploration",
+            "href":  "/coach/attendance/new",
+            "color": "#10B981",
+        },
+        {
+            "icon": "&#128203;",
+            "title": "Group Testing",
+            "sub":   "Record measurement sessions and review game scores",
+            "href":  "/coach/group-hub",
+            "color": "#F59E0B",
+        },
+        {
+            "icon": "&#128202;",
+            "title": "Reports",
+            "sub":   "Progress reports, group next steps, and adaptability snapshots",
+            "href":  "/coach/progress",
+            "color": "#EF4444",
+        },
+        {
+            "icon": "&#127942;",
+            "title": "Group Leaderboard",
+            "sub":   "AXP rankings within your groups",
+            "href":  "/coach/leaderboard",
+            "color": "#F0A82E",
+        },
+    ]
+
+    cards_html = ""
+    for c in CARDS:
+        cards_html += f"""
+        <a href="{c['href']}" class="prac-card" style="--card-accent:{c['color']};">
+          <div class="prac-card-icon">{c['icon']}</div>
+          <div class="prac-card-body">
+            <div class="prac-card-title">{c['title']}</div>
+            <div class="prac-card-sub">{c['sub']}</div>
+          </div>
+          <div class="prac-card-arrow">&#8250;</div>
+        </a>"""
+
+    body = f"""
+    <style>
+      .prac-home {{
+        max-width: 680px;
+        margin: 0 auto;
+        padding: 32px 16px 48px;
+      }}
+      .prac-welcome {{
+        text-align: center;
+        margin-bottom: 36px;
+      }}
+      .prac-welcome h1 {{
+        font-size: 22px;
+        font-weight: 700;
+        color: #F0A82E;
+        margin: 0 0 6px;
+      }}
+      .prac-welcome p {{
+        font-size: 14px;
+        color: rgba(255,255,255,0.55);
+        margin: 0;
+      }}
+      .prac-cards {{
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }}
+      .prac-card {{
+        display: flex;
+        align-items: center;
+        gap: 18px;
+        background: rgba(255,255,255,0.04);
+        border: 1.5px solid rgba(255,255,255,0.08);
+        border-left: 4px solid var(--card-accent);
+        border-radius: 14px;
+        padding: 18px 20px;
+        text-decoration: none;
+        color: inherit;
+        transition: background 0.18s, transform 0.15s, box-shadow 0.18s;
+        cursor: pointer;
+      }}
+      .prac-card:hover {{
+        background: rgba(255,255,255,0.08);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+      }}
+      .prac-card:active {{
+        transform: translateY(0);
+      }}
+      .prac-card-icon {{
+        font-size: 28px;
+        width: 48px;
+        height: 48px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255,255,255,0.06);
+        border-radius: 12px;
+        flex-shrink: 0;
+      }}
+      .prac-card-body {{
+        flex: 1;
+        min-width: 0;
+      }}
+      .prac-card-title {{
+        font-size: 15px;
+        font-weight: 700;
+        color: #fff;
+        margin-bottom: 3px;
+      }}
+      .prac-card-sub {{
+        font-size: 12px;
+        color: rgba(255,255,255,0.5);
+        line-height: 1.4;
+      }}
+      .prac-card-arrow {{
+        font-size: 24px;
+        color: var(--card-accent);
+        flex-shrink: 0;
+        opacity: 0.8;
+      }}
+      @media (min-width: 520px) {{
+        .prac-card-title {{ font-size: 16px; }}
+        .prac-card-icon  {{ font-size: 30px; }}
+      }}
+    </style>
+
+    <div class="prac-home">
+      <div class="prac-welcome">
+        <h1>What are you keen to do today, {esc(name)}?</h1>
+        <p>Choose an area to get started</p>
+      </div>
+      <div class="prac-cards">
+        {cards_html}
+      </div>
+    </div>"""
+
+    return layout("Home", body, user=coach, active_nav="home")
+
+
 def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None, org_map=None, stats=None):
     message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
     is_admin = user.get("is_admin")
@@ -2686,7 +2861,7 @@ def group_achievement_summary_page(coach, group, participants_sessions, max_leve
         body = f"""
         <div class="page-head">
           <div><h1>{gname} &mdash; Achievement Summary</h1></div>
-          <a class="btn btn-ghost" href="/coach">&larr; Dashboard</a>
+          <a class="btn btn-ghost" href="/coach/groups">&larr; Groups</a>
         </div>
         <div class="card">
           <p class="muted">No athletes in this group have two or more test sessions yet — come back after the second round of measurements.</p>
@@ -2889,7 +3064,7 @@ def group_achievement_summary_page(coach, group, participants_sessions, max_leve
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <a class="btn btn-ghost" href="{prog_link}">Individual stats &rarr;</a>
-        <a class="btn btn-ghost" href="/coach">&larr; Dashboard</a>
+        <a class="btn btn-ghost" href="/coach/groups">&larr; Groups</a>
       </div>
     </div>
     {level_bar}
@@ -2917,7 +3092,7 @@ def group_scores_table_page(coach, group, participants_sessions, max_level=None)
         body = f"""
         <div class="page-head">
           <div><h1>{gname} &mdash; Scores Table</h1></div>
-          <a class="btn btn-ghost" href="/coach">&larr; Dashboard</a>
+          <a class="btn btn-ghost" href="/coach/groups">&larr; Groups</a>
         </div>
         <div class="card"><p class="muted">No test sessions recorded for this group yet.</p></div>"""
         return layout(f"{group['name']} Scores Table", body, user=coach, active_nav="progress")
@@ -2952,7 +3127,7 @@ def group_scores_table_page(coach, group, participants_sessions, max_level=None)
         body = f"""
         <div class="page-head">
           <div><h1>{gname} &mdash; Scores Table</h1></div>
-          <a class="btn btn-ghost" href="/coach">&larr; Dashboard</a>
+          <a class="btn btn-ghost" href="/coach/groups">&larr; Groups</a>
         </div>
         <div class="card"><p class="muted">No measurement data recorded yet.</p></div>"""
         return layout(f"{group['name']} Scores Table", body, user=coach, active_nav="progress")
@@ -3051,7 +3226,7 @@ def group_scores_table_page(coach, group, participants_sessions, max_level=None)
           &#128438; Print / Save PDF
         </button>
         <a class="btn btn-ghost" href="{summary_url}">&#128200; Group Stats</a>
-        <a class="btn btn-ghost" href="/coach">&larr; Dashboard</a>
+        <a class="btn btn-ghost" href="/coach/groups">&larr; Groups</a>
       </div>
     </div>
     <div class="no-print">{level_bar}</div>

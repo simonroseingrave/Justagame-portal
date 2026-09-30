@@ -356,6 +356,15 @@ def athlete_resources(req):
 
 
 @router.get("/coach")
+def coach_home(req):
+    """Practitioner landing page — 'What are you keen to do today?'"""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    return Response(views.practitioner_home_page(coach))
+
+
+@router.get("/coach/groups")
 def coach_dashboard(req):
     coach = require_staff(req)
     if not coach:
@@ -541,11 +550,11 @@ def new_participant_post(req):
         if setup_login:
             emailed = mailer.send_welcome_athlete(name, email, password)
             if emailed:
-                return flash_redirect("/coach", f"Added {name} (#{athlete_number}). Welcome email sent to {email}.")
+                return flash_redirect("/coach/groups", f"Added {name} (#{athlete_number}). Welcome email sent to {email}.")
             else:
-                return flash_redirect("/coach", f"Added {name} (#{athlete_number}). Share their login: {email} / {password}")
+                return flash_redirect("/coach/groups", f"Added {name} (#{athlete_number}). Share their login: {email} / {password}")
         else:
-            return flash_redirect("/coach", f"Added {name} (#{athlete_number}) to the system.")
+            return flash_redirect("/coach/groups", f"Added {name} (#{athlete_number}) to the system.")
     finally:
         conn.close()
 
@@ -1599,7 +1608,7 @@ def log_measurement_session(req, participant_id):
         finally:
             conn.close()
         if not p or p["group_id"] not in coach_group_ids:
-            return flash_redirect("/coach", "You don't have access to that participant.")
+            return flash_redirect("/coach/groups", "You don't have access to that participant.")
     session_label  = req.form_get("session_label") or None
     session_month  = req.form_get("session_month") or None
     confirm_replace = req.form_get("confirm_replace") == "1"
@@ -1696,7 +1705,7 @@ def reset_participant_password(req, participant_id):
             "SELECT * FROM users WHERE id = ? AND role = 'participant'", (participant_id,)
         ).fetchone()
         if not participant:
-            return flash_redirect("/coach", "Participant not found.")
+            return flash_redirect("/coach/groups", "Participant not found.")
         temp_password = generate_temp_password()
         db.update_password(conn, participant_id, temp_password)
         conn.execute("DELETE FROM sessions WHERE user_id = ?", (participant_id,))
@@ -2305,11 +2314,11 @@ def group_new(req):
         return redirect("/login")
     name = req.form_get("group_name").strip()
     if not name:
-        return flash_redirect("/coach", "Group name is required.")
+        return flash_redirect("/coach/groups", "Group name is required.")
     conn = db.get_conn()
     try:
         db.add_participant_group(conn, name, coach["id"])
-        return flash_redirect("/coach", f'Group "{name}" created.')
+        return flash_redirect("/coach/groups", f'Group "{name}" created.')
     finally:
         conn.close()
 
@@ -2347,7 +2356,7 @@ def group_edit_post(req, group_id):
     conn = db.get_conn()
     try:
         db.update_participant_group(conn, group_id, name, icon_url, show_leaderboard=show_leaderboard)
-        return flash_redirect("/coach", f'Group "{name}" updated.')
+        return flash_redirect("/coach/groups", f'Group "{name}" updated.')
     finally:
         conn.close()
 
@@ -2379,7 +2388,7 @@ def group_delete(req, group_id):
     conn = db.get_conn()
     try:
         db.delete_participant_group(conn, group_id)
-        return flash_redirect("/coach", "Group deleted. Participants moved to ungrouped.")
+        return flash_redirect("/coach/groups", "Group deleted. Participants moved to ungrouped.")
     finally:
         conn.close()
 
@@ -2393,14 +2402,14 @@ def group_relabel_sessions(req, group_id):
     session_label = req.form_get("session_label") or None
     session_month = req.form_get("session_month") or None
     if not session_label or not session_month:
-        return flash_redirect("/coach", "Please select both a phase and a month.")
+        return flash_redirect("/coach/groups", "Please select both a phase and a month.")
     conn = db.get_conn()
     try:
         updated = db.relabel_unlabelled_sessions(conn, group_id, session_label, session_month)
     finally:
         conn.close()
     label_display = SESSION_LABEL_MAP.get(session_label, session_label)
-    return flash_redirect("/coach", f"{updated} session(s) labelled as '{label_display}'.")
+    return flash_redirect("/coach/groups", f"{updated} session(s) labelled as '{label_display}'.")
 
 
 # ------------------------------------------------------------------ resources
@@ -2818,7 +2827,7 @@ def participant_import_post(req):
     summary = f"Import complete: {created} added, {skipped} skipped."
     if errors:
         summary += " Issues: " + " | ".join(errors)
-    return flash_redirect("/coach", summary)
+    return flash_redirect("/coach/groups", summary)
 
 
 # ---------------------------------------------------------------------------
@@ -3072,7 +3081,7 @@ def scores_import_post(req):
         summary += ". Issues: " + " | ".join(errors[:10])
         if len(errors) > 10:
             summary += f" (and {len(errors)-10} more)"
-    return flash_redirect("/coach", summary)
+    return flash_redirect("/coach/groups", summary)
 
 
 @router.get("/coach/participants/export.csv")
@@ -3516,7 +3525,7 @@ def coach_participant_xp(req, participant_id):
     try:
         participant = conn.execute("SELECT * FROM users WHERE id = ?", (participant_id,)).fetchone()
         if not participant:
-            return flash_redirect("/coach", "Participant not found.")
+            return flash_redirect("/coach/groups", "Participant not found.")
         xp_data = db.get_athlete_xp(conn, participant_id)
         levels = db.get_all_athlete_levels(conn, participant_id)
     finally:
