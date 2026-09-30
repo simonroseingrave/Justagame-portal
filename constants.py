@@ -663,3 +663,165 @@ def threshold_field_key(area):
     cfg = XP_GAME_CONFIG.get(area["game_key"], {})
     fields = cfg.get("score_fields", [])
     return fields[0] if fields else ""
+
+
+# ── S&C Gap Language ──────────────────────────────────────────────────────────
+# Per-scoring-area S&C gap descriptions and programme recommendations.
+# Keyed by (game_key, stored_field_key) — use threshold_field_key(area) to get stored_field_key.
+# Used in the individual athlete report to generate S&C-language gap analysis.
+
+SC_GAP_LANGUAGE = {
+    ("balance_ball_catching", "large_ball_wall_bounce"): {
+        "display": "Balance Catching — Two Feet",
+        "family": "Balance & Postural Control",
+        "sc_gap": (
+            "Bilateral balance deficit — the proprioceptive system is not adequately "
+            "managing postural stability under a dual-task demand (balance + catch). "
+            "The stable base required to support a secondary perceptual demand is not yet established."
+        ),
+        "sc_programme": (
+            "Prioritise bilateral proprioceptive loading: single-plane balance holds progressing "
+            "to unstable surfaces. Include wall-supported catching as a controlled dual-task. "
+            "Avoid premature loading on unstable surfaces — build a stable base first. "
+            "Calf and ankle stability work underpins the postural hold."
+        ),
+        "d2_focus": ["Bilateral balance", "Proprioception", "Hand-eye coordination"],
+    },
+    ("balance_ball_catching", "one_foot_balance_catch"): {
+        "display": "Balance Catching — One Foot",
+        "family": "Balance & Postural Control",
+        "sc_gap": (
+            "Unilateral balance deficit — single-leg proprioceptive control is insufficient "
+            "to support a secondary perceptual demand. The athlete cannot yet stabilise on "
+            "one foot while simultaneously tracking and catching a ball."
+        ),
+        "sc_programme": (
+            "Build unilateral proprioceptive control progressively: single-leg holds → "
+            "single-leg with arm reach → single-leg catch. Only introduce unstable surfaces "
+            "once stable ground control is consistent. Hip abductor and ankle stability "
+            "work (single-leg deadlifts, lateral band walks) directly supports this area."
+        ),
+        "d2_focus": ["Unilateral balance", "Proprioception", "Core stability"],
+    },
+    ("lob_scotch", "squares_scored"): {
+        "display": "Lob Scotch",
+        "family": "Explosive & Landing",
+        "sc_gap": (
+            "Dynamic landing mechanics deficit — inadequate bilateral landing control "
+            "following a unilateral projective movement. Landing absorption and re-stabilisation "
+            "from the hop-to-land transition is underdeveloped."
+        ),
+        "sc_programme": (
+            "Focus on progressive landing mechanics: drop landings → box step-offs → "
+            "unilateral hops to bilateral landing. Cue knee-over-toe alignment and full "
+            "ankle dorsiflexion on contact. Avoid max-effort hops until controlled, "
+            "quiet landing is consistent. Eccentric quad and glute strength underpins "
+            "the absorption capacity."
+        ),
+        "d2_focus": ["Landing mechanics", "Plyometric power", "Rhythmic coordination"],
+    },
+    ("leap_catching_throwing", "points"): {
+        "display": "Grid Leap",
+        "family": "Explosive & Landing",
+        "sc_gap": (
+            "Horizontal power and spatial targeting deficit — inadequate projective force "
+            "production and/or landing accuracy under a concurrent perceptual demand. "
+            "The athlete cannot yet couple horizontal force output with simultaneous ball "
+            "tracking and spatial target awareness."
+        ),
+        "sc_programme": (
+            "Develop horizontal power with landing accuracy together: broad jumps to a "
+            "target zone, medicine ball horizontal throws for force production. Progress "
+            "to reactive catch-and-jump sequences. Include spatial target work alongside "
+            "power development — accuracy and distance should develop in parallel, not in series."
+        ),
+        "d2_focus": ["Horizontal power", "Landing mechanics", "Hand-eye coordination"],
+    },
+    ("step_up", "step_bench"): {
+        "display": "Step Up",
+        "family": "Explosive & Landing",
+        "sc_gap": (
+            "Vertical force production with concurrent hand-eye coordination deficit — "
+            "step-up rhythm and catch timing are decoupled. The athlete cannot yet maintain "
+            "the full perception-action loop through the complete vertical movement cycle."
+        ),
+        "sc_programme": (
+            "Build step-up rhythm before adding the ball: metronome-paced step-ups, "
+            "focusing on full hip extension at the top position. Once rhythm is consistent, "
+            "introduce the self-feed wall catch. Vertical power foundation work (box step-ups, "
+            "loaded step-ups, calf raises) supports the locomotor demand and reduces "
+            "cognitive load on the movement pattern."
+        ),
+        "d2_focus": ["Vertical power", "Rhythmic coordination", "Hand-eye coordination"],
+    },
+    ("skipping_rope_sprint", "average"): {
+        "display": "Skipping Rope Sprints",
+        "family": "Dynamic Locomotor",
+        "sc_gap": (
+            "Linear speed with rhythmic coordination deficit — the athlete cannot yet "
+            "synchronise locomotion with rope rotation at sufficient pace. Sprint mechanics "
+            "and rope timing are not coupled, with the rope constraint reducing the efficiency "
+            "of the locomotor pattern."
+        ),
+        "sc_programme": (
+            "Address sprint mechanics and rope coordination as separate qualities before "
+            "combining them. For the S&C component: acceleration work (wall drives, A-skips, "
+            "resisted sprint starts) builds the speed foundation. Progress to combined "
+            "rope-sprint sets once each element is consistent in isolation. "
+            "Note: this is an inverse metric — lower time is better."
+        ),
+        "d2_focus": ["Linear speed", "Rhythmic coordination"],
+    },
+    ("diamond_gates", "small_group"): {
+        "display": "Diamond Gates",
+        "family": "Dynamic Locomotor",
+        "sc_gap": (
+            "Change of direction speed deficit — the athlete is not efficiently navigating "
+            "the spatial structure of the diamond under the group time constraint. "
+            "Deceleration mechanics, re-acceleration, and turning efficiency need development."
+        ),
+        "sc_programme": (
+            "COD speed development: deceleration mechanics first (hip-sink, foot-strike "
+            "positioning), then 5-10-5 shuttle progressions, lateral shuffle to sprint "
+            "transitions. Strength base directly supports deceleration capacity — include "
+            "rear-foot-elevated split squats and lateral band work for hip abductor control "
+            "in the change-of-direction moment."
+        ),
+        "d2_focus": ["Change of direction speed", "Reactive agility"],
+    },
+    ("diamond_dribble", "small_group"): {
+        "display": "Diamond Dribble",
+        "family": "Dynamic Locomotor",
+        "sc_gap": (
+            "Change of direction speed with concurrent ball manipulation deficit — "
+            "the dribble constraint is absorbing perceptual and motor resources, "
+            "reducing locomotor efficiency. Dual-task capacity (movement quality + "
+            "ball control) is underdeveloped."
+        ),
+        "sc_programme": (
+            "From an S&C perspective, address movement quality as the priority: COD "
+            "mechanics, deceleration control, and unilateral leg strength (split squats, "
+            "lateral lunges). Ball manipulation is a skill quality developed separately. "
+            "Combine only once the movement pattern is sufficiently automatic that it "
+            "no longer competes for attentional resources."
+        ),
+        "d2_focus": ["Change of direction speed", "Ball manipulation / dribbling", "Foot-eye coordination"],
+    },
+    ("split_step", "catches"): {
+        "display": "Split Step",
+        "family": "Perceptual-Motor Speed",
+        "sc_gap": (
+            "Reactive agility deficit — the athlete is not intercepting the reflex ball "
+            "within the available temporal window at sufficient rate. Reactive speed and "
+            "the coupling between visual stimulus and motor response are limiting performance."
+        ),
+        "sc_programme": (
+            "Reactive agility training: visual stimulus to movement response drills, "
+            "1v1 mirroring, partner signal COD. Plyometric base supports reactive speed — "
+            "include drop-catch drills and rapid ground contact (pogo) work to reduce "
+            "ground contact time. Critically: avoid choreographed agility patterns. "
+            "The S&C adaptation must occur under genuine unpredictability to transfer."
+        ),
+        "d2_focus": ["Reactive agility", "Hand-eye coordination"],
+    },
+}

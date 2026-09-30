@@ -527,6 +527,33 @@ def coach_participant_detail(req, participant_id):
         conn.close()
 
 
+@router.get("/coach/participants/<int:participant_id>/report")
+def coach_participant_report(req, participant_id):
+    """Individual athlete report — latest scores, gap analysis, S&C recommendations."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        participant = conn.execute(
+            "SELECT * FROM users WHERE id = ? AND role = 'participant'", (participant_id,)
+        ).fetchone()
+        if not participant:
+            return Response(views.simple_message_page("Not found", "Participant not found.", user=coach), status=404)
+        if not coach["role"] in {"org_admin", "system_admin"}:
+            coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
+            if participant["group_id"] not in coach_group_ids:
+                return Response(views.simple_message_page("Access denied", "You don't have access to this participant.", user=coach), status=403)
+        sessions = db.measurement_sessions_for(conn, participant_id)
+        levels_by_area = db.get_all_athlete_levels_by_area(conn, participant_id)
+        thresholds_raw = db.get_all_thresholds(conn)
+        return Response(views.individual_athlete_report_page(
+            coach, dict(participant), sessions, levels_by_area, thresholds_raw
+        ))
+    finally:
+        conn.close()
+
+
 @router.get("/coach/reports")
 def reports_landing(req):
     coach = require_staff(req)

@@ -2220,6 +2220,7 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
       <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
         {reset_btn}
         <a class="btn btn-primary" href="/coach/participants/{participant['id']}/progress">&#128200; Achievement Statistics</a>
+        <a class="btn btn-ghost" href="/coach/participants/{participant['id']}/report" target="_blank">&#128196; S&amp;C Report</a>
         <a class="btn btn-ghost" href="/coach">&larr; Back</a>
       </div>
     </div>
@@ -9227,3 +9228,252 @@ def athlete_window_submit_page(user, window, games, already_submitted=False):
     </script>"""
 
     return layout(f"Score Entry{' — ' + label if label else ''}", body, user=user, active_nav="dashboard")
+
+
+# ── Individual Athlete Report ──────────────────────────────────────────────────
+
+def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
+                                   thresholds_raw, sc_programme=True):
+    """
+    Printable individual athlete report.
+    Shows latest scores, gap identification against thresholds (if set),
+    S&C gap language, and S&C programme recommendations.
+
+    athlete:         user row
+    sessions:        list of session dicts (most-recent first), each with 'results' dict keyed (game_key, field_key)
+    levels_by_area:  {(game_key, field_key): level}
+    thresholds_raw:  list of threshold rows from get_all_thresholds()
+    sc_programme:    bool — whether to show the S&C programme section
+    """
+    from constants import SCORING_AREAS, threshold_field_key, SC_GAP_LANGUAGE, XP_GAME_CONFIG
+
+    today = _dt.date.today().strftime("%d %B %Y")
+    name  = esc(athlete.get("name", "Athlete"))
+    num   = esc(athlete.get("athlete_number") or "")
+    sport = esc(athlete.get("sport") or "")
+
+    # Build threshold lookup: {(game_key, field_key, level): threshold_value}
+    thresh_lookup = {}
+    for t in thresholds_raw:
+        thresh_lookup[(t["game_key"], t["field_key"] or "", t["level"])] = t
+    has_thresholds = bool(thresh_lookup)
+
+    # Latest session results
+    latest_results = {}  # (game_key, field_key) → value
+    latest_date = ""
+    if sessions:
+        latest = sessions[0]  # most recent first
+        latest_results = latest.get("results", {})
+        latest_date = latest.get("date", "")
+
+    # ── Per-area analysis ────────────────────────────────────────────────────
+    FAMILY_ORDER = [
+        "Balance & Postural Control",
+        "Explosive & Landing",
+        "Dynamic Locomotor",
+        "Perceptual-Motor Speed",
+    ]
+    FAMILY_COL = {
+        "Balance & Postural Control": "#2563EB",
+        "Explosive & Landing":        "#F97316",
+        "Dynamic Locomotor":          "#1EBE8B",
+        "Perceptual-Motor Speed":     "#A855F7",
+    }
+
+    gap_areas   = []  # areas below threshold (or all if no thresholds)
+    score_rows  = []  # for the summary table
+
+    for area in SCORING_AREAS:
+        gk       = area["game_key"]
+        fk       = area["field_key"]          # None = pooled
+        lower    = area["lower_is_better"]
+        disp     = area["display_name"]
+        stored   = threshold_field_key(area)
+
+        # Resolve score from latest session
+        cfg = XP_GAME_CONFIG.get(gk, {})
+        if fk is None:
+            # Pooled: take max across all score_fields
+            vals = [latest_results.get((gk, f)) for f in cfg.get("score_fields", [])]
+            vals = [v for v in vals if v is not None]
+            score = max(vals) if vals else None
+        else:
+            score = latest_results.get((gk, fk))
+
+        # Current level for this area
+        ach_fk = fk or ""
+        cur_level = levels_by_area.get((gk, ach_fk), 0)
+
+        # Find threshold at current_level+1 (what they need to hit next)
+        next_level = cur_level + 1
+        next_thresh = thresh_lookup.get((gk, stored, next_level))
+
+        # Gap check
+        is_gap = False
+        gap_label = ""
+        if score is not None and next_thresh:
+            tv = next_thresh["threshold_value"]
+            if lower:
+                is_gap = float(score) > tv          # higher time = slower = gap
+                gap_label = f"Target: ≤ {tv:g}  (current: {score:g})"
+            else:
+                is_gap = float(score) < tv
+                gap_label = f"Target: {tv:g}  (current: {score:g})"
+        elif score is None:
+            is_gap = False  # not enough data yet
+        elif not has_thresholds:
+            is_gap = True   # flag all areas when no thresholds set
+
+        # Score row data
+        score_s = f"{score:g}" if score is not None else "—"
+        score_rows.append({
+            "display":   disp,
+            "score":     score_s,
+            "level":     cur_level,
+            "next_thr":  f"{next_thresh['threshold_value']:g}" if next_thresh else ("—" if has_thresholds else "not set"),
+            "is_gap":    is_gap,
+            "gap_label": gap_label,
+            "lower":     lower,
+        })
+
+        if is_gap:
+            sc_info = SC_GAP_LANGUAGE.get((gk, stored)) or SC_GAP_LANGUAGE.get((gk, ach_fk))
+            gap_areas.append({
+                "display":      disp,
+                "family":       sc_info["family"] if sc_info else "—",
+                "sc_gap":       sc_info["sc_gap"] if sc_info else "",
+                "sc_programme": sc_info["sc_programme"] if sc_info else "",
+                "d2_focus":     sc_info["d2_focus"] if sc_info else [],
+                "gap_label":    gap_label,
+            })
+
+    # ── Summary table ────────────────────────────────────────────────────────
+    LEVEL_C = {0: ("#E5E7EB","#6B7280"), 1: ("#1EBE8B","#fff"), 2: ("#F0A82E","#2D323B"),
+               3: ("#2D323B","#fff"), 4: ("#F97316","#fff"), 5: ("#8B5CF6","#fff")}
+
+    def _level_chip(lvl):
+        bg, fg = LEVEL_C.get(lvl, ("#E5E7EB","#6B7280"))
+        lbl = f"L{lvl}" if lvl else "—"
+        return f'<span style="font-size:11px;font-weight:700;background:{bg};color:{fg};border-radius:999px;padding:2px 8px;">{lbl}</span>'
+
+    trs = ""
+    for r in score_rows:
+        row_bg  = "#FFF7ED" if r["is_gap"] else "#fff"
+        gap_ind = '<span style="color:#F97316;font-weight:700;">▲ Gap</span>' if r["is_gap"] else '<span style="color:#1EBE8B;">✓</span>'
+        lower_note = " ↓" if r["lower"] else ""
+        trs += f"""
+        <tr style="background:{row_bg};border-bottom:1px solid #F3F4F5;">
+          <td style="padding:8px 12px;font-size:13px;font-weight:600;color:#2D323B;">{esc(r['display'])}</td>
+          <td style="padding:8px 12px;font-size:13px;text-align:center;">{esc(r['score'])}{lower_note}</td>
+          <td style="padding:8px 12px;text-align:center;">{_level_chip(r['level'])}</td>
+          <td style="padding:8px 12px;font-size:12px;color:#6E737B;text-align:center;">{esc(r['next_thr'])}</td>
+          <td style="padding:8px 12px;text-align:center;">{gap_ind}</td>
+        </tr>"""
+
+    no_thresh_note = ""
+    if not has_thresholds:
+        no_thresh_note = '<div style="background:#FFF3D6;border-left:4px solid #F0A82E;border-radius:6px;padding:10px 14px;font-size:12px;color:#92400E;margin-bottom:16px;">No thresholds have been set yet — all scoring areas are shown. Once thresholds are configured, this report will highlight only the areas where this athlete is below their next level target.</div>'
+
+    score_table = f"""
+    {no_thresh_note}
+    <div style="border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;margin-bottom:28px;">
+      <table style="width:100%;border-collapse:collapse;">
+        <thead>
+          <tr style="background:#2D323B;">
+            <th style="padding:9px 12px;text-align:left;font-size:12px;color:#fff;">Test Area</th>
+            <th style="padding:9px 12px;font-size:12px;color:#fff;text-align:center;">Latest Score</th>
+            <th style="padding:9px 12px;font-size:12px;color:#fff;text-align:center;">Current Level</th>
+            <th style="padding:9px 12px;font-size:12px;color:#fff;text-align:center;">Next Threshold</th>
+            <th style="padding:9px 12px;font-size:12px;color:#fff;text-align:center;">Status</th>
+          </tr>
+        </thead>
+        <tbody>{trs}</tbody>
+      </table>
+    </div>"""
+
+    # ── Gap analysis section ──────────────────────────────────────────────────
+    if not gap_areas:
+        gap_html = '<div style="background:#ECFDF5;border-left:4px solid #1EBE8B;border-radius:6px;padding:12px 16px;font-size:13px;color:#065F46;margin-bottom:28px;"><strong>No gaps identified.</strong> This athlete is meeting all current thresholds.</div>'
+    else:
+        # Group by family
+        by_family = {}
+        for g in gap_areas:
+            by_family.setdefault(g["family"], []).append(g)
+
+        gap_cards = ""
+        for family in FAMILY_ORDER:
+            if family not in by_family:
+                continue
+            col = FAMILY_COL.get(family, "#2D323B")
+            items = by_family[family]
+            area_cards = ""
+            for g in items:
+                d2_chips = "".join(
+                    f'<span style="font-size:11px;background:#F3F4F5;border:1px solid #E5E7EB;border-radius:999px;padding:2px 8px;color:#2D323B;">{esc(q)}</span>'
+                    for q in g["d2_focus"]
+                )
+                gap_lbl_html = f'<div style="font-size:11px;color:#F97316;font-weight:600;margin-bottom:6px;">{esc(g["gap_label"])}</div>' if g["gap_label"] else ""
+                area_cards += f"""
+                <div style="border:1px solid #E5E7EB;border-radius:8px;padding:14px 16px;margin-bottom:12px;background:#fff;">
+                  <div style="font-size:13px;font-weight:700;color:#2D323B;margin-bottom:4px;">{esc(g['display'])}</div>
+                  {gap_lbl_html}
+                  <div style="font-size:12px;color:#4B5563;margin-bottom:8px;line-height:1.5;"><strong>S&amp;C gap:</strong> {esc(g['sc_gap'])}</div>
+                  {f'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">{d2_chips}</div>' if d2_chips else ''}
+                  {('<div style="background:#F9FAFB;border-left:3px solid ' + col + ';border-radius:0 6px 6px 0;padding:10px 12px;font-size:12px;color:#374151;line-height:1.6;"><strong>If undertaking an S&amp;C programme:</strong> ' + esc(g['sc_programme']) + '</div>') if sc_programme and g['sc_programme'] else ""}
+                </div>"""
+
+            gap_cards += f"""
+            <div style="margin-bottom:20px;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:{col};"></span>
+                <span style="font-size:13px;font-weight:700;color:#2D323B;">{esc(family)}</span>
+              </div>
+              {area_cards}
+            </div>"""
+
+        gap_html = gap_cards
+
+    # ── Page layout ───────────────────────────────────────────────────────────
+    athlete_meta = f"#{num} · " if num else ""
+    athlete_meta += f"{sport} · " if sport else ""
+    athlete_meta += f"Latest session: {esc(latest_date)}" if latest_date else "No sessions recorded"
+
+    body = f"""
+    <div class="container" style="max-width:860px;padding-top:32px;">
+
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px;">
+        <div>
+          <h1 style="font-size:24px;font-weight:800;color:#2D323B;margin:0 0 4px;">{name}</h1>
+          <p style="font-size:13px;color:#6E737B;margin:0;">{athlete_meta}</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <a href="/coach/athlete/{athlete['id']}" class="btn btn-ghost btn-sm">← Back to Profile</a>
+          <button onclick="window.print()" class="btn btn-primary btn-sm">🖨 Print Report</button>
+        </div>
+      </div>
+
+      <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#9CA3AF;margin-bottom:12px;">Latest Scores</h2>
+      {score_table}
+
+      <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#9CA3AF;margin-bottom:12px;">
+        Gap Analysis{"" if has_thresholds else " (all areas — no thresholds set)"}
+      </h2>
+      <p style="font-size:13px;color:#6E737B;margin-bottom:16px;line-height:1.5;">
+        {"Areas where this athlete is below their next level threshold, with S&C language to support programme integration." if has_thresholds else "Once thresholds are set, only areas below threshold will appear here."}
+      </p>
+      {gap_html}
+
+      <div style="border-top:1px solid #E5E7EB;margin-top:32px;padding-top:12px;font-size:11px;color:#9CA3AF;text-align:center;">
+        JAG Athlete Adaptability Programme · {esc(name)} · Generated {today}
+      </div>
+    </div>
+
+    <style>
+    @media print {{
+      .btn, nav, header {{ display: none !important; }}
+      body {{ background: #fff; }}
+      .container {{ padding-top: 0 !important; }}
+    }}
+    </style>"""
+
+    return layout(f"Report — {athlete.get('name','Athlete')}", body, user=coach, active_nav="progress")
