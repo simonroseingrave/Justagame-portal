@@ -1639,7 +1639,7 @@ def practitioner_home_page(coach):
         {
             "icon": "&#128218;",
             "title": "Go To Resources",
-            "sub":   "Videos, guides and reference materials for your programme",
+            "sub":   "Guides and reference materials for your programme",
             "href":  "/coach/resources",
             "color": "#F0A82E",
         },
