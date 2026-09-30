@@ -7228,68 +7228,24 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     });
     </script>""" if is_admin else ""
 
-    # Search bar + tag filter buttons
-    tag_filter_btns = "".join(
-        f'<button type="button" class="res-tag-filter btn btn-ghost btn-sm" data-tag="{esc(t["name"].lower())}" '
-        f'style="border-radius:999px;">{esc(t["name"])}</button>'
-        for t in tags
-    )
-    search_bar = f"""
-    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:20px;">
+    # Search bar (tag filter removed — taxonomy is now hidden)
+    search_bar = """
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:20px;">
       <input type="search" id="res-search" placeholder="Search resources…"
              style="max-width:260px;padding:8px 12px;border-radius:8px;border:1px solid var(--jag-border);font-size:14px;" />
-      {tag_filter_btns}
-      <button type="button" id="res-clear-filter" class="btn btn-ghost btn-sm" style="display:none;border-radius:999px;">&#10005; Clear</button>
     </div>
     <script>
-    (function() {{
-      var searchInput  = document.getElementById('res-search');
-      var clearBtn     = document.getElementById('res-clear-filter');
-      var activeTag    = null;
-
-      function filterTiles() {{
-        var query = searchInput ? searchInput.value.toLowerCase().trim() : '';
-        document.querySelectorAll('.res-tile').forEach(function(tile) {{
-          var matchSearch = !query || (tile.dataset.search || '').indexOf(query) !== -1;
-          var matchTag    = !activeTag || (tile.dataset.tags || '').split(',').indexOf(activeTag) !== -1;
-          tile.style.display = (matchSearch && matchTag) ? '' : 'none';
-        }});
-        if (clearBtn) clearBtn.style.display = (query || activeTag) ? 'inline-block' : 'none';
-      }}
-
-      if (searchInput) searchInput.addEventListener('input', filterTiles);
-
-      document.querySelectorAll('.res-tag-filter').forEach(function(btn) {{
-        btn.addEventListener('click', function() {{
-          if (activeTag === btn.dataset.tag) {{
-            activeTag = null;
-            btn.style.background = '';
-            btn.style.color = '';
-          }} else {{
-            activeTag = btn.dataset.tag;
-            document.querySelectorAll('.res-tag-filter').forEach(function(b) {{
-              b.style.background = '';
-              b.style.color = '';
-            }});
-            btn.style.background = 'var(--jag-green)';
-            btn.style.color = 'var(--jag-navy)';
-          }}
-          filterTiles();
-        }});
-      }});
-
-      if (clearBtn) {{
-        clearBtn.addEventListener('click', function() {{
-          if (searchInput) searchInput.value = '';
-          activeTag = null;
-          document.querySelectorAll('.res-tag-filter').forEach(function(b) {{
-            b.style.background = '';
-            b.style.color = '';
-          }});
-          filterTiles();
-        }});
-      }}
-    }})();
+    (function() {
+      var searchInput = document.getElementById('res-search');
+      if (searchInput) {
+        searchInput.addEventListener('input', function() {
+          var query = searchInput.value.toLowerCase().trim();
+          document.querySelectorAll('.res-tile').forEach(function(tile) {
+            tile.style.display = (!query || (tile.dataset.search || '').indexOf(query) !== -1) ? '' : 'none';
+          });
+        });
+      }
+    })();
     </script>"""
 
     body = f"""
