@@ -493,66 +493,9 @@ def best_one_foot_score(session_data):
 # ----------------------------------------------------------------------
 # Sport-Specific Measurement Games
 # Same structure as MEASUREMENT_GAMES but keyed by sport name.
-# Add new sports here as they are defined.
-SPORT_SPECIFIC_GAMES = {
-    "Cricket": [
-        {
-            "section": "Cricket",
-            "games": [
-                {
-                    "key": "clipncatch",
-                    "name": "ClipNCatch (Catches within 1 minute)",
-                    "fields": [
-                        {"key": "standard_floor",     "label": "Standard Floor",     "type": "points"},
-                        {"key": "balance_implement",  "label": "Balance Implement",  "type": "points"},
-                    ],
-                },
-                {
-                    "key": "straight_lofting",
-                    "name": "Straight Lofting",
-                    "fields": [
-                        {"key": "points", "label": "Points", "type": "points"},
-                    ],
-                },
-                {
-                    "key": "under_pressure",
-                    "name": "Under Pressure (gates in 1 minute)",
-                    "fields": [
-                        {"key": "gates", "label": "Gates", "type": "number"},
-                    ],
-                },
-                {
-                    "key": "pull_away",
-                    "name": "Pull Away",
-                    "fields": [
-                        {"key": "points", "label": "Points", "type": "points"},
-                    ],
-                },
-                {
-                    "key": "touch_n_go",
-                    "name": "Touch N Go",
-                    "fields": [
-                        {"key": "gates", "label": "Gates", "type": "number"},
-                    ],
-                },
-            ],
-        },
-    ],
-    "Touch / Rugby": [
-        {
-            "section": "Touch / Rugby",
-            "games": [
-                {
-                    "key": "touch_n_go_rugby",
-                    "name": "Touch N Go Rugby",
-                    "fields": [
-                        {"key": "gates", "label": "Gates", "type": "number"},
-                    ],
-                },
-            ],
-        },
-    ],
-}
+# Parked for next build stage — sport-specific games will be added here
+# when the donor sport programme is ready to launch.
+SPORT_SPECIFIC_GAMES = {}
 
 
 def all_sport_games(sport):
