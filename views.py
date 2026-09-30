@@ -1606,28 +1606,28 @@ def practitioner_home_page(coach):
             "title": "View Groups &amp; Athletes",
             "sub":   "Browse your groups and individual athlete profiles",
             "href":  "/coach/groups",
-            "color": "#6366F1",
+            "color": "#F0A82E",
         },
         {
             "icon": "&#9989;",
             "title": "Record Attendance",
             "sub":   "Mark attendance and open self-test exploration",
             "href":  "/coach/attendance/new",
-            "color": "#10B981",
+            "color": "#F0A82E",
         },
         {
             "icon": "&#128203;",
             "title": "Group Testing",
             "sub":   "Record measurement sessions and review game scores",
             "href":  "/coach/group-hub",
-            "color": "#F59E0B",
+            "color": "#F0A82E",
         },
         {
             "icon": "&#128202;",
             "title": "Reports",
             "sub":   "Progress reports, group next steps, and adaptability snapshots",
             "href":  "/coach/progress",
-            "color": "#EF4444",
+            "color": "#F0A82E",
         },
         {
             "icon": "&#127942;",
@@ -1664,49 +1664,52 @@ def practitioner_home_page(coach):
       .prac-welcome h1 {{
         font-size: 22px;
         font-weight: 700;
-        color: #F0A82E;
+        color: #2D323B;
         margin: 0 0 6px;
+      }}
+      .prac-welcome h1 span {{
+        color: #F0A82E;
       }}
       .prac-welcome p {{
         font-size: 14px;
-        color: rgba(255,255,255,0.55);
+        color: #64748B;
         margin: 0;
       }}
       .prac-cards {{
         display: flex;
         flex-direction: column;
-        gap: 14px;
+        gap: 12px;
       }}
       .prac-card {{
         display: flex;
         align-items: center;
         gap: 18px;
-        background: rgba(255,255,255,0.04);
-        border: 1.5px solid rgba(255,255,255,0.08);
-        border-left: 4px solid var(--card-accent);
+        background: #2D323B;
+        border-left: 5px solid var(--card-accent);
         border-radius: 14px;
         padding: 18px 20px;
         text-decoration: none;
         color: inherit;
         transition: background 0.18s, transform 0.15s, box-shadow 0.18s;
         cursor: pointer;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.10);
       }}
       .prac-card:hover {{
-        background: rgba(255,255,255,0.08);
+        background: #1E252C;
         transform: translateY(-2px);
-        box-shadow: 0 6px 20px rgba(0,0,0,0.25);
+        box-shadow: 0 8px 24px rgba(0,0,0,0.20);
       }}
       .prac-card:active {{
         transform: translateY(0);
       }}
       .prac-card-icon {{
         font-size: 28px;
-        width: 48px;
-        height: 48px;
+        width: 50px;
+        height: 50px;
         display: flex;
         align-items: center;
         justify-content: center;
-        background: rgba(255,255,255,0.06);
+        background: rgba(255,255,255,0.08);
         border-radius: 12px;
         flex-shrink: 0;
       }}
@@ -1717,29 +1720,28 @@ def practitioner_home_page(coach):
       .prac-card-title {{
         font-size: 15px;
         font-weight: 700;
-        color: #fff;
-        margin-bottom: 3px;
+        color: #FFFFFF;
+        margin-bottom: 4px;
       }}
       .prac-card-sub {{
         font-size: 12px;
-        color: rgba(255,255,255,0.5);
+        color: rgba(255,255,255,0.60);
         line-height: 1.4;
       }}
       .prac-card-arrow {{
-        font-size: 24px;
+        font-size: 26px;
         color: var(--card-accent);
         flex-shrink: 0;
-        opacity: 0.8;
       }}
       @media (min-width: 520px) {{
         .prac-card-title {{ font-size: 16px; }}
-        .prac-card-icon  {{ font-size: 30px; }}
+        .prac-card-icon  {{ font-size: 30px; width: 54px; height: 54px; }}
       }}
     </style>
 
     <div class="prac-home">
       <div class="prac-welcome">
-        <h1>What are you keen to do today, {esc(name)}?</h1>
+        <h1>What are you keen to do today, <span>{esc(name)}</span>?</h1>
         <p>Choose an area to get started</p>
       </div>
       <div class="prac-cards">
