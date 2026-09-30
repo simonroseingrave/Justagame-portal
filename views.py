@@ -1636,6 +1636,13 @@ def practitioner_home_page(coach):
             "href":  "/coach/leaderboard",
             "color": "#F0A82E",
         },
+        {
+            "icon": "&#128218;",
+            "title": "Go To Resources",
+            "sub":   "Videos, guides and reference materials for your programme",
+            "href":  "/coach/resources",
+            "color": "#F0A82E",
+        },
     ]
 
     cards_html = ""
