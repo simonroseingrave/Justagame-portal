@@ -1101,10 +1101,57 @@ def participant_dashboard(user, measurement_sessions,
     xp_bar_pct = int(xp_progress * 100)
     if next_tier:
         xp_to_next = next_tier["min_xp"] - total_xp
-        xp_next_label = (f'<span style="font-size:12px;color:#6E737B;">'
+        xp_next_label = (f'<span style="font-size:12px;color:#9CA3AF;">'
                          f'{xp_to_next:,} AXP to {esc(next_tier["label"])}</span>')
     else:
         xp_next_label = '<span style="font-size:12px;color:#1EBE8B;font-weight:700;">Max rank reached!</span>'
+
+    # ── AXP journey line ──────────────────────────────────────────────────────
+    from constants import XP_RANK_TIERS
+    _jl_max = XP_RANK_TIERS[-1]["min_xp"]  # 15000
+    _jl_fill = min(100.0, (total_xp / _jl_max * 100)) if _jl_max else 100.0
+    _jl_dots = ""
+    _jl_labels = ""
+    for _t in XP_RANK_TIERS:
+        _pos = (_t["min_xp"] / _jl_max * 100) if _jl_max else 0
+        _achieved = total_xp >= _t["min_xp"]
+        _is_cur = _t["label"] == tier["label"]
+        if _is_cur:
+            _dot = (f'width:14px;height:14px;background:#fff;'
+                    f'border:2px solid {_t["colour"]};'
+                    f'box-shadow:0 0 0 3px rgba(255,255,255,0.25);top:-4px;')
+        elif _achieved:
+            _dot = 'width:10px;height:10px;background:#fff;top:-2px;'
+        else:
+            _dot = ('width:10px;height:10px;'
+                    'background:rgba(255,255,255,0.15);'
+                    'border:1.5px solid rgba(255,255,255,0.3);top:-2px;')
+        _jl_dots += (
+            f'<div style="position:absolute;left:{_pos:.1f}%;'
+            f'transform:translateX(-50%);{_dot}'
+            f'border-radius:50%;z-index:2;"></div>'
+        )
+        _fw = "700" if _is_cur else "400"
+        _op = "1" if _achieved else "0.4"
+        _jl_labels += (
+            f'<div style="position:absolute;left:{_pos:.1f}%;'
+            f'transform:translateX(-50%);text-align:center;width:52px;margin-left:-26px;">'
+            f'<div style="font-size:10px;font-weight:{_fw};'
+            f'color:rgba(255,255,255,{_op});white-space:nowrap;">{esc(_t["label"])}</div>'
+            f'<div style="font-size:9px;color:rgba(255,255,255,0.35);">{_t["min_xp"]:,}</div>'
+            f'</div>'
+        )
+    _journey_line = f"""
+      <div style="position:relative;padding-bottom:38px;">
+        <div style="position:relative;height:6px;background:rgba(255,255,255,0.12);border-radius:999px;">
+          <div style="width:{_jl_fill:.1f}%;height:100%;background:#fff;border-radius:999px;
+                      position:absolute;top:0;left:0;transition:width 0.8s ease;"></div>
+          {_jl_dots}
+        </div>
+        <div style="position:relative;height:34px;margin-top:8px;">
+          {_jl_labels}
+        </div>
+      </div>"""
 
     # ── Active measurement window banner ──────────────────────────────────────
     window_banner = ""
@@ -1174,12 +1221,9 @@ def participant_dashboard(user, measurement_sessions,
           {xp_next_label}
         </div>
       </div>
-      <!-- XP progress bar -->
+      <!-- AXP journey line -->
       <div style="margin-top:20px;">
-        <div style="background:rgba(255,255,255,0.1);border-radius:999px;height:6px;overflow:hidden;">
-          <div style="background:{tier_colour};width:{xp_bar_pct}%;height:100%;
-                      border-radius:999px;transition:width 0.6s ease;"></div>
-        </div>
+        {_journey_line}
       </div>
     </div>"""
 
@@ -2085,33 +2129,85 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
             f'<span style="font-size:11px;font-weight:700;background:{bg};color:{fg};'
             f'border-radius:999px;padding:1px 8px;">{label}</span></div>'
         )
+    # AXP journey line for coach view
+    from constants import XP_RANK_TIERS
+    _cj_max = XP_RANK_TIERS[-1]["min_xp"]
+    _cj_fill = min(100.0, (total_xp / _cj_max * 100)) if _cj_max else 100.0
+    _cj_dots = ""
+    _cj_lbls = ""
+    _next_tier_c = xp_data.get("next_tier")
+    for _ct in XP_RANK_TIERS:
+        _cp = (_ct["min_xp"] / _cj_max * 100) if _cj_max else 0
+        _ca = total_xp >= _ct["min_xp"]
+        _cc = _ct["label"] == tier["label"]
+        if _cc:
+            _cds = ('width:12px;height:12px;background:#fff;'
+                    f'border:2px solid {_ct["colour"]};'
+                    'box-shadow:0 0 0 2px rgba(255,255,255,0.2);top:-3px;')
+        elif _ca:
+            _cds = 'width:8px;height:8px;background:#fff;top:-1px;'
+        else:
+            _cds = ('width:8px;height:8px;background:rgba(255,255,255,0.15);'
+                    'border:1px solid rgba(255,255,255,0.3);top:-1px;')
+        _cj_dots += (f'<div style="position:absolute;left:{_cp:.1f}%;transform:translateX(-50%);'
+                     f'{_cds}border-radius:50%;z-index:2;"></div>')
+        _cfw = "700" if _cc else "400"
+        _cop = "1" if _ca else "0.4"
+        _cj_lbls += (f'<div style="position:absolute;left:{_cp:.1f}%;transform:translateX(-50%);'
+                     f'text-align:center;width:48px;margin-left:-24px;">'
+                     f'<div style="font-size:9px;font-weight:{_cfw};color:rgba(255,255,255,{_cop});white-space:nowrap;">'
+                     f'{esc(_ct["label"])}</div>'
+                     f'<div style="font-size:8px;color:rgba(255,255,255,0.3);">{_ct["min_xp"]:,}</div>'
+                     f'</div>')
+    if _next_tier_c:
+        _xtn = _next_tier_c["min_xp"] - total_xp
+        _cnote = (f'<div style="font-size:10px;color:#9CA3AF;margin-top:2px;">'
+                  f'{_xtn:,} AXP to {esc(_next_tier_c["label"])}</div>')
+    else:
+        _cnote = '<div style="font-size:10px;color:#1EBE8B;margin-top:2px;font-weight:700;">Max rank!</div>'
+
     xp_card = f"""
-    <div style="background:#2D323B;border-radius:14px;padding:18px 20px;margin-bottom:20px;
-                display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start;">
-      <div style="flex:0 0 auto;text-align:center;padding-right:20px;
-                  border-right:1px solid rgba(255,255,255,0.1);">
-        <div style="font-size:28px;font-weight:800;color:#F0A82E;line-height:1;">{total_xp:,}</div>
-        <div style="font-size:10px;color:#9CA3AF;letter-spacing:0.06em;margin-bottom:8px;">TOTAL AXP</div>
-        <span style="font-size:11px;font-weight:700;background:{tier_colour};color:#fff;
-                     border-radius:999px;padding:2px 10px;">{tier_label}</span>
-        <div style="font-size:11px;color:#9CA3AF;margin-top:8px;">{att_count} sessions attended</div>
-      </div>
-      <div style="flex:1;min-width:240px;">
-        <div style="font-size:10px;font-weight:700;color:#9CA3AF;letter-spacing:0.06em;
-                    margin-bottom:8px;text-transform:uppercase;">
-          Game Levels &nbsp;
-          <span style="background:rgba(255,255,255,0.1);color:#fff;border-radius:999px;
-                       padding:1px 7px;">{games_with_level}/8</span>
+    <div style="background:#2D323B;border-radius:14px;padding:18px 20px;margin-bottom:20px;">
+      <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start;">
+        <div style="flex:0 0 auto;text-align:center;padding-right:20px;
+                    border-right:1px solid rgba(255,255,255,0.1);">
+          <div style="font-size:28px;font-weight:800;color:#F0A82E;line-height:1;">{total_xp:,}</div>
+          <div style="font-size:10px;color:#9CA3AF;letter-spacing:0.06em;margin-bottom:8px;">TOTAL AXP</div>
+          <span style="font-size:11px;font-weight:700;background:{tier_colour};color:#fff;
+                       border-radius:999px;padding:2px 10px;">{tier_label}</span>
+          <div style="font-size:11px;color:#9CA3AF;margin-top:8px;">{att_count} sessions attended</div>
+          {_cnote}
         </div>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
-          {level_badges}
+        <div style="flex:1;min-width:240px;">
+          <div style="font-size:10px;font-weight:700;color:#9CA3AF;letter-spacing:0.06em;
+                      margin-bottom:8px;text-transform:uppercase;">
+            Game Levels &nbsp;
+            <span style="background:rgba(255,255,255,0.1);color:#fff;border-radius:999px;
+                         padding:1px 7px;">{games_with_level}/8</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+            {level_badges}
+          </div>
+        </div>
+        <div style="flex:0 0 auto;align-self:flex-end;">
+          <a href="/coach/participants/{participant['id']}/xp"
+             style="font-size:12px;color:#F0A82E;text-decoration:none;font-weight:600;">
+            Full AXP history →
+          </a>
         </div>
       </div>
-      <div style="flex:0 0 auto;align-self:flex-end;">
-        <a href="/coach/participants/{participant['id']}/xp"
-           style="font-size:12px;color:#F0A82E;text-decoration:none;font-weight:600;">
-          Full AXP history →
-        </a>
+      <!-- AXP journey line -->
+      <div style="margin-top:16px;border-top:1px solid rgba(255,255,255,0.08);padding-top:14px;">
+        <div style="position:relative;padding-bottom:34px;">
+          <div style="position:relative;height:5px;background:rgba(255,255,255,0.1);border-radius:999px;">
+            <div style="width:{_cj_fill:.1f}%;height:100%;background:#fff;border-radius:999px;
+                        position:absolute;top:0;left:0;transition:width 0.8s ease;"></div>
+            {_cj_dots}
+          </div>
+          <div style="position:relative;height:30px;margin-top:7px;">
+            {_cj_lbls}
+          </div>
+        </div>
       </div>
     </div>"""
 
@@ -7672,27 +7768,56 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
     tier_colour = tier.get("colour", "#6E737B")
 
     # ── Rank hero card ────────────────────────────────────────────────────────
+    from constants import XP_RANK_TIERS
+    _max_xp = XP_RANK_TIERS[-1]["min_xp"]
+    _fill = min(100.0, (total / _max_xp * 100)) if _max_xp else 100.0
+    _dots = ""
+    _lbls = ""
+    for _t in XP_RANK_TIERS:
+        _p = (_t["min_xp"] / _max_xp * 100) if _max_xp else 0
+        _ach = total >= _t["min_xp"]
+        _cur = _t["label"] == tier_label
+        if _cur:
+            _ds = ('width:14px;height:14px;background:#fff;'
+                   f'border:2px solid rgba(0,0,0,0.2);'
+                   'box-shadow:0 0 0 3px rgba(255,255,255,0.3);top:-4px;')
+        elif _ach:
+            _ds = 'width:10px;height:10px;background:#fff;top:-2px;'
+        else:
+            _ds = ('width:10px;height:10px;background:rgba(255,255,255,0.2);'
+                   'border:1.5px solid rgba(255,255,255,0.4);top:-2px;')
+        _dots += (f'<div style="position:absolute;left:{_p:.1f}%;transform:translateX(-50%);'
+                  f'{_ds}border-radius:50%;z-index:2;"></div>')
+        _fw = "700" if _cur else "400"
+        _op = "1" if _ach else "0.45"
+        _lbls += (f'<div style="position:absolute;left:{_p:.1f}%;transform:translateX(-50%);'
+                  f'text-align:center;width:52px;margin-left:-26px;">'
+                  f'<div style="font-size:10px;font-weight:{_fw};color:rgba(255,255,255,{_op});white-space:nowrap;">'
+                  f'{esc(_t["label"])}</div>'
+                  f'<div style="font-size:9px;color:rgba(255,255,255,0.45);">{_t["min_xp"]:,}</div>'
+                  f'</div>')
+
     if next_tier:
         xp_to_next = next_tier["min_xp"] - total
-        next_label = next_tier["label"]
-        next_colour = next_tier["colour"]
-        progress_bar = f"""
-        <div style="margin-top:16px;">
-          <div style="display:flex;justify-content:space-between;font-size:12px;color:rgba(255,255,255,0.75);margin-bottom:6px;">
-            <span>{tier_label}</span><span>{esc(next_label)}</span>
-          </div>
-          <div style="background:rgba(255,255,255,0.25);border-radius:999px;height:10px;overflow:hidden;">
-            <div style="width:{int(progress*100)}%;background:#fff;height:100%;border-radius:999px;transition:width 0.6s;"></div>
-          </div>
-          <div style="text-align:right;font-size:12px;color:rgba(255,255,255,0.75);margin-top:5px;">
-            {xp_to_next:,} AXP to {esc(next_label)}
-          </div>
-        </div>"""
+        _next_note = (f'<div style="text-align:right;font-size:12px;color:rgba(255,255,255,0.8);margin-top:2px;">'
+                      f'{xp_to_next:,} AXP to {esc(next_tier["label"])}</div>')
     else:
-        progress_bar = f"""
-        <div style="margin-top:16px;font-size:13px;color:rgba(255,255,255,0.8);">
-          Maximum rank achieved — keep earning AXP!
-        </div>"""
+        _next_note = '<div style="text-align:center;font-size:12px;color:rgba(255,255,255,0.85);margin-top:2px;">Maximum rank achieved — keep earning AXP!</div>'
+
+    _journey = f"""
+      <div style="margin-top:18px;">
+        <div style="position:relative;padding-bottom:36px;">
+          <div style="position:relative;height:6px;background:rgba(255,255,255,0.2);border-radius:999px;">
+            <div style="width:{_fill:.1f}%;height:100%;background:#fff;border-radius:999px;
+                        position:absolute;top:0;left:0;transition:width 0.8s ease;"></div>
+            {_dots}
+          </div>
+          <div style="position:relative;height:32px;margin-top:9px;">
+            {_lbls}
+          </div>
+        </div>
+        {_next_note}
+      </div>"""
 
     hero = f"""
     <div style="background:{tier_colour};border-radius:16px;padding:28px 32px;margin-bottom:28px;color:#fff;">
@@ -7707,7 +7832,7 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
           <div style="font-size:14px;opacity:0.8;">AXP total</div>
         </div>
       </div>
-      {progress_bar}
+      {_journey}
     </div>"""
 
     # ── Level achievements grid ───────────────────────────────────────────────
