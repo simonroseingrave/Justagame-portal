@@ -3732,7 +3732,7 @@ def coach_leaderboard(req):
     conn = db.get_conn()
     try:
         groups = db.list_participant_groups(conn)
-        group_id_str = req.params.get("group_id", "").strip()
+        group_id_str = req.query.get("group_id", [""])[0].strip()
         selected_group_id = int(group_id_str) if group_id_str.isdigit() else None
         ranked_athletes = None
         if selected_group_id:
