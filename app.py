@@ -29,7 +29,8 @@ import mailer
 router = Router()
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 
-SESSION_COOKIE = "jag_session"
+SESSION_COOKIE  = "jag_session"
+VIEW_AS_COOKIE  = "jag_view_as"
 
 
 # ---------------------------------------------------------------- helpers --
@@ -94,6 +95,59 @@ def require_system_admin(req):
     if not user or user["role"] != "system_admin":
         return None
     return user
+
+
+def get_view_as_athlete(req):
+    """If a staff user has activated view-as mode, return the athlete they're viewing.
+
+    The athlete dict has extra keys injected:
+        _view_as              = True
+        _view_as_profile_url  = "/coach/participants/<id>"
+    so layout() can render the exit banner automatically.
+    """
+    staff = require_staff(req)
+    if not staff:
+        return None
+    raw_id = req.get_cookie(VIEW_AS_COOKIE)
+    if not raw_id:
+        return None
+    try:
+        athlete_id = int(raw_id)
+    except (TypeError, ValueError):
+        return None
+    conn = db.get_conn()
+    try:
+        athlete = conn.execute(
+            "SELECT * FROM users WHERE id = ? AND role = 'participant'",
+            (athlete_id,),
+        ).fetchone()
+        if not athlete:
+            return None
+        athlete = dict(athlete)
+        # Org scoping — practitioner can only view athletes in their own org
+        if staff.get("org_id") and athlete.get("org_id") != staff.get("org_id"):
+            return None
+        # Inject view-as metadata used by layout() to show the exit banner
+        athlete["_view_as"] = True
+        athlete["_view_as_profile_url"] = f"/coach/participants/{athlete_id}"
+        # Inject leaderboard flag so athlete nav renders correctly
+        if athlete.get("group_id"):
+            grp = conn.execute(
+                "SELECT show_leaderboard FROM participant_groups WHERE id = ?",
+                (athlete["group_id"],),
+            ).fetchone()
+            athlete["show_leaderboard"] = bool(grp and grp["show_leaderboard"]) if grp else False
+        return athlete
+    finally:
+        conn.close()
+
+
+def require_participant_or_view_as(req):
+    """For athlete GET routes: allow real participants OR staff in view-as mode."""
+    user = require_role(req, "participant")
+    if user:
+        return user
+    return get_view_as_athlete(req)
 
 
 def require_admin(req):
@@ -237,7 +291,7 @@ def logout(req):
 
 @router.get("/dashboard")
 def dashboard(req):
-    user = require_role(req, "participant")
+    user = require_participant_or_view_as(req)
     if not user:
         return redirect("/login")
     conn = db.get_conn()
@@ -287,7 +341,7 @@ def dashboard(req):
 
 @router.get("/athlete/resources")
 def athlete_resources(req):
-    user = require_role(req, "participant")
+    user = require_participant_or_view_as(req)
     if not user:
         return redirect("/login")
     conn = db.get_conn()
@@ -525,6 +579,27 @@ def coach_participant_detail(req, participant_id):
         ))
     finally:
         conn.close()
+
+
+@router.get("/coach/participants/<int:participant_id>/view-as")
+def start_view_as(req, participant_id):
+    """Set view-as cookie and redirect to the athlete dashboard."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    resp = redirect("/dashboard")
+    resp.set_cookie(VIEW_AS_COOKIE, str(participant_id), max_age=60 * 60 * 8, path="/")
+    return resp
+
+
+@router.get("/coach/exit-view-as")
+def exit_view_as(req):
+    """Clear view-as cookie and return to the athlete's coach profile page."""
+    athlete_id = req.get_cookie(VIEW_AS_COOKIE)
+    back = f"/coach/participants/{athlete_id}" if athlete_id else "/coach"
+    resp = redirect(back)
+    resp.delete_cookie(VIEW_AS_COOKIE, path="/")
+    return resp
 
 
 @router.get("/coach/participants/<int:participant_id>/report")
@@ -3225,7 +3300,7 @@ def attendance_delete(req, event_id):
 @router.get("/athlete/self-directed")
 def self_directed_home(req):
     """Athlete: see pending sessions to score and completed self-directed history."""
-    user = require_role(req, "participant")
+    user = require_participant_or_view_as(req)
     if not user:
         return redirect("/login")
     conn = db.get_conn()
@@ -3240,7 +3315,7 @@ def self_directed_home(req):
 @router.get("/athlete/self-directed/<int:event_id>")
 def self_directed_entry_get(req, event_id):
     """Athlete: score entry form for a specific session event."""
-    user = require_role(req, "participant")
+    user = require_participant_or_view_as(req)
     if not user:
         return redirect("/login")
     conn = db.get_conn()
@@ -3341,7 +3416,7 @@ def self_directed_entry_post(req, event_id):
 @router.get("/athlete/xp")
 def athlete_xp_page(req):
     """Athlete-facing XP profile — rank, total points, recent events."""
-    user = require_role(req, "participant")
+    user = require_participant_or_view_as(req)
     if not user:
         return redirect("/login")
     conn = db.get_conn()
@@ -3356,7 +3431,7 @@ def athlete_xp_page(req):
 @router.get("/athlete/report")
 def athlete_report(req):
     """Athlete-facing plain-English movement report."""
-    user = require_role(req, "participant")
+    user = require_participant_or_view_as(req)
     if not user:
         return redirect("/login")
     conn = db.get_conn()
@@ -3375,7 +3450,7 @@ def athlete_report(req):
 def athlete_leaderboard(req):
     """Athlete-facing group leaderboard — only accessible when group has show_leaderboard enabled."""
     from constants import XP_RANK_TIERS, CORE_AAP_GAMES
-    user = require_role(req, "participant")
+    user = require_participant_or_view_as(req)
     if not user:
         return redirect("/login")
     if not user.get("show_leaderboard"):
@@ -3830,7 +3905,7 @@ def window_reopen(req, window_id):
 def athlete_window_get(req, window_id):
     """Athlete self-score entry form for an open measurement window."""
     from constants import active_measurement_games, games_for_max_level
-    user = require_role(req, "participant")
+    user = require_participant_or_view_as(req)
     if not user:
         return redirect("/login")
     conn = db.get_conn()

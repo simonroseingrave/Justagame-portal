@@ -293,6 +293,20 @@ def layout(title, body, user=None, flash=None, active_nav=None):
 </head>
 <body>
   {nav}
+  {f'''<div style="background:#1B2E4B;border-bottom:3px solid #F0A82E;padding:9px 20px;
+              display:flex;align-items:center;justify-content:space-between;
+              position:sticky;top:60px;z-index:900;gap:12px;">
+    <span style="font-size:13px;color:#fff;line-height:1.4;">
+      &#128065; <strong style="color:#F0A82E;">Viewing as {esc(user.get("name","Athlete"))}</strong>
+      &nbsp;&mdash;&nbsp;you are seeing their screen. Actions are read-only.
+    </span>
+    <a href="/coach/exit-view-as"
+       style="font-size:12px;font-weight:700;color:#F0A82E;text-decoration:none;white-space:nowrap;
+              background:rgba(240,168,46,0.15);padding:5px 14px;border-radius:20px;
+              border:1px solid rgba(240,168,46,0.4);">
+      &larr; Exit View
+    </a>
+  </div>''' if user and user.get("_view_as") else ""}
   <main class="container">
     {flash_html}
     {body}
@@ -2238,6 +2252,7 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
         {reset_btn}
         <a class="btn btn-primary" href="/coach/participants/{participant['id']}/progress">&#128200; Achievement Statistics</a>
         <a class="btn btn-ghost" href="/coach/participants/{participant['id']}/report" target="_blank">&#128196; Adaptability Progress Report</a>
+        <a class="btn btn-ghost" href="/coach/participants/{participant['id']}/view-as">&#128065; View as Athlete</a>
         <a class="btn btn-ghost" href="/coach">&larr; Back</a>
       </div>
     </div>
