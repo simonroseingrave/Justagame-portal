@@ -3731,7 +3731,7 @@ def coach_leaderboard(req):
     from constants import XP_RANK_TIERS, CORE_AAP_GAMES
     conn = db.get_conn()
     try:
-        groups = db.list_groups(conn)
+        groups = db.list_participant_groups(conn)
         group_id_str = req.params.get("group_id", "").strip()
         selected_group_id = int(group_id_str) if group_id_str.isdigit() else None
         ranked_athletes = None
