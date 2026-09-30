@@ -132,12 +132,22 @@ CREATE TABLE IF NOT EXISTS resource_tag_assignments (
 );
 
 -- ── Resource Taxonomy (hidden structural tags) ────────────────────────────
--- Links each resource to one or more AAP measurement games.
+-- Links each resource to one or more AAP measurement games (D10 Test Linkage).
 -- Separate from user-facing resource_tags; never shown to athletes.
 CREATE TABLE IF NOT EXISTS resource_game_links (
     resource_id INTEGER NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
     game_key    TEXT NOT NULL,
     PRIMARY KEY (resource_id, game_key)
+);
+
+-- Multi-value taxonomy dimensions (D1, D2, D3, D4, D6, D8).
+-- dimension is one of: D1, D2, D3, D4, D6, D8
+-- value is the machine-readable slug for that dimension's option.
+CREATE TABLE IF NOT EXISTS resource_taxonomy_tags (
+    resource_id INTEGER NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
+    dimension   TEXT NOT NULL,
+    value       TEXT NOT NULL,
+    PRIMARY KEY (resource_id, dimension, value)
 );
 
 -- ── Attendance & Self-Directed Sessions ──────────────────────────────────
@@ -364,12 +374,25 @@ def init_db():
         "ALTER TABLE measurement_sessions ADD COLUMN attendance_event_id INTEGER REFERENCES session_events(id)",
         "ALTER TABLE participant_groups ADD COLUMN show_leaderboard INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE resources ADD COLUMN level_range TEXT NOT NULL DEFAULT 'all'",
+        "ALTER TABLE resources ADD COLUMN space_requirement TEXT NOT NULL DEFAULT 'unspecified'",
     ]:
         try:
             conn.execute(sql)
             conn.commit()
         except Exception:
             pass  # column already exists
+    # Data migration: align level_range values with taxonomy doc naming
+    for old_val, new_val in [
+        ("entry", "level_1"),
+        ("developing", "level_2"),
+        ("progressing", "level_3"),
+        ("all", "multi_level"),
+    ]:
+        try:
+            conn.execute("UPDATE resources SET level_range = ? WHERE level_range = ?", (new_val, old_val))
+            conn.commit()
+        except Exception:
+            pass
     # Migration: rebuild level_achievements and game_level_thresholds to add
     # field_key discriminator column and updated UNIQUE constraints.
     # This is safe because both tables are empty until thresholds are set and
@@ -1191,12 +1214,14 @@ def move_resource(conn, resource_id, folder_id):
 
 
 def update_resource(conn, resource_id, name, description, url, folder_id,
-                    self_organisation=None, level_range="all"):
+                    self_organisation=None, level_range="multi_level",
+                    space_requirement="unspecified"):
     conn.execute(
         "UPDATE resources SET name = ?, description = ?, url = ?, folder_id = ?, "
-        "self_organisation = ?, level_range = ? WHERE id = ?",
+        "self_organisation = ?, level_range = ?, space_requirement = ? WHERE id = ?",
         (name, description or None, url, folder_id or None,
-         self_organisation or None, level_range or "all", resource_id),
+         self_organisation or None, level_range or "multi_level",
+         space_requirement or "unspecified", resource_id),
     )
     conn.commit()
 
@@ -1267,6 +1292,34 @@ def set_resource_game_keys(conn, resource_id, game_keys):
     conn.commit()
 
 
+def get_resource_taxonomy_tags(conn, resource_id):
+    """Return {dimension: [value, ...]} for a resource's taxonomy tags."""
+    rows = conn.execute(
+        "SELECT dimension, value FROM resource_taxonomy_tags WHERE resource_id = ? ORDER BY dimension, value",
+        (resource_id,),
+    ).fetchall()
+    result = {}
+    for r in rows:
+        result.setdefault(r["dimension"], []).append(r["value"])
+    return result
+
+
+def set_resource_taxonomy_tags(conn, resource_id, tags_by_dimension):
+    """Replace all taxonomy tags for a resource (idempotent).
+
+    tags_by_dimension: {dimension: [value, ...]}  e.g. {'D1': ['balance_postural'], 'D2': [...]}
+    """
+    conn.execute("DELETE FROM resource_taxonomy_tags WHERE resource_id = ?", (resource_id,))
+    for dimension, values in tags_by_dimension.items():
+        for value in values:
+            if value:
+                conn.execute(
+                    "INSERT OR IGNORE INTO resource_taxonomy_tags (resource_id, dimension, value) VALUES (?, ?, ?)",
+                    (resource_id, dimension, value),
+                )
+    conn.commit()
+
+
 def get_game_keys_for_resources(conn, resource_ids):
     """Return {resource_id: [game_key, ...]} for a list of resource IDs."""
     if not resource_ids:
@@ -1285,34 +1338,39 @@ def get_game_keys_for_resources(conn, resource_ids):
 def get_recommended_resources(conn, participant_id, limit=6):
     """Return resources matched to an athlete's current gaps.
 
-    Logic:
-      - For each game, determine the athlete's level (0 = none).
-      - Map level to level_range:  0 → 'entry',  1 → 'developing',  2+ → 'progressing'.
-      - Find resources linked to that game_key whose level_range is either
-        the matched range or 'all'.
-      - Sort by gap size (most-needed game first) then by resource sort_order.
-      - De-duplicate; return at most `limit` resources.
+    Scoring (per taxonomy doc):
+      - D10 match (game_key link):   3 pts per resource
+      - D2/D3 match (taxonomy tags): 2 pts each  (future — once resources are tagged)
+      - D1 match (family):           1 pt each    (future)
+      - Filter: level_range must match athlete's level or be 'multi_level'
+
+    Current implementation: D10 + level_range filter, priority-ordered by
+    most-needed game first. D2/D3 scoring is wired in once resources carry
+    full taxonomy tags.
     """
     from constants import CORE_AAP_GAMES
     levels = get_all_athlete_levels(conn, participant_id)
 
-    RANGE_MAP = {0: "entry", 1: "developing"}  # 2+ → "progressing"
+    # Athlete level → resource level_range needed
+    # 0 (no level) → Level 1 resources  |  1 → Level 2  |  2+ → Level 3
+    RANGE_MAP = {0: "level_1", 1: "level_2"}  # default → "level_3"
 
-    # Build a priority-ordered list of (game_key, needed_range)
+    # Sort games: unachieved levels first (biggest gap = highest priority)
     game_priority = []
     for gk in CORE_AAP_GAMES:
         lvl = levels.get(gk, 0)
-        needed = RANGE_MAP.get(lvl, "progressing")
-        game_priority.append((gk, needed))
+        needed = RANGE_MAP.get(lvl, "level_3")
+        game_priority.append((gk, needed, lvl))
+    game_priority.sort(key=lambda x: x[2])  # lowest level = most needed
 
     seen_ids = set()
     results = []
-    for gk, needed_range in game_priority:
+    for gk, needed_range, _lvl in game_priority:
         rows = conn.execute(
             """SELECT r.* FROM resources r
                JOIN resource_game_links rgl ON rgl.resource_id = r.id
                WHERE rgl.game_key = ?
-                 AND (r.level_range = ? OR r.level_range = 'all')
+                 AND (r.level_range = ? OR r.level_range = 'multi_level')
                ORDER BY r.sort_order, r.name""",
             (gk, needed_range),
         ).fetchall()

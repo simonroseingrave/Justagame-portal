@@ -2343,8 +2343,11 @@ def resource_edit_get(req, resource_id):
             return flash_redirect("/coach/resources", "Resource not found.")
         folders = db.list_folders(conn)
         selected_game_keys = db.get_resource_game_keys(conn, resource_id)
+        taxonomy_tags = db.get_resource_taxonomy_tags(conn, resource_id)
         return Response(views.edit_resource_page(
-            coach, dict(resource), folders, selected_game_keys=selected_game_keys,
+            coach, dict(resource), folders,
+            selected_game_keys=selected_game_keys,
+            taxonomy_tags=taxonomy_tags,
         ))
     finally:
         conn.close()
@@ -2360,18 +2363,27 @@ def resource_edit_post(req, resource_id):
     description = req.form_get("description").strip()
     self_organisation = req.form_get("self_organisation").strip() or None
     folder_id = req.form_get("folder_id").strip() or None
-    level_range = req.form_get("level_range").strip() or "all"
+    level_range = req.form_get("level_range").strip() or "multi_level"
+    space_requirement = req.form_get("space_requirement").strip() or "unspecified"
     game_keys = [g.strip() for g in req.form_get_list("game_keys") if g.strip()]
+    # Collect taxonomy multi-select dimensions
+    taxonomy_tags = {}
+    for dim in ("D1", "D2", "D3", "D4", "D6", "D8"):
+        vals = [v.strip() for v in req.form_get_list(f"tax_{dim}") if v.strip()]
+        if vals:
+            taxonomy_tags[dim] = vals
     if not name or not url:
         conn = db.get_conn()
         try:
             resource = conn.execute("SELECT * FROM resources WHERE id = ?", (resource_id,)).fetchone()
             folders = db.list_folders(conn)
             selected_game_keys = db.get_resource_game_keys(conn, resource_id)
+            existing_tax = db.get_resource_taxonomy_tags(conn, resource_id)
             return Response(
                 views.edit_resource_page(
                     coach, dict(resource), folders,
                     selected_game_keys=selected_game_keys,
+                    taxonomy_tags=existing_tax,
                     error="Name and URL are required.",
                 ),
                 status=400,
@@ -2381,8 +2393,10 @@ def resource_edit_post(req, resource_id):
     conn = db.get_conn()
     try:
         db.update_resource(conn, resource_id, name, description, url, folder_id,
-                           self_organisation=self_organisation, level_range=level_range)
+                           self_organisation=self_organisation, level_range=level_range,
+                           space_requirement=space_requirement)
         db.set_resource_game_keys(conn, resource_id, game_keys)
+        db.set_resource_taxonomy_tags(conn, resource_id, taxonomy_tags)
         return flash_redirect("/coach/resources", f'"{name}" updated.')
     finally:
         conn.close()

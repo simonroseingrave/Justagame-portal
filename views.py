@@ -7313,7 +7313,8 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
     return layout("Resources", body, user=user, active_nav="resources")
 
 
-def edit_resource_page(user, resource, folders, selected_game_keys=None, error=None):
+def edit_resource_page(user, resource, folders, selected_game_keys=None,
+                       taxonomy_tags=None, error=None):
     from constants import CORE_AAP_GAMES, find_measurement_game
     error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
     folder_opts = '<option value="">— Ungrouped —</option>' + "".join(
@@ -7321,45 +7322,183 @@ def edit_resource_page(user, resource, folders, selected_game_keys=None, error=N
         for f in folders
     )
     selected_game_keys = set(selected_game_keys or [])
+    taxonomy_tags = taxonomy_tags or {}
 
-    # ── Hidden taxonomy ───────────────────────────────────────────────────
-    game_checkboxes = ""
+    # ── Helper: render a group of checkboxes for one dimension ────────────
+    def _tax_checkboxes(dim, options, selected_set):
+        html = ""
+        for val, label in options:
+            chk = "checked" if val in selected_set else ""
+            html += (
+                f'<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;'
+                f'font-weight:400;margin:0 10px 5px 0;cursor:pointer;">'
+                f'<input type="checkbox" name="tax_{dim}" value="{esc(val)}" {chk} style="width:auto;margin:0;" />'
+                f'{esc(label)}</label>'
+            )
+        return html
+
+    # ── D10: Test Linkage (measurement game checkboxes) ──────────────────
+    game_html = ""
     for gk in CORE_AAP_GAMES:
         gdef = find_measurement_game(gk)
         gname = gdef["name"] if gdef else gk
-        checked = "checked" if gk in selected_game_keys else ""
-        game_checkboxes += (
-            f'<label style="display:inline-flex;align-items:center;gap:5px;font-size:13px;'
-            f'font-weight:400;margin:0 10px 6px 0;cursor:pointer;">'
-            f'<input type="checkbox" name="game_keys" value="{esc(gk)}" {checked} style="width:auto;margin:0;" />'
+        chk = "checked" if gk in selected_game_keys else ""
+        game_html += (
+            f'<label style="display:inline-flex;align-items:center;gap:5px;font-size:12px;'
+            f'font-weight:400;margin:0 10px 5px 0;cursor:pointer;">'
+            f'<input type="checkbox" name="game_keys" value="{esc(gk)}" {chk} style="width:auto;margin:0;" />'
             f'{esc(gname)}</label>'
         )
-    current_range = resource.get("level_range") or "all"
+
+    # ── D9: Programme Level (single-select) ──────────────────────────────
+    current_range = resource.get("level_range") or "multi_level"
     range_opts = ""
-    for val, label, hint in [
-        ("all",        "All levels",    "suitable for any athlete"),
-        ("entry",      "Entry",         "working toward Level 1"),
-        ("developing", "Developing",    "Level 1 → Level 2"),
-        ("progressing","Progressing",   "Level 2 and above"),
+    for val, label in [
+        ("multi_level", "Multi-level — constraint adjustable, suits any level"),
+        ("level_1",     "Level 1 — athlete working toward Level 1"),
+        ("level_2",     "Level 2 — athlete at Level 1, moving to Level 2"),
+        ("level_3",     "Level 3 — athlete at Level 2 and above"),
     ]:
         sel = "selected" if current_range == val else ""
-        range_opts += f'<option value="{val}" {sel}>{label} — {hint}</option>'
+        range_opts += f'<option value="{val}" {sel}>{label}</option>'
+
+    # ── D7: Space Requirement (single-select) ─────────────────────────────
+    current_space = resource.get("space_requirement") or "unspecified"
+    space_opts = ""
+    for val, label in [
+        ("unspecified", "Not specified"),
+        ("minimal",     "Minimal — < 5m × 5m (classroom or corridor)"),
+        ("medium",      "Medium — 5–15m (half gym or small outdoor area)"),
+        ("large",       "Large — 15m+ (full gymnasium or outdoor field)"),
+    ]:
+        sel = "selected" if current_space == val else ""
+        space_opts += f'<option value="{val}" {sel}>{label}</option>'
+
+    # ── D1: Measurement Family ────────────────────────────────────────────
+    D1 = [
+        ("balance_postural",      "Balance & Postural Control"),
+        ("explosive_landing",     "Explosive & Landing"),
+        ("dynamic_locomotor",     "Dynamic Locomotor"),
+        ("perceptual_motor_speed","Perceptual-Motor Speed"),
+    ]
+    # ── D2: Physical Quality (S&C Language) ──────────────────────────────
+    D2 = [
+        ("bilateral_balance",        "Bilateral balance"),
+        ("unilateral_balance",       "Unilateral balance"),
+        ("proprioception",           "Proprioception"),
+        ("core_stability",           "Core stability"),
+        ("plyometric_power",         "Plyometric power"),
+        ("landing_mechanics",        "Landing mechanics"),
+        ("horizontal_power",         "Horizontal power"),
+        ("vertical_power",           "Vertical power"),
+        ("linear_speed",             "Linear speed"),
+        ("change_of_direction",      "Change of direction speed"),
+        ("reactive_agility",         "Reactive agility"),
+        ("rhythmic_coordination",    "Rhythmic coordination"),
+        ("hand_eye_coordination",    "Hand-eye coordination"),
+        ("foot_eye_coordination",    "Foot-eye coordination"),
+        ("ball_manipulation",        "Ball manipulation / dribbling"),
+    ]
+    # ── D3: EcoD Construct (CLA Language) ────────────────────────────────
+    D3 = [
+        ("perception_action",        "Perception-action coupling"),
+        ("postural_attunement",      "Postural attunement"),
+        ("metastability",            "Metastability"),
+        ("ballistic_force_landing",  "Ballistic force production with landing control"),
+        ("functional_locomotion",    "Functional locomotion"),
+        ("attunement_calibration",   "Attunement & calibration"),
+        ("info_predictable",         "Informational constraint — predictable (wall / set feed)"),
+        ("info_unpredictable",       "Informational constraint — unpredictable (reflex ball / opponent)"),
+        ("self_organisation",        "Self-organisation"),
+        ("functional_variability",   "Functional variability"),
+        ("constrain_to_afford",      "Constrain to afford"),
+        ("constrain_to_potentiate",  "Constrain to potentiate"),
+        ("representative_task",      "Representative task design"),
+        ("repetition_without",       "Repetition without repetition"),
+    ]
+    # ── D4: Laterality ───────────────────────────────────────────────────
+    D4 = [
+        ("bilateral",    "Bilateral"),
+        ("unilateral",   "Unilateral"),
+        ("alternating",  "Alternating (bilateral ↔ unilateral)"),
+        ("asymmetric",   "Asymmetric (different demand each side)"),
+        ("not_applicable","Not applicable"),
+    ]
+    # ── D6: Equipment / Tool ─────────────────────────────────────────────
+    D6 = [
+        ("large_ball",       "Large ball"),
+        ("small_ball",       "Small ball"),
+        ("reflex_ball",      "Reflex / reaction ball"),
+        ("standard_rope",    "Standard rope (single rotation)"),
+        ("rope_double",      "Rope (double rotation)"),
+        ("wall",             "Wall (hard surface)"),
+        ("step_box",         "Step / box"),
+        ("gate_cone",        "Gate / cone"),
+        ("bosu",             "Bosu / balance ball"),
+        ("no_equipment",     "No equipment"),
+    ]
+    # ── D8: Group Format ─────────────────────────────────────────────────
+    D8 = [
+        ("individual",   "Individual (1 person)"),
+        ("pair",         "Pair (2 people)"),
+        ("small_group",  "Small group (3–5)"),
+        ("large_group",  "Large group (6+)"),
+        ("adaptable",    "Adaptable (works across group sizes)"),
+    ]
+
+    def _dim_section(dim_id, title, options):
+        sel = set(taxonomy_tags.get(dim_id, []))
+        return (
+            f'<div style="margin-bottom:12px;">'
+            f'<div style="font-size:11px;font-weight:700;color:#6E737B;text-transform:uppercase;'
+            f'letter-spacing:0.06em;margin-bottom:5px;">{esc(title)}</div>'
+            f'<div style="display:flex;flex-wrap:wrap;">{_tax_checkboxes(dim_id, options, sel)}</div>'
+            f'</div>'
+        )
 
     taxonomy_section = f"""
-    <div style="margin-top:18px;padding:14px 16px;background:#F8F9FA;border-radius:10px;
+    <div style="margin-top:18px;padding:16px 18px;background:#F8F9FA;border-radius:10px;
                 border:1px solid #E5E7EB;">
-      <div style="font-size:12px;font-weight:700;color:#6E737B;text-transform:uppercase;
-                  letter-spacing:0.07em;margin-bottom:10px;">
-        Hidden Taxonomy <span style="font-weight:400;font-size:11px;text-transform:none;">(practitioner recommendation engine — not shown to athletes)</span>
+      <div style="font-size:12px;font-weight:700;color:#374151;text-transform:uppercase;
+                  letter-spacing:0.07em;margin-bottom:14px;padding-bottom:8px;
+                  border-bottom:1px solid #E5E7EB;">
+        Hidden Taxonomy
+        <span style="font-weight:400;font-size:11px;text-transform:none;color:#6E737B;">
+          — practitioner recommendation engine, not shown to athletes
+        </span>
       </div>
-      <label style="margin-bottom:6px;font-size:13px;">Linked Measurement Games</label>
-      <div style="display:flex;flex-wrap:wrap;gap:0;margin-bottom:12px;">
-        {game_checkboxes}
+
+      <div style="margin-bottom:12px;">
+        <div style="font-size:11px;font-weight:700;color:#6E737B;text-transform:uppercase;
+                    letter-spacing:0.06em;margin-bottom:5px;">D10 · Test Linkage
+          <span style="font-weight:400;text-transform:none;color:#9CA3AF;">(highest weight in scoring)</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;">{game_html}</div>
       </div>
-      <label for="level_range" style="font-size:13px;">Level Range</label>
-      <select id="level_range" name="level_range" style="margin-top:4px;">
-        {range_opts}
-      </select>
+
+      {_dim_section("D1", "D1 · Measurement Family", D1)}
+      {_dim_section("D2", "D2 · Physical Quality (S&C Language)", D2)}
+      {_dim_section("D3", "D3 · EcoD Construct (CLA Language)", D3)}
+      {_dim_section("D4", "D4 · Laterality", D4)}
+      {_dim_section("D6", "D6 · Equipment / Tool", D6)}
+      {_dim_section("D8", "D8 · Group Format", D8)}
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:4px;">
+        <div>
+          <label for="level_range" style="font-size:11px;font-weight:700;color:#6E737B;
+                  text-transform:uppercase;letter-spacing:0.06em;">D9 · Programme Level</label>
+          <select id="level_range" name="level_range" style="margin-top:4px;font-size:13px;">
+            {range_opts}
+          </select>
+        </div>
+        <div>
+          <label for="space_requirement" style="font-size:11px;font-weight:700;color:#6E737B;
+                  text-transform:uppercase;letter-spacing:0.06em;">D7 · Space Requirement</label>
+          <select id="space_requirement" name="space_requirement" style="margin-top:4px;font-size:13px;">
+            {space_opts}
+          </select>
+        </div>
+      </div>
     </div>"""
 
     body = f"""
