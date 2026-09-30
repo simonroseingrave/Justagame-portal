@@ -2103,6 +2103,46 @@ def retroactive_xp_pass(conn):
     return processed
 
 
+def retroactive_level_pass(conn):
+    """Re-check level thresholds across ALL sessions regardless of whether they
+    already have XP events.  Must be run whenever thresholds are first set (or
+    changed) because the main retroactive_xp_pass skips already-processed sessions.
+
+    Fully idempotent: award_level uses a UNIQUE constraint so levels cannot be
+    double-awarded. The accompanying level_achievement XP is guarded the same way.
+    Returns (levels_awarded, xp_awarded) counts."""
+    sessions = conn.execute(
+        "SELECT id, participant_id FROM measurement_sessions ORDER BY date ASC, id ASC"
+    ).fetchall()
+
+    levels_awarded = 0
+    xp_awarded = 0
+
+    for s in sessions:
+        session_id = s["id"]
+        participant_id = s["participant_id"]
+
+        # Load all results for this session
+        rows = conn.execute(
+            "SELECT game_key, field_key, value FROM measurement_results WHERE session_id = ?",
+            (session_id,),
+        ).fetchall()
+        session_results = {}
+        for r in rows:
+            session_results.setdefault(r["game_key"], {})[r["field_key"]] = r["value"]
+
+        for game_key, game_results in session_results.items():
+            new_levels = _check_level_thresholds(
+                conn, participant_id, game_key, game_results, session_id
+            )
+            for (fk, lvl) in new_levels:
+                levels_awarded += 1
+                from constants import LEVEL_XP_AWARDS
+                xp_awarded += LEVEL_XP_AWARDS.get(lvl, 0)
+
+    return levels_awarded, xp_awarded
+
+
 def cleanup_demo_data():
     """One-time cleanup: removes demo participants, their sessions/results,
     and the Demo Group from the live database.

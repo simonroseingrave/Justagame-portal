@@ -3632,6 +3632,23 @@ def xp_retroactive_pass(req):
                           f"Retroactive XP pass complete — {processed} sessions processed.")
 
 
+@router.post("/coach/admin/level-retroactive")
+def level_retroactive_pass(req):
+    """System admin: re-check level thresholds across all sessions.
+    Use this after setting thresholds for the first time, since the AXP retroactive
+    pass skips sessions that already have XP events."""
+    coach = require_system_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        levels, xp = db.retroactive_level_pass(conn)
+    finally:
+        conn.close()
+    return flash_redirect("/coach/admin/game-thresholds",
+                          f"Level check complete — {levels} new level(s) awarded, {xp:,} AXP granted.")
+
+
 class _FastRequestHandler(WSGIRequestHandler):
     """Skip the reverse-DNS lookup wsgiref normally does on every request.
 

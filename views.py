@@ -7862,10 +7862,16 @@ def game_thresholds_page(coach, thresholds, scoring_areas, xp_game_config, thres
             Thresholds can be updated at any time — once earned, an athlete's level is permanent.
           </p>
         </div>
-        <form method="post" action="/coach/admin/xp-retroactive"
-              onsubmit="return confirm('Run retroactive AXP pass over ALL existing sessions? This is safe to run multiple times but may take a moment.')">
-          <button class="btn btn-primary">Run Retroactive AXP Pass</button>
-        </form>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <form method="post" action="/coach/admin/xp-retroactive"
+                onsubmit="return confirm('Run retroactive AXP pass over ALL existing sessions? This is safe to run multiple times but may take a moment.')">
+            <button class="btn btn-primary">Re-run AXP Pass</button>
+          </form>
+          <form method="post" action="/coach/admin/level-retroactive"
+                onsubmit="return confirm('Re-check level thresholds across ALL sessions? Run this after setting thresholds for the first time. Safe to run multiple times.')">
+            <button class="btn btn-primary" style="background:#1EBE8B;">Re-check Levels</button>
+          </form>
+        </div>
       </div>
       <div style="background:#EFF6FF;border-left:4px solid #2D323B;border-radius:8px;padding:12px 16px;
         margin-bottom:24px;font-size:13px;color:#2D323B;">
