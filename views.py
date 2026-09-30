@@ -1600,48 +1600,50 @@ def practitioner_home_page(coach):
     name = coach.get("name", "").split()[0] if coach.get("name") else "there"
     is_admin = coach.get("role") in {"org_admin", "system_admin"}
 
+    _G = "#F0A82E"  # gold
+    _S = 'stroke="#F0A82E" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"'
     CARDS = [
         {
-            "icon": "&#128101;",
+            "icon": f'<svg width="28" height="28" viewBox="0 0 24 24" fill="none" {_S}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
             "title": "View Groups &amp; Athletes",
             "sub":   "Browse your groups and individual athlete profiles",
             "href":  "/coach/groups",
-            "color": "#F0A82E",
+            "color": _G,
         },
         {
-            "icon": "&#9989;",
+            "icon": f'<svg width="28" height="28" viewBox="0 0 24 24" fill="none" {_S}><polyline points="20 6 9 17 4 12"/></svg>',
             "title": "Record Attendance",
             "sub":   "Mark attendance and open self-test exploration",
             "href":  "/coach/attendance/new",
-            "color": "#F0A82E",
+            "color": _G,
         },
         {
-            "icon": "&#128203;",
+            "icon": f'<svg width="28" height="28" viewBox="0 0 24 24" fill="none" {_S}><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/><line x1="9" y1="12" x2="15" y2="12"/><line x1="9" y1="16" x2="13" y2="16"/></svg>',
             "title": "Group Testing",
             "sub":   "Record measurement sessions and review game scores",
             "href":  "/coach/group-hub",
-            "color": "#F0A82E",
+            "color": _G,
         },
         {
-            "icon": "&#128202;",
+            "icon": f'<svg width="28" height="28" viewBox="0 0 24 24" fill="none" {_S}><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
             "title": "Reports",
             "sub":   "Progress reports, group next steps, and adaptability snapshots",
             "href":  "/coach/progress",
-            "color": "#F0A82E",
+            "color": _G,
         },
         {
-            "icon": "&#127942;",
+            "icon": f'<svg width="28" height="28" viewBox="0 0 24 24" fill="none" {_S}><path d="M6 9H4a2 2 0 0 0 0 4h2"/><path d="M18 9h2a2 2 0 0 1 0 4h-2"/><path d="M6 3h12v9a6 6 0 0 1-12 0V3z"/><line x1="9" y1="21" x2="15" y2="21"/><line x1="12" y1="18" x2="12" y2="21"/></svg>',
             "title": "Group Leaderboard",
             "sub":   "AXP rankings within your groups",
             "href":  "/coach/leaderboard",
-            "color": "#F0A82E",
+            "color": _G,
         },
         {
-            "icon": "&#128218;",
+            "icon": f'<svg width="28" height="28" viewBox="0 0 24 24" fill="none" {_S}><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="10" y1="8" x2="16" y2="8"/><line x1="10" y1="12" x2="16" y2="12"/></svg>',
             "title": "Go To Resources",
             "sub":   "Guides and reference materials for your programme",
             "href":  "/coach/resources",
-            "color": "#F0A82E",
+            "color": _G,
         },
     ]
 
