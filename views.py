@@ -1354,7 +1354,6 @@ def participant_dashboard(user, measurement_sessions,
         for r in resources[:6]:
             r_name = esc(r.get("name", ""))
             r_url = r.get("url", "")
-            tag_names = ", ".join(esc(t) for t in (r.get("tag_names") or []))
             tiles += f"""
             <a href="{esc(r_url)}" target="_blank" rel="noopener"
                style="display:block;background:#fff;border:1px solid #E5E7EB;border-radius:10px;
@@ -1363,7 +1362,6 @@ def participant_dashboard(user, measurement_sessions,
                onmouseover="this.style.boxShadow='0 2px 12px rgba(0,0,0,0.08)';this.style.borderColor='#F0A82E'"
                onmouseout="this.style.boxShadow='';this.style.borderColor='#E5E7EB'">
               <div style="font-size:13px;font-weight:600;color:#2D323B;">{r_name}</div>
-              {f'<div style="font-size:11px;color:#9CA3AF;margin-top:3px;">{tag_names}</div>' if tag_names else ''}
             </a>"""
         more_link = (f'<a href="/athlete/resources" style="font-size:13px;color:#2D323B;'
                      f'font-weight:600;">View all resources →</a>'
@@ -7009,11 +7007,7 @@ def _resource_tile(r, is_admin=False, tags=None):
         </form>
       </div>""" if is_admin else ""
     tag_names = [t["name"] for t in (tags or [])]
-    tag_pills = "".join(
-        f'<span style="font-size:10px;background:var(--jag-green);color:var(--jag-navy);border-radius:999px;padding:1px 7px;font-weight:600;white-space:nowrap;">{esc(t)}</span>'
-        for t in tag_names
-    )
-    tags_html = f'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:auto;padding-top:8px;">{tag_pills}</div>' if tag_pills else ''
+    tags_html = ''
     tag_data = ",".join(t.lower() for t in tag_names)
     search_data = (r['name'] + " " + (r['description'] or "")).lower()
 
