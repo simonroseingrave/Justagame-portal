@@ -686,6 +686,10 @@ SC_GAP_LANGUAGE = {
             "Calf and ankle stability work underpins the postural hold."
         ),
         "d2_focus": ["Bilateral balance", "Proprioception", "Hand-eye coordination"],
+        "athlete_what": "Staying balanced while catching is something to develop — when your base is solid, everything else gets easier.",
+        "athlete_why": "In your sport, staying steady when a ball comes to you — or when someone puts you under pressure — makes a real difference. This is the foundation.",
+        "athlete_games": ["Balance Ball Catching (self-test)", "Lob Scotch", "Step Up"],
+        "athlete_sc": "Try standing on two feet and catching a ball thrown against a wall. As you get better, close your eyes for a second before each catch to make it harder.",
     },
     ("balance_ball_catching", "one_foot_balance_catch"): {
         "display": "Balance Catching — One Foot",
@@ -702,6 +706,10 @@ SC_GAP_LANGUAGE = {
             "work (single-leg deadlifts, lateral band walks) directly supports this area."
         ),
         "d2_focus": ["Unilateral balance", "Proprioception", "Core stability"],
+        "athlete_what": "Balancing on one leg while tracking a ball is a real skill — and it's very trainable.",
+        "athlete_why": "Most sport happens on one leg — cutting, landing, holding your position. Getting comfortable here makes you more robust and harder to knock off balance.",
+        "athlete_games": ["Balance Ball Catching (self-test)", "Step Up", "Grid Leap"],
+        "athlete_sc": "Practice standing on one leg for 30 seconds at a time — once that's easy, try catching a ball while you do it. Simple but effective.",
     },
     ("lob_scotch", "squares_scored"): {
         "display": "Lob Scotch",
@@ -719,6 +727,10 @@ SC_GAP_LANGUAGE = {
             "the absorption capacity."
         ),
         "d2_focus": ["Landing mechanics", "Plyometric power", "Rhythmic coordination"],
+        "athlete_what": "Your jumping rhythm and landing control is something to work on — you're building the foundation for real explosive movement.",
+        "athlete_why": "Being able to hop, land softly, and rebalance quickly shows up in every sport — jumping for a ball, landing after a contest, changing direction at speed.",
+        "athlete_games": ["Lob Scotch (self-test)", "Grid Leap", "Step Up"],
+        "athlete_sc": "Practice small, controlled hops — jump and stick the landing for 2 seconds before jumping again. Focus on landing quietly, knees soft.",
     },
     ("leap_catching_throwing", "points"): {
         "display": "Grid Leap",
@@ -736,6 +748,10 @@ SC_GAP_LANGUAGE = {
             "power development — accuracy and distance should develop in parallel, not in series."
         ),
         "d2_focus": ["Horizontal power", "Landing mechanics", "Hand-eye coordination"],
+        "athlete_what": "Combining a big leap with a catch and throw is tough — this is an exciting area to develop because the gains are very visible.",
+        "athlete_why": "Leaping to take a mark, jumping to intercept, or driving through space under pressure — this is where physical power meets game reading.",
+        "athlete_games": ["Grid Leap (self-test)", "Diamond Gates", "Lob Scotch"],
+        "athlete_sc": "Broad jumps are great here — jump as far as you can and focus on landing in balance. Then try catching something at the same time.",
     },
     ("step_up", "step_bench"): {
         "display": "Step Up",
@@ -753,6 +769,10 @@ SC_GAP_LANGUAGE = {
             "cognitive load on the movement pattern."
         ),
         "d2_focus": ["Vertical power", "Rhythmic coordination", "Hand-eye coordination"],
+        "athlete_what": "Keeping your rhythm while doing two things at once — stepping and catching — is a great skill to build.",
+        "athlete_why": "Athletes who can keep moving consistently while tracking a ball have a real edge. This tests whether your body can run on autopilot so your mind can focus on the game.",
+        "athlete_games": ["Step Up (self-test)", "Skipping Rope Sprint", "Diamond Gates"],
+        "athlete_sc": "Box step-ups are a simple gym exercise that directly helps here — focus on driving all the way up to a full hip extension at the top.",
     },
     ("skipping_rope_sprint", "average"): {
         "display": "Skipping Rope Sprints",
@@ -771,6 +791,10 @@ SC_GAP_LANGUAGE = {
             "Note: this is an inverse metric — lower time is better."
         ),
         "d2_focus": ["Linear speed", "Rhythmic coordination"],
+        "athlete_what": "Your running speed and coordination under a constraint is something to develop — and it responds really well to practice.",
+        "athlete_why": "Pure speed is one of the most valuable things in sport. Getting faster over short distances — and staying coordinated while you do it — is a game-changer.",
+        "athlete_games": ["Skipping Rope Sprint (self-test)", "Diamond Gates", "Diamond Dribble"],
+        "athlete_sc": "Acceleration drills are the best gym support here — wall drive holds, A-skips, short sprint starts from standing. Focus on the first 5 metres.",
     },
     ("diamond_gates", "small_group"): {
         "display": "Diamond Gates",
@@ -788,6 +812,10 @@ SC_GAP_LANGUAGE = {
             "in the change-of-direction moment."
         ),
         "d2_focus": ["Change of direction speed", "Reactive agility"],
+        "athlete_what": "Changing direction quickly and efficiently is something to keep working on — this is one of the most impactful areas in field and court sports.",
+        "athlete_why": "The ability to stop, change direction and accelerate again quickly is at the heart of getting to the right place before anyone else.",
+        "athlete_games": ["Diamond Gates (self-test & programme)", "Diamond Dribble", "Split Step"],
+        "athlete_sc": "Shuttle runs are your friend — short, sharp, and frequent. Focus on the deceleration (the slow-down before you turn) as much as the sprint.",
     },
     ("diamond_dribble", "small_group"): {
         "display": "Diamond Dribble",
@@ -806,6 +834,10 @@ SC_GAP_LANGUAGE = {
             "no longer competes for attentional resources."
         ),
         "d2_focus": ["Change of direction speed", "Ball manipulation / dribbling", "Foot-eye coordination"],
+        "athlete_what": "Moving quickly with the ball while changing direction is something to develop — your movement and ball control will start to click together.",
+        "athlete_why": "Being able to move with the ball without thinking about it frees your mind to read the game. This area is about making ball movement feel automatic.",
+        "athlete_games": ["Diamond Dribble (self-test & programme)", "Diamond Gates", "Skipping Rope Sprint"],
+        "athlete_sc": "Work on your change-of-direction movement without the ball first — get sharp at stopping and starting. Then bring the ball back in.",
     },
     ("split_step", "catches"): {
         "display": "Split Step",
@@ -823,5 +855,9 @@ SC_GAP_LANGUAGE = {
             "The S&C adaptation must occur under genuine unpredictability to transfer."
         ),
         "d2_focus": ["Reactive agility", "Hand-eye coordination"],
+        "athlete_what": "Reacting quickly to a ball that you can't predict is something to sharpen — this is one of the most sport-specific skills there is.",
+        "athlete_why": "The best athletes read play early and move before anyone else. This test measures exactly that — your ability to pick up cues and react instantly.",
+        "athlete_games": ["Split Step (self-test)", "Split Decision", "Diamond Gates"],
+        "athlete_sc": "Play reaction games with a partner — they point a direction, you move. Or drop-catch drills: hold a ball at shoulder height, drop it, catch before it bounces twice.",
     },
 }

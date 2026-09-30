@@ -3329,6 +3329,24 @@ def athlete_xp_page(req):
     return Response(views.athlete_xp_page(user, xp_data, levels))
 
 
+@router.get("/athlete/report")
+def athlete_report(req):
+    """Athlete-facing plain-English movement report."""
+    user = require_role(req, "participant")
+    if not user:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        sessions = db.measurement_sessions_for(conn, user["id"])
+        levels_by_area = db.get_all_athlete_levels_by_area(conn, user["id"])
+        thresholds_raw = db.get_all_thresholds(conn)
+    finally:
+        conn.close()
+    return Response(views.athlete_movement_report_page(
+        dict(user), sessions, levels_by_area, thresholds_raw
+    ))
+
+
 @router.get("/athlete/leaderboard")
 def athlete_leaderboard(req):
     """Athlete-facing group leaderboard — only accessible when group has show_leaderboard enabled."""

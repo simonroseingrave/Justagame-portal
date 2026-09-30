@@ -1380,12 +1380,28 @@ def participant_dashboard(user, measurement_sessions,
         <h2 class="section-title" style="margin-bottom:12px;">Recent Test Results</h2>
         {measurement_games_history(measurement_sessions)}"""
 
+    report_cta = """
+    <a href="/athlete/report" style="text-decoration:none;display:block;
+       background:linear-gradient(135deg,#2D323B 0%,#3D434F 100%);
+       border-radius:12px;padding:16px 20px;margin-bottom:20px;">
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div style="font-size:28px;flex-shrink:0;">📋</div>
+        <div style="flex:1;">
+          <div style="font-size:14px;font-weight:800;color:#fff;margin-bottom:2px;">My Movement Report</div>
+          <div style="font-size:12px;color:rgba(255,255,255,0.65);">
+            See what you're tracking well and where to focus next →
+          </div>
+        </div>
+      </div>
+    </a>"""
+
     body = f"""
     <div style="max-width:860px;">
       {window_banner}
       {hero}
       {nudge_html}
       {stats_html}
+      {report_cta}
       {level_grid}
       {resource_links_html}
       {history_html}
@@ -9477,3 +9493,191 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
     </style>"""
 
     return layout(f"Report — {athlete.get('name','Athlete')}", body, user=coach, active_nav="progress")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Athlete-facing movement report — plain English, motivational
+# ─────────────────────────────────────────────────────────────────────────────
+
+def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_raw):
+    """
+    Plain-English movement report for the athlete's own login.
+    Splits areas into 'tracking well' vs 'focus areas', uses motivational
+    athlete_what / athlete_why / athlete_games / athlete_sc language from SC_GAP_LANGUAGE.
+    """
+    from constants import SCORING_AREAS, SC_GAP_LANGUAGE, threshold_field_key
+
+    name = esc(athlete.get("name", "Athlete"))
+    sport = athlete.get("sport") or ""
+
+    # Build thresholds lookup
+    thresholds = {}
+    for row in (thresholds_raw or []):
+        thresholds[(row["game_key"], row["field_key"])] = row["threshold_value"]
+
+    # Pull latest achievement per area
+    latest = {}
+    for row in (levels_by_area or []):
+        k = (row["game_key"], row["field_key"])
+        if k not in latest:
+            latest[k] = row
+
+    # Sort areas into good / focus
+    well = []
+    focus = []
+
+    for area in SCORING_AREAS:
+        gk = area["game_key"]
+        fk = area.get("field_key")
+        stored = threshold_field_key(area)
+        lang = SC_GAP_LANGUAGE.get((gk, stored)) or SC_GAP_LANGUAGE.get((gk, fk))
+        if not lang:
+            continue
+
+        # find achievement row
+        ach = latest.get((gk, stored)) or latest.get((gk, fk))
+        score = ach["achievement_value"] if ach else None
+        threshold = thresholds.get((gk, stored)) or thresholds.get((gk, fk))
+
+        if score is None:
+            continue  # no data yet — skip
+
+        if threshold is not None:
+            lower_is_better = area.get("lower_is_better", False)
+            gap = (score > threshold) if lower_is_better else (score < threshold)
+        else:
+            gap = False
+
+        entry = {
+            "display": lang["display"],
+            "family": lang["family"],
+            "score": score,
+            "threshold": threshold,
+            "athlete_what": lang.get("athlete_what", ""),
+            "athlete_why": lang.get("athlete_why", ""),
+            "athlete_games": lang.get("athlete_games", []),
+            "athlete_sc": lang.get("athlete_sc", ""),
+        }
+
+        if gap:
+            focus.append(entry)
+        else:
+            well.append(entry)
+
+    # ── Strengths section ─────────────────────────────────────────────────────
+    if well:
+        well_cards = ""
+        for item in well:
+            well_cards += f"""
+            <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;
+                        background:#fff;border:1px solid #D1FAE5;border-radius:10px;margin-bottom:8px;">
+              <span style="font-size:20px;">✅</span>
+              <div>
+                <div style="font-size:13px;font-weight:700;color:#065F46;">{esc(item['display'])}</div>
+                <div style="font-size:12px;color:#6B7280;">You're tracking well here — keep it going.</div>
+              </div>
+            </div>"""
+        strengths_html = f"""
+        <div style="margin-bottom:32px;">
+          <h2 style="font-size:16px;font-weight:800;color:#2D323B;margin:0 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="background:#D1FAE5;color:#065F46;border-radius:50%;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;">✓</span>
+            Tracking Well
+          </h2>
+          {well_cards}
+        </div>"""
+    else:
+        strengths_html = ""
+
+    # ── Focus areas section ───────────────────────────────────────────────────
+    if focus:
+        focus_cards = ""
+        for item in focus:
+            games_html = ""
+            if item["athlete_games"]:
+                chips = "".join(
+                    f'<span style="font-size:11px;background:#F3F4F5;border:1px solid #E5E7EB;'
+                    f'border-radius:999px;padding:3px 10px;color:#2D323B;font-weight:600;">{esc(g)}</span>'
+                    for g in item["athlete_games"]
+                )
+                games_html = f"""
+                <div style="margin-top:10px;">
+                  <div style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px;">Games & Tests to Try</div>
+                  <div style="display:flex;flex-wrap:wrap;gap:6px;">{chips}</div>
+                </div>"""
+
+            sc_html = ""
+            if item["athlete_sc"]:
+                sc_html = f"""
+                <div style="margin-top:10px;background:#FFFBEB;border-left:3px solid #F0A82E;
+                            border-radius:0 6px 6px 0;padding:10px 12px;font-size:12px;color:#78350F;line-height:1.6;">
+                  <strong>💪 If you're doing gym or S&amp;C work:</strong> {esc(item['athlete_sc'])}
+                </div>"""
+
+            focus_cards += f"""
+            <div style="border:1px solid #E5E7EB;border-radius:12px;padding:18px 20px;margin-bottom:16px;background:#fff;">
+              <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:10px;">
+                <span style="font-size:20px;flex-shrink:0;">🎯</span>
+                <div>
+                  <div style="font-size:14px;font-weight:800;color:#2D323B;margin-bottom:4px;">{esc(item['display'])}</div>
+                  <div style="font-size:13px;color:#374151;line-height:1.6;margin-bottom:6px;">{esc(item['athlete_what'])}</div>
+                  <div style="font-size:12px;color:#6B7280;line-height:1.5;font-style:italic;">{esc(item['athlete_why'])}</div>
+                </div>
+              </div>
+              {games_html}
+              {sc_html}
+            </div>"""
+
+        focus_html = f"""
+        <div style="margin-bottom:32px;">
+          <h2 style="font-size:16px;font-weight:800;color:#2D323B;margin:0 0 12px;display:flex;align-items:center;gap:8px;">
+            <span style="background:#FEF3C7;color:#92400E;border-radius:50%;width:28px;height:28px;display:inline-flex;align-items:center;justify-content:center;font-size:14px;">🎯</span>
+            Your Focus Areas
+          </h2>
+          {focus_cards}
+        </div>"""
+    elif not well:
+        focus_html = """
+        <div class="card" style="text-align:center;padding:32px;">
+          <p style="color:#6B7280;margin:0;">No measurement data yet — once you've completed some tests your report will appear here.</p>
+        </div>"""
+    else:
+        focus_html = """
+        <div style="background:#D1FAE5;border-radius:12px;padding:20px 24px;margin-bottom:32px;text-align:center;">
+          <div style="font-size:24px;margin-bottom:8px;">🏆</div>
+          <div style="font-size:15px;font-weight:700;color:#065F46;">You're above threshold in all tested areas — excellent work!</div>
+        </div>"""
+
+    sport_line = f" · {esc(sport)}" if sport else ""
+    body = f"""
+    <div class="container" style="max-width:700px;padding-top:32px;padding-bottom:48px;">
+
+      <div style="margin-bottom:28px;">
+        <a href="/athlete" class="btn btn-ghost btn-sm" style="margin-bottom:16px;">&larr; Back to Dashboard</a>
+        <h1 style="font-size:26px;font-weight:800;color:#2D323B;margin:0 0 4px;">Your Movement Report</h1>
+        <p style="font-size:14px;color:#6B7280;margin:0;">{name}{sport_line}</p>
+      </div>
+
+      <div style="background:linear-gradient(135deg,#2D323B 0%,#3D434F 100%);border-radius:14px;padding:20px 24px;
+                  margin-bottom:28px;color:#fff;">
+        <div style="font-size:13px;font-weight:600;color:#F0A82E;margin-bottom:6px;">HOW TO USE THIS REPORT</div>
+        <p style="font-size:13px;line-height:1.7;margin:0;color:rgba(255,255,255,0.85);">
+          This report is based on your measurement results. The <strong style="color:#4ADE80;">Tracking Well</strong> section
+          shows where you're performing strongly. The <strong style="color:#FCD34D;">Focus Areas</strong> section highlights
+          where you can make the biggest gains — with specific games and activities to help you get there.
+        </p>
+      </div>
+
+      {strengths_html}
+      {focus_html}
+
+    </div>
+
+    <style>
+    @media print {{
+      .btn, nav, header {{ display: none !important; }}
+      body {{ background: #fff; }}
+      .container {{ padding-top: 0 !important; }}
+    }}
+    </style>"""
+
+    return layout("My Movement Report", body, user=athlete, active_nav="dashboard")
