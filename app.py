@@ -3716,7 +3716,7 @@ def game_thresholds_delete(req):
 @router.get("/coach/leaderboard")
 def coach_leaderboard(req):
     """Group XP leaderboard — ranked by total XP."""
-    coach = require_coach(req)
+    coach = require_staff(req)
     if not coach:
         return redirect("/login")
     from constants import XP_RANK_TIERS, CORE_AAP_GAMES

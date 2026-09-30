@@ -4813,7 +4813,6 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
       </div>
     </div>"""
         else:
-            from constants import SESSION_TYPES
             label_options = "".join(
                 f'<option value="{esc(t["key"])}">{esc(t["label"])}</option>'
                 for t in SESSION_TYPES
