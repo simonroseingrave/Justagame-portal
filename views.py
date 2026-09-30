@@ -1395,62 +1395,39 @@ def participant_dashboard(user, measurement_sessions,
     return layout("My Dashboard", body, user=user, active_nav="dashboard")
 
 
-def athlete_resources_page(athlete, resources_by_tag, all_tags, selected_tag_id=None):
-    """Athlete-facing resource browser — tag chips + resource grid."""
-    # Tag filter bar
-    tag_chips = '<a href="/athlete/resources" style="display:inline-block;padding:5px 14px;' \
-                f'border-radius:999px;font-size:13px;font-weight:600;text-decoration:none;margin:3px;' \
-                f'background:{"#2D323B" if not selected_tag_id else "#E5E7EB"};' \
-                f'color:{"#fff" if not selected_tag_id else "#2D323B"};">All</a>'
-    for t in all_tags:
-        active = (selected_tag_id == t["id"])
-        tag_chips += (
-            f'<a href="/athlete/resources?tag={t["id"]}" '
-            f'style="display:inline-block;padding:5px 14px;border-radius:999px;font-size:13px;'
-            f'font-weight:600;text-decoration:none;margin:3px;'
-            f'background:{"#2D323B" if active else "#E5E7EB"};'
-            f'color:{"#fff" if active else "#2D323B"};">{esc(t["name"])}</a>'
-        )
-
-    # Build resource tiles per tag group (or flat if filtered)
+def athlete_resources_page(athlete, folder_groups, ungrouped):
+    """Athlete-facing resource browser — grouped by folder."""
     content_html = ""
-    if selected_tag_id:
-        # Flat view for a single tag
-        items = resources_by_tag.get(selected_tag_id, [])
-        if items:
-            tiles = _athlete_resource_tiles(items)
-            content_html = f'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:14px;">{tiles}</div>'
-        else:
-            content_html = '<p style="color:#9CA3AF;font-size:14px;padding:20px 0;">No resources in this category.</p>'
-    else:
-        # Grouped by tag
-        if resources_by_tag:
-            for t in all_tags:
-                items = resources_by_tag.get(t["id"], [])
-                if not items:
-                    continue
-                tiles = _athlete_resource_tiles(items)
-                content_html += f"""
-                <h3 style="font-size:16px;font-weight:700;color:#2D323B;margin:24px 0 10px;">{esc(t['name'])}</h3>
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:8px;">
-                  {tiles}
-                </div>"""
-            # Untagged
-            untagged = resources_by_tag.get(None, [])
-            if untagged:
-                tiles = _athlete_resource_tiles(untagged)
-                content_html += f"""
-                <h3 style="font-size:16px;font-weight:700;color:#2D323B;margin:24px 0 10px;">Other</h3>
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
-                  {tiles}
-                </div>"""
-        else:
-            content_html = '<p style="color:#9CA3AF;font-size:14px;padding:32px 0;text-align:center;">No resources have been shared yet.</p>'
+    for folder, items in folder_groups:
+        if not items:
+            continue
+        tiles = _athlete_resource_tiles(items)
+        content_html += f"""
+        <div style="margin-bottom:28px;">
+          <h3 style="font-size:16px;font-weight:700;color:#2D323B;margin:0 0 10px;
+                     padding-left:12px;border-left:4px solid #F0A82E;">{esc(folder["name"])}</h3>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
+            {tiles}
+          </div>
+        </div>"""
+    if ungrouped:
+        tiles = _athlete_resource_tiles(list(ungrouped))
+        label = "Other" if folder_groups else ""
+        header = (f'<h3 style="font-size:16px;font-weight:700;color:#2D323B;margin:0 0 10px;'
+                  f'padding-left:12px;border-left:4px solid #E5E7EB;">{label}</h3>') if label else ''
+        content_html += f"""
+        <div style="margin-bottom:28px;">
+          {header}
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
+            {tiles}
+          </div>
+        </div>"""
+    if not content_html:
+        content_html = '<p style="color:#9CA3AF;font-size:14px;padding:32px 0;text-align:center;">No resources have been shared yet.</p>'
 
     body = f"""
     <div style="max-width:900px;padding-top:28px;">
-      <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 16px;">Resources</h2>
-      <div style="margin-bottom:20px;line-height:2.2;">{tag_chips}</div>
+      <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 20px;">Resources</h2>
       {content_html}
     </div>"""
     return layout("Resources", body, user=athlete, active_nav="resources")
@@ -7101,12 +7078,10 @@ def _resource_tile_wrap(tiles_html, list_id=None):
     return f'<div class="res-tiles-wrap" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:18px;padding:8px 0 12px;align-items:stretch;"{list_attr}>{tiles_html}</div>'
 
 
-def resources_page(user, folder_groups, ungrouped, folders, tags=None, tags_by_resource=None, message=None, error=None):
+def resources_page(user, folder_groups, ungrouped, folders, message=None, error=None):
     message_html = f'<div class="flash">{esc(message)}</div>' if message else ""
     error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
     is_admin = user.get("is_admin")
-    tags = tags or []
-    tags_by_resource = tags_by_resource or {}
 
     folder_opts = '<option value="">— Ungrouped —</option>' + "".join(
         f'<option value="{f["id"]}">{esc(f["name"])}</option>' for f in folders
@@ -7115,7 +7090,7 @@ def resources_page(user, folder_groups, ungrouped, folders, tags=None, tags_by_r
     # Build folder sections — link tile layout
     folder_sections = ""
     for folder, resources in folder_groups:
-        tiles_html = "".join(_resource_tile(r, is_admin=is_admin, tags=tags_by_resource.get(r['id'], [])) for r in resources)
+        tiles_html = "".join(_resource_tile(r, is_admin=is_admin) for r in resources)
         count = len(resources)
         count_text = f'<span class="muted" style="font-size:14px; font-weight:400;">&nbsp;({count} link{"s" if count != 1 else ""})</span>'
         list_content = _resource_tile_wrap(tiles_html, list_id=folder['id']) if tiles_html else '<p class="muted" style="margin:8px 0 0; font-size:13px;">No resources in this folder yet.</p>'
@@ -7154,7 +7129,7 @@ def resources_page(user, folder_groups, ungrouped, folders, tags=None, tags_by_r
         </div>"""
 
     # Ungrouped section
-    ug_tiles_html = "".join(_resource_tile(r, is_admin=is_admin, tags=tags_by_resource.get(r['id'], [])) for r in ungrouped)
+    ug_tiles_html = "".join(_resource_tile(r, is_admin=is_admin) for r in ungrouped)
     ug_count = len(ungrouped)
     ug_count_text = f'<span class="muted" style="font-size:14px; font-weight:400;">&nbsp;({ug_count} link{"s" if ug_count != 1 else ""})</span>'
     ungrouped_list_html = _resource_tile_wrap(ug_tiles_html, list_id="ungrouped") if ug_tiles_html else '<p class="muted" style="margin:8px 0 0; font-size:13px;">No ungrouped resources.</p>'
@@ -7169,29 +7144,10 @@ def resources_page(user, folder_groups, ungrouped, folders, tags=None, tags_by_r
       {ungrouped_list_html}
     </div>""" if ungrouped or is_admin else ""
 
-    # Tag checkboxes for the Add Resource form
-    tag_checkboxes_add = "".join(
-        f'<label style="display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:400;margin:0 8px 4px 0;cursor:pointer;">'
-        f'<input type="checkbox" name="tag_ids" value="{t["id"]}" style="width:auto;margin:0;" />{esc(t["name"])}</label>'
-        for t in tags
-    )
-    tag_checkboxes_section = f'<label style="margin-top:10px;">Tags</label><div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:4px;">{tag_checkboxes_add}</div>' if tags else ''
-
-    # Manage Tags section (admin only)
-    tag_rows = "".join(
-        f'<span style="display:inline-flex;align-items:center;gap:4px;background:var(--jag-green);color:var(--jag-navy);border-radius:999px;padding:3px 10px;font-size:13px;font-weight:600;">'
-        f'{esc(t["name"])}'
-        f'<form method="post" action="/coach/resources/tags/{t["id"]}/delete" style="display:inline;margin:0;" onsubmit="return confirm(\'Delete tag \\\'{esc(t["name"])}\\\' ?\');">'
-        f'<button type="submit" style="background:none;border:none;cursor:pointer;font-size:14px;line-height:1;color:var(--jag-navy);padding:0 0 0 4px;" title="Delete tag">&times;</button>'
-        f'</form></span>'
-        for t in tags
-    ) if tags else '<span style="color:var(--jag-muted);font-size:13px;">No tags yet.</span>'
-
     manage_forms = f"""
     <div style="display:flex; gap:10px; margin-bottom:28px; flex-wrap:wrap;">
       <button type="button" class="btn btn-primary" onclick="var p=document.getElementById('res-add-panel');p.style.display=p.style.display==='none'?'block':'none';">+ Add Resource</button>
       <button type="button" class="btn btn-ghost" onclick="var p=document.getElementById('folder-add-panel');p.style.display=p.style.display==='none'?'block':'none';">+ Create Folder</button>
-      <button type="button" class="btn btn-ghost" onclick="var p=document.getElementById('tags-panel');p.style.display=p.style.display==='none'?'block':'none';">&#127991; Manage Tags</button>
     </div>
     <div id="res-add-panel" style="display:none; margin-bottom:24px;">
       <div class="card form-card" style="max-width:480px;">
@@ -7207,7 +7163,6 @@ def resources_page(user, folder_groups, ungrouped, folders, tags=None, tags_by_r
           <input type="text" id="res_so" name="self_organisation" placeholder="e.g. Spatial awareness &amp; decision making" />
           <label for="res_folder">Folder (optional)</label>
           <select id="res_folder" name="folder_id">{folder_opts}</select>
-          {tag_checkboxes_section}
           <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Add Resource</button>
         </form>
       </div>
@@ -7219,19 +7174,6 @@ def resources_page(user, folder_groups, ungrouped, folders, tags=None, tags_by_r
           <label for="folder_name">Folder name</label>
           <input type="text" id="folder_name" name="folder_name" required placeholder="e.g. Coaching Guides" />
           <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Create Folder</button>
-        </form>
-      </div>
-    </div>
-    <div id="tags-panel" style="display:none; margin-bottom:24px;">
-      <div class="card form-card" style="max-width:520px;">
-        <h2 style="margin-top:0; font-size:16px;">Manage Tags</h2>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:14px;">{tag_rows}</div>
-        <form method="post" action="/coach/resources/tags/new" style="display:flex;gap:8px;align-items:flex-end;">
-          <div style="flex:1;">
-            <label for="tag_name" style="font-size:13px;font-weight:600;">New tag name</label>
-            <input type="text" id="tag_name" name="tag_name" required placeholder="e.g. Video" style="margin-top:4px;" />
-          </div>
-          <button type="submit" class="btn btn-primary">Add Tag</button>
         </form>
       </div>
     </div>""" if is_admin else ""
@@ -7371,24 +7313,14 @@ def resources_page(user, folder_groups, ungrouped, folders, tags=None, tags_by_r
     return layout("Resources", body, user=user, active_nav="resources")
 
 
-def edit_resource_page(user, resource, folders, all_tags=None, selected_tag_ids=None,
-                       selected_game_keys=None, error=None):
+def edit_resource_page(user, resource, folders, selected_game_keys=None, error=None):
     from constants import CORE_AAP_GAMES, find_measurement_game
     error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
     folder_opts = '<option value="">— Ungrouped —</option>' + "".join(
         f'<option value="{f["id"]}" {"selected" if resource["folder_id"] == f["id"] else ""}>{esc(f["name"])}</option>'
         for f in folders
     )
-    all_tags = all_tags or []
-    selected_tag_ids = selected_tag_ids or []
     selected_game_keys = set(selected_game_keys or [])
-    tag_checkboxes = "".join(
-        f'<label style="display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:400;margin:0 8px 4px 0;cursor:pointer;">'
-        f'<input type="checkbox" name="tag_ids" value="{t["id"]}" {"checked" if t["id"] in selected_tag_ids else ""} style="width:auto;margin:0;" />{esc(t["name"])}</label>'
-        for t in all_tags
-    )
-    tags_section = (f'<label style="margin-top:10px;">Tags <span style="font-weight:400;color:#6E737B;font-size:12px;">(visible to athletes)</span></label>'
-                    f'<div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:4px;">{tag_checkboxes}</div>') if all_tags else ''
 
     # ── Hidden taxonomy ───────────────────────────────────────────────────
     game_checkboxes = ""
@@ -7448,7 +7380,6 @@ def edit_resource_page(user, resource, folders, all_tags=None, selected_tag_ids=
         <input type="text" id="self_organisation" name="self_organisation" value="{esc(resource.get('self_organisation') or '')}" placeholder="e.g. Spatial awareness &amp; decision making" />
         <label for="folder_id">Folder</label>
         <select id="folder_id" name="folder_id">{folder_opts}</select>
-        {tags_section}
         {taxonomy_section}
         <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Save Changes</button>
       </form>

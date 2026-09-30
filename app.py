@@ -292,29 +292,8 @@ def athlete_resources(req):
         return redirect("/login")
     conn = db.get_conn()
     try:
-        all_tags = db.list_tags(conn)
-        tag_id_param = req.params.get("tag")
-        selected_tag_id = int(tag_id_param) if tag_id_param and tag_id_param.isdigit() else None
-        _fg2, _ug2 = db.list_resources_by_folder(conn)
-        all_resources = [r for _f, rs in _fg2 for r in rs] + list(_ug2)
-        # Build tags per resource
-        all_ids = [r["id"] for r in all_resources]
-        tags_by_res = db.get_tags_for_resources(conn, all_ids) if all_ids else {}
-        # Group resources by tag
-        resources_by_tag = {}  # tag_id (or None) -> list of resource dicts
-        for r in all_resources:
-            r_dict = dict(r)
-            r_tags = tags_by_res.get(r["id"], [])
-            r_dict["tag_names"] = [t["name"] for t in r_tags]
-            tag_ids_for_r = [t["id"] for t in r_tags]
-            if not tag_ids_for_r:
-                resources_by_tag.setdefault(None, []).append(r_dict)
-            else:
-                for tid in tag_ids_for_r:
-                    resources_by_tag.setdefault(tid, []).append(r_dict)
-        return Response(views.athlete_resources_page(
-            user, resources_by_tag, all_tags, selected_tag_id=selected_tag_id
-        ))
+        folder_groups, ungrouped = db.list_resources_by_folder(conn)
+        return Response(views.athlete_resources_page(user, folder_groups, ungrouped))
     finally:
         conn.close()
 
@@ -2304,12 +2283,8 @@ def group_relabel_sessions(req, group_id):
 def _resources_page_response(coach, conn, message=None, error=None, status=200):
     folder_groups, ungrouped = db.list_resources_by_folder(conn)
     folders = db.list_folders(conn)
-    tags = db.list_tags(conn)
-    all_resources = [r for _, rs in folder_groups for r in rs] + list(ungrouped)
-    all_ids = [r["id"] for r in all_resources]
-    tags_by_resource = db.get_tags_for_resources(conn, all_ids)
     return Response(
-        views.resources_page(coach, folder_groups, ungrouped, folders, tags, tags_by_resource, message=message, error=error),
+        views.resources_page(coach, folder_groups, ungrouped, folders, message=message, error=error),
         status=status,
     )
 
@@ -2337,7 +2312,6 @@ def resources_new(req):
     description = req.form_get("description").strip()
     self_organisation = req.form_get("self_organisation").strip() or None
     folder_id = req.form_get("folder_id").strip() or None
-    tag_ids = [int(t) for t in req.form_get_list("tag_ids") if t.strip().isdigit()]
     if not name or not url:
         conn = db.get_conn()
         try:
@@ -2346,13 +2320,12 @@ def resources_new(req):
             conn.close()
     conn = db.get_conn()
     try:
-        resource_id = conn.execute(
+        conn.execute(
             "INSERT INTO resources (name, description, url, self_organisation, added_by, folder_id, sort_order, created_at) "
             "VALUES (?, ?, ?, ?, ?, ?, (SELECT COALESCE(MAX(sort_order),-1)+1 FROM resources), ?)",
             (name, description or None, url, self_organisation, coach["id"], folder_id or None, db.now()),
-        ).lastrowid
+        )
         conn.commit()
-        db.set_resource_tags(conn, resource_id, tag_ids)
         return flash_redirect("/coach/resources", f'"{name}" added.')
     finally:
         conn.close()
@@ -2369,12 +2342,9 @@ def resource_edit_get(req, resource_id):
         if not resource:
             return flash_redirect("/coach/resources", "Resource not found.")
         folders = db.list_folders(conn)
-        all_tags = db.list_tags(conn)
-        selected_tag_ids = db.get_resource_tag_ids(conn, resource_id)
         selected_game_keys = db.get_resource_game_keys(conn, resource_id)
         return Response(views.edit_resource_page(
-            coach, dict(resource), folders, all_tags, selected_tag_ids,
-            selected_game_keys=selected_game_keys,
+            coach, dict(resource), folders, selected_game_keys=selected_game_keys,
         ))
     finally:
         conn.close()
@@ -2391,19 +2361,16 @@ def resource_edit_post(req, resource_id):
     self_organisation = req.form_get("self_organisation").strip() or None
     folder_id = req.form_get("folder_id").strip() or None
     level_range = req.form_get("level_range").strip() or "all"
-    tag_ids = [int(t) for t in req.form_get_list("tag_ids") if t.strip().isdigit()]
     game_keys = [g.strip() for g in req.form_get_list("game_keys") if g.strip()]
     if not name or not url:
         conn = db.get_conn()
         try:
             resource = conn.execute("SELECT * FROM resources WHERE id = ?", (resource_id,)).fetchone()
             folders = db.list_folders(conn)
-            all_tags = db.list_tags(conn)
-            selected_tag_ids = db.get_resource_tag_ids(conn, resource_id)
             selected_game_keys = db.get_resource_game_keys(conn, resource_id)
             return Response(
                 views.edit_resource_page(
-                    coach, dict(resource), folders, all_tags, selected_tag_ids,
+                    coach, dict(resource), folders,
                     selected_game_keys=selected_game_keys,
                     error="Name and URL are required.",
                 ),
@@ -2415,7 +2382,6 @@ def resource_edit_post(req, resource_id):
     try:
         db.update_resource(conn, resource_id, name, description, url, folder_id,
                            self_organisation=self_organisation, level_range=level_range)
-        db.set_resource_tags(conn, resource_id, tag_ids)
         db.set_resource_game_keys(conn, resource_id, game_keys)
         return flash_redirect("/coach/resources", f'"{name}" updated.')
     finally:
