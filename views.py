@@ -7807,9 +7807,9 @@ _GAME_DISPLAY_NAMES = {
     "balance_ball_catching": "Balance Catching",
     "leap_catching_throwing": "Grid Leap",
     "split_step":            "Split Step",
-    "diamond_games":         "Diamond Gates",
+    "diamond_gates":         "Diamond Gates",
     "diamond_dribble":       "Diamond Dribble",
-    "diamond_gym":           "Step Up",
+    "step_up":               "Step Up",
     "lob_scotch":            "Lob Scotch",
 }
 

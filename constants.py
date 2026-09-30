@@ -114,7 +114,7 @@ MEASUREMENT_GAMES = [
                 ],
             },
             {
-                "key": "diamond_games",
+                "key": "diamond_gates",
                 "name": "Diamond Gates - 1 minute",
                 "level": 1,
                 "either_or": True,
@@ -136,9 +136,7 @@ MEASUREMENT_GAMES = [
                 ],
             },
             {
-                # Step Up (internal key: diamond_gym — retained for DB compatibility)
-                # step_bench_small (Small Ball) hidden from new forms; historical data preserved.
-                "key": "diamond_gym",
+                "key": "step_up",
                 "name": "Step Up",
                 "level": 1,
                 "level_threshold_hint": "Successful step-ups in 1 minute — Large Ball only. Set thresholds for each level based on count.",
@@ -240,9 +238,9 @@ CORE_AAP_GAMES = [
     "balance_ball_catching",
     "leap_catching_throwing",   # Grid Leap
     "split_step",
-    "diamond_games",            # Diamond Gates
+    "diamond_gates",
     "diamond_dribble",
-    "diamond_gym",              # Step Up
+    "step_up",
     "lob_scotch",
 ]
 
@@ -282,7 +280,7 @@ XP_GAME_CONFIG = {
         "score_fields": ["catches"],
         "primary_field": "catches",
     },
-    "diamond_games": {
+    "diamond_gates": {
         "xp_type": "count",
         "multiplier": 5,
         "score_fields": ["small_group", "large_group"],
@@ -294,7 +292,7 @@ XP_GAME_CONFIG = {
         "score_fields": ["small_group", "large_group"],
         "primary_field": "small_group",
     },
-    "diamond_gym": {
+    "step_up": {
         "xp_type": "count",
         "multiplier": 1,
         # step_bench_small hidden from new forms; excluded from active XP calculation
@@ -366,9 +364,9 @@ GAME_DISPLAY_NAMES = {
     "balance_ball_catching":  "Balance Ball Catching",
     "leap_catching_throwing": "Grid Leap",
     "split_step":             "Split Step",
-    "diamond_games":          "Diamond Gates",
+    "diamond_gates":          "Diamond Gates",
     "diamond_dribble":        "Diamond Dribble",
-    "diamond_gym":            "Step Up",
+    "step_up":                "Step Up",
     "lob_scotch":             "Lob Scotch",
     # Deprecated games — kept for historical display
     "step_over":              "Step Over",
@@ -408,7 +406,7 @@ GAME_LEVEL_DESCRIPTIONS = {
         "L4 — High catch volume; reading and reacting to ball",
         "L5 — Elite reaction and volley count in 1 minute",
     ],
-    "diamond_games": [
+    "diamond_gates": [
         "L1 — Moving through gates with awareness of group",
         "L2 — Increasing gate count; reading the diamond shape",
         "L3 — Smooth movement; consistent gate count per minute",
@@ -422,7 +420,7 @@ GAME_LEVEL_DESCRIPTIONS = {
         "L4 — High gate count with close ball control",
         "L5 — Elite gate count; full ball mastery in group context",
     ],
-    "diamond_gym": [
+    "step_up": [
         "L1 — Completing step-ups with large ball control",
         "L2 — Increasing step-up count; rhythm developing",
         "L3 — Consistent step-up count; strong balance",
@@ -690,7 +688,7 @@ SCORING_AREAS = [
     },
     {
         "display_name": "Diamond Gates",
-        "game_key":     "diamond_games",
+        "game_key":     "diamond_gates",
         "field_key":    None,   # pooled: small_group + large_group combined
         "lower_is_better": False,
     },
@@ -702,7 +700,7 @@ SCORING_AREAS = [
     },
     {
         "display_name": "Step Up",
-        "game_key":     "diamond_gym",
+        "game_key":     "step_up",
         "field_key":    "step_bench",
         "lower_is_better": False,
     },

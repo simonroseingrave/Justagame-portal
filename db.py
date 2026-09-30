@@ -280,8 +280,8 @@ def migrate_diamond_group_fields(conn):
     """
     MAPPINGS = [
         # (game_key, [old field_keys], new field_key)
-        ("diamond_games",   ["athletes_3", "athletes_4", "athletes_5"], "small_group"),
-        ("diamond_games",   ["athletes_6", "athletes_7", "athletes_8"], "large_group"),
+        ("diamond_gates",   ["athletes_3", "athletes_4", "athletes_5"], "small_group"),
+        ("diamond_gates",   ["athletes_6", "athletes_7", "athletes_8"], "large_group"),
         ("diamond_dribble", ["athletes_4", "athletes_5"],               "small_group"),
         ("diamond_dribble", ["athletes_6"],                             "large_group"),
     ]
@@ -393,6 +393,16 @@ def init_db():
             conn.commit()
         except Exception:
             pass
+    # Data migration: rename legacy game_keys to clean canonical names
+    # diamond_games → diamond_gates  |  diamond_gym → step_up
+    for table in ("measurement_results", "xp_events", "level_achievements",
+                  "game_level_thresholds", "resource_game_links"):
+        for old_key, new_key in (("diamond_games", "diamond_gates"), ("diamond_gym", "step_up")):
+            try:
+                conn.execute(f"UPDATE {table} SET game_key = ? WHERE game_key = ?", (new_key, old_key))
+                conn.commit()
+            except Exception:
+                pass
     # Migration: rebuild level_achievements and game_level_thresholds to add
     # field_key discriminator column and updated UNIQUE constraints.
     # This is safe because both tables are empty until thresholds are set and
@@ -721,7 +731,7 @@ def seed_demo_data():
             ("skipping_rope_sprint", "average", round((t1 + t2 + t3) / 3, 2)),
             ("balance_ball_catching", "small_ball", 14),
             ("balance_ball_catching", "large_ball", 22),
-            ("diamond_games", "running_room", 8),
+            ("diamond_gates", "running_room", 8),
         ]
         for game_key, field_key, value in sample_results:
             conn.execute(
