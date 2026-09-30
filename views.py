@@ -1564,7 +1564,8 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
                       f'{tiles_html or empty_msg}</div>')
         folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder groups" style="color:var(--jag-muted);cursor:grab;font-size:16px;">&#9776;</span>' if is_admin else ""
         summary_link = (f'<a href="/coach/groups/{group["id"]}/achievement-summary" class="btn btn-sm" style="font-size:12px;background:var(--jag-green);color:var(--jag-navy);font-weight:600;border:none;">&#128200; Group Stats</a>'
-                        f'<a href="/coach/groups/{group["id"]}/scores" class="btn btn-sm btn-ghost" style="font-size:12px;">&#128203; Scores Table</a>')
+                        f'<a href="/coach/groups/{group["id"]}/scores" class="btn btn-sm btn-ghost" style="font-size:12px;">&#128203; Scores Table</a>'
+                        f'<a href="/coach/groups/{group["id"]}/next-steps" class="btn btn-sm btn-ghost" style="font-size:12px;">&#128161; Next Steps</a>')
         type_opts_rl = "".join(
             f'<option value="{s["key"]}">{esc(s["label"])}</option>'
             for s in SESSION_TYPES
@@ -3307,6 +3308,7 @@ def all_progress_page(coach, groups_data, sport_filter=None, max_level=None):
           <div style="display:flex;gap:6px;flex-wrap:wrap;">
             <a href="/coach/groups/{gid}/achievement-summary" class="btn btn-sm" style="font-size:11px;background:var(--jag-green);color:var(--jag-navy);font-weight:700;border:none;">Group Stats</a>
             <a href="/coach/groups/{gid}/scores" class="btn btn-ghost btn-sm" style="font-size:11px;">Scores Table</a>
+            <a href="/coach/groups/{gid}/next-steps" class="btn btn-ghost btn-sm" style="font-size:11px;">&#128161; Next Steps</a>
           </div>
         </div>"""
 
@@ -3351,6 +3353,7 @@ def all_progress_page(coach, groups_data, sport_filter=None, max_level=None):
             links = (f'<a href="/coach/groups/{gid}/achievement-summary" class="btn btn-sm" '
                      f'style="font-size:12px;background:var(--jag-green);color:var(--jag-navy);font-weight:700;border:none;">Group Stats</a>'
                      f'<a href="/coach/groups/{gid}/scores" class="btn btn-ghost btn-sm" style="font-size:12px;">Scores Table</a>'
+                     f'<a href="/coach/groups/{gid}/next-steps" class="btn btn-ghost btn-sm" style="font-size:12px;">&#128161; Next Steps</a>'
                      f'<a href="/coach/progress/pdf?scope=group&group_id={gid}" class="btn btn-ghost btn-sm no-print" style="font-size:12px;">&#128196; PDF</a>')
 
         group_sections_html += f"""
@@ -9682,3 +9685,387 @@ def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_r
     </style>"""
 
     return layout("My Movement Report", body, user=athlete, active_nav="dashboard")
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Group Next Steps Report — practitioner session planning guide
+# ─────────────────────────────────────────────────────────────────────────────
+
+def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw):
+    """
+    5-week session planning guide for a group post-testing.
+    Analyses group-level gaps and strengths across SCORING_AREAS, calls out
+    outliers, and generates a suggested rotation of programme games + test spaces.
+    """
+    from constants import SCORING_AREAS, SC_GAP_LANGUAGE, threshold_field_key
+    import statistics
+
+    group_name = esc(group["name"] if isinstance(group, dict) else group["name"])
+    group_id = group["id"] if isinstance(group, dict) else group["id"]
+    today = __import__("datetime").date.today().strftime("%-d %B %Y")
+    n_athletes = len(athletes_with_levels)
+
+    if n_athletes == 0:
+        body = f"""
+        <div class="page-head">
+          <div><h1>{group_name} — Next Steps</h1></div>
+          <a class="btn btn-ghost" href="/coach/group-hub">&larr; Group Hub</a>
+        </div>
+        <div class="card"><p class="muted">No athletes in this group yet.</p></div>"""
+        return layout(f"{group_name} — Next Steps", body, user=coach, active_nav="dashboard")
+
+    # ── Build thresholds lookup ───────────────────────────────────────────────
+    thresholds = {}
+    for row in (thresholds_raw or []):
+        thresholds[(row["game_key"], row["field_key"])] = row["threshold_value"]
+
+    # ── Programme games per SCORING_AREA (from SC_GAP_LANGUAGE athlete_games) ─
+    # Maps area key → list of suggested programme game names
+    AREA_PROGRAMME_GAMES = {
+        ("balance_ball_catching", "large_ball_wall_bounce"): ["Lob Scotch", "Step Up"],
+        ("balance_ball_catching", "one_foot_balance_catch"):  ["Step Up", "Grid Leap"],
+        ("lob_scotch",            "squares_scored"):           ["Lob Scotch", "Grid Leap"],
+        ("leap_catching_throwing", "points"):                  ["Grid Leap", "Diamond Gates"],
+        ("step_up",               "step_bench"):               ["Step Up", "Diamond Gates"],
+        ("skipping_rope_sprint",  "average"):                  ["Skipping Rope Sprint", "Diamond Dribble"],
+        ("diamond_gates",         "small_group"):              ["Diamond Gates", "Split Step"],
+        ("diamond_dribble",       "small_group"):              ["Diamond Dribble", "Diamond Gates"],
+        ("split_step",            "catches"):                  ["Split Step", "Split Decision"],
+    }
+
+    SELF_TEST_GAME = {
+        ("balance_ball_catching", "large_ball_wall_bounce"): "Balance Ball Catching (Two Feet)",
+        ("balance_ball_catching", "one_foot_balance_catch"):  "Balance Ball Catching (One Foot)",
+        ("lob_scotch",            "squares_scored"):           "Lob Scotch",
+        ("leap_catching_throwing", "points"):                  "Grid Leap",
+        ("step_up",               "step_bench"):               "Step Up",
+        ("skipping_rope_sprint",  "average"):                  "Skipping Rope Sprint",
+        ("diamond_gates",         "small_group"):              "Diamond Gates",
+        ("diamond_dribble",       "small_group"):              "Diamond Dribble",
+        ("split_step",            "catches"):                  "Split Step",
+    }
+
+    SC_NOTE = {
+        ("balance_ball_catching", "large_ball_wall_bounce"): "Balance work: single-leg holds, standing on one foot with eyes closed, or catching a ball while balanced.",
+        ("balance_ball_catching", "one_foot_balance_catch"):  "Single-leg stability: one-leg holds progressing to one-leg catch drills.",
+        ("lob_scotch",            "squares_scored"):           "Landing control: small hops to a spot, focusing on a quiet, controlled landing.",
+        ("leap_catching_throwing", "points"):                  "Horizontal power: broad jumps to a target zone. Accuracy and distance together.",
+        ("step_up",               "step_bench"):               "Step-up rhythm: box step-ups at pace, then add a wall catch once the movement is smooth.",
+        ("skipping_rope_sprint",  "average"):                  "Speed foundation: short acceleration drills — wall drives, A-skips, 5-metre burst starts.",
+        ("diamond_gates",         "small_group"):              "Change of direction: short shuttle runs focusing on the slow-down before the turn.",
+        ("diamond_dribble",       "small_group"):              "Movement first: COD drills without the ball, then reintroduce the ball once movement is sharp.",
+        ("split_step",            "catches"):                  "Reaction work: partner signal drills, drop-catch, or 1v1 mirroring to sharpen reactive speed.",
+    }
+
+    # ── Analyse each area across the group ───────────────────────────────────
+    area_analysis = []
+    for area in SCORING_AREAS:
+        gk = area["game_key"]
+        fk = area.get("field_key")
+        stored = threshold_field_key(area)
+        area_key = (gk, stored)
+        lang = SC_GAP_LANGUAGE.get(area_key) or SC_GAP_LANGUAGE.get((gk, fk))
+        if not lang:
+            continue
+
+        threshold = thresholds.get(area_key) or thresholds.get((gk, fk))
+        lower_is_better = area.get("lower_is_better", False)
+
+        athlete_levels = []
+        below_threshold = []
+        above_threshold = []
+
+        for ath in athletes_with_levels:
+            lvl = ath["levels"].get((gk, stored or fk or ""), 0)
+            athlete_levels.append((ath["name"], ath.get("athlete_number") or "", lvl))
+            if threshold is not None:
+                # We don't have raw scores here — use level as proxy
+                # Level 0 = gap, Level 1+ = above baseline
+                if lvl == 0:
+                    below_threshold.append(ath["name"])
+                else:
+                    above_threshold.append(ath["name"])
+
+        if not athlete_levels:
+            continue
+
+        levels_only = [x[2] for x in athlete_levels]
+        try:
+            modal_level = max(set(levels_only), key=levels_only.count)
+        except Exception:
+            modal_level = 0
+
+        n_below = len(below_threshold)
+        n_above = len(above_threshold)
+        pct_gap = (n_below / n_athletes * 100) if n_athletes else 0
+
+        # Outliers: athletes 2+ levels above modal
+        advanced_outliers = [n for n, _, l in athlete_levels if l >= modal_level + 2]
+        # Athletes significantly behind
+        behind_outliers = [n for n, _, l in athlete_levels if modal_level >= 2 and l == 0]
+
+        area_analysis.append({
+            "key": area_key,
+            "display": lang["display"],
+            "family": lang["family"],
+            "modal_level": modal_level,
+            "pct_gap": pct_gap,
+            "n_below": n_below,
+            "n_above": n_above,
+            "athlete_levels": athlete_levels,
+            "advanced_outliers": advanced_outliers,
+            "behind_outliers": behind_outliers,
+            "programme_games": AREA_PROGRAMME_GAMES.get(area_key, []),
+            "self_test": SELF_TEST_GAME.get(area_key, ""),
+            "sc_note": SC_NOTE.get(area_key, ""),
+        })
+
+    # Sort: gaps first (highest pct_gap), then strengths
+    gap_areas = [a for a in area_analysis if a["pct_gap"] >= 50]
+    strength_areas = [a for a in area_analysis if a["pct_gap"] < 30]
+    mixed_areas = [a for a in area_analysis if 30 <= a["pct_gap"] < 50]
+
+    gap_areas.sort(key=lambda x: -x["pct_gap"])
+    strength_areas.sort(key=lambda x: x["pct_gap"])
+
+    # ── Group snapshot section ────────────────────────────────────────────────
+    def area_bar(pct):
+        col = "#EF4444" if pct >= 60 else "#F59E0B" if pct >= 30 else "#10B981"
+        return (f'<div style="height:6px;border-radius:3px;background:#F3F4F6;margin-top:4px;">'
+                f'<div style="width:{pct:.0f}%;height:100%;background:{col};border-radius:3px;"></div></div>')
+
+    snapshot_rows = ""
+    for a in area_analysis:
+        pct = a["pct_gap"]
+        if a["modal_level"] == 0 and not thresholds:
+            tag = '<span style="font-size:10px;color:#9CA3AF;">No thresholds set</span>'
+        elif pct >= 50:
+            tag = '<span style="font-size:10px;font-weight:700;color:#EF4444;background:#FEF2F2;border-radius:999px;padding:1px 8px;">Focus area</span>'
+        elif pct < 30:
+            tag = '<span style="font-size:10px;font-weight:700;color:#065F46;background:#D1FAE5;border-radius:999px;padding:1px 8px;">Strength</span>'
+        else:
+            tag = '<span style="font-size:10px;font-weight:700;color:#92400E;background:#FEF3C7;border-radius:999px;padding:1px 8px;">Mixed</span>'
+
+        lvl_chips = "".join(
+            f'<span title="{esc(nm)}" style="font-size:10px;background:#F3F4F6;border-radius:999px;padding:1px 7px;color:#374151;">L{lvl}</span>'
+            for nm, num, lvl in a["athlete_levels"]
+        )
+
+        snapshot_rows += f"""
+        <tr style="border-bottom:1px solid #F3F4F6;">
+          <td style="padding:10px 12px;font-size:13px;font-weight:600;color:#2D323B;">{esc(a['display'])}</td>
+          <td style="padding:10px 12px;">{tag}</td>
+          <td style="padding:10px 12px;">
+            <div style="display:flex;flex-wrap:wrap;gap:4px;">{lvl_chips}</div>
+            {area_bar(pct)}
+          </td>
+        </tr>"""
+
+    snapshot_html = f"""
+    <div style="margin-bottom:32px;">
+      <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#9CA3AF;margin-bottom:12px;">Group Snapshot</h2>
+      <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;">
+          <thead>
+            <tr style="background:#F9FAFB;border-bottom:1px solid #E5E7EB;">
+              <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6B7280;font-weight:600;">Area</th>
+              <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6B7280;font-weight:600;">Status</th>
+              <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6B7280;font-weight:600;">Athlete levels (hover for name)</th>
+            </tr>
+          </thead>
+          <tbody>{snapshot_rows}</tbody>
+        </table>
+      </div>
+    </div>"""
+
+    # ── Outlier callouts ──────────────────────────────────────────────────────
+    outlier_items = ""
+    for a in area_analysis:
+        for nm in a["advanced_outliers"]:
+            outlier_items += f"""
+            <div style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid #F3F4F6;">
+              <span style="font-size:16px;">⭐</span>
+              <div>
+                <strong style="font-size:13px;color:#2D323B;">{esc(nm)}</strong>
+                <span style="font-size:12px;color:#6B7280;"> — {esc(a['display'])}</span>
+                <div style="font-size:12px;color:#374151;margin-top:2px;">
+                  2+ levels ahead of the group. Consider extending constraints — make the game harder for them or use them to demonstrate to peers.
+                </div>
+              </div>
+            </div>"""
+        for nm in a["behind_outliers"]:
+            outlier_items += f"""
+            <div style="display:flex;gap:10px;align-items:flex-start;padding:10px 0;border-bottom:1px solid #F3F4F6;">
+              <span style="font-size:16px;">🔍</span>
+              <div>
+                <strong style="font-size:13px;color:#2D323B;">{esc(nm)}</strong>
+                <span style="font-size:12px;color:#6B7280;"> — {esc(a['display'])}</span>
+                <div style="font-size:12px;color:#374151;margin-top:2px;">
+                  Still at baseline while the rest of the group has progressed. Give this athlete extra reps or a simplified constraint to build confidence.
+                </div>
+              </div>
+            </div>"""
+
+    outliers_html = ""
+    if outlier_items:
+        outliers_html = f"""
+        <div style="margin-bottom:32px;">
+          <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#9CA3AF;margin-bottom:12px;">Athletes to Watch</h2>
+          <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:4px 16px;">
+            {outlier_items}
+          </div>
+        </div>"""
+
+    # ── 5-week session plan ───────────────────────────────────────────────────
+    # Build a pool: cycle through gap areas (2x), then fill with strength/mixed
+    focus_pool = (gap_areas * 2) + mixed_areas + strength_areas
+    # Each session: primary focus area + one complementary (strength or mixed)
+    FAMILY_COLOURS = {
+        "Balance & Postural Control": "#6366F1",
+        "Explosive & Landing":        "#F59E0B",
+        "Dynamic Locomotor":          "#10B981",
+        "Perceptual-Motor Speed":     "#EF4444",
+    }
+
+    sessions_html = ""
+    used_primaries = []
+    comp_pool = strength_areas + mixed_areas
+
+    for week in range(1, 6):
+        # Pick primary: rotate through gap areas, avoid repeating last session's primary
+        primary = None
+        for a in focus_pool:
+            if a not in used_primaries[-1:]:
+                primary = a
+                focus_pool = [x for x in focus_pool if x is not a or focus_pool.index(x) > 0]
+                break
+        if not primary and area_analysis:
+            primary = area_analysis[(week - 1) % len(area_analysis)]
+        if not primary:
+            continue
+        used_primaries.append(primary)
+
+        # Complementary: pick from strength/mixed, different family if possible
+        comp = None
+        for c in comp_pool:
+            if c is not primary and c.get("family") != primary.get("family"):
+                comp = c
+                break
+        if not comp:
+            for c in comp_pool:
+                if c is not primary:
+                    comp = c
+                    break
+        # Rotate comp pool
+        if comp_pool:
+            comp_pool = comp_pool[1:] + comp_pool[:1]
+
+        # Build game cards for this session
+        def game_card(area, is_primary=True):
+            col = FAMILY_COLOURS.get(area["family"], "#6366F1")
+            badge = "Primary Focus" if is_primary else "Complementary"
+            badge_col = "#EF4444" if is_primary else "#10B981"
+            games = " · ".join(area["programme_games"]) if area["programme_games"] else "—"
+            lvl_note = f"Group modal level: L{area['modal_level']}"
+            adv = ", ".join(area["advanced_outliers"])
+            adv_note = (f'<div style="font-size:11px;color:#6366F1;margin-top:4px;">⭐ {esc(adv)} — extend constraints for these athletes</div>'
+                        if adv else "")
+            behind = ", ".join(area["behind_outliers"])
+            behind_note = (f'<div style="font-size:11px;color:#F59E0B;margin-top:4px;">🔍 {esc(behind)} — simplify constraints or extra reps</div>'
+                           if behind else "")
+            return f"""
+            <div style="border-left:3px solid {col};border-radius:0 8px 8px 0;background:#fff;
+                        border:1px solid #E5E7EB;border-left:3px solid {col};padding:12px 14px;margin-bottom:10px;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+                <span style="font-size:11px;font-weight:700;color:{badge_col};background:{'#FEF2F2' if is_primary else '#D1FAE5'};
+                             border-radius:999px;padding:1px 8px;">{badge}</span>
+                <span style="font-size:13px;font-weight:700;color:#2D323B;">{esc(area['display'])}</span>
+                <span style="font-size:11px;color:#9CA3AF;">{esc(area['family'])}</span>
+              </div>
+              <div style="font-size:12px;color:#374151;margin-bottom:4px;">
+                <strong>Programme games:</strong> {esc(games)}
+              </div>
+              <div style="font-size:11px;color:#6B7280;">{lvl_note}</div>
+              {adv_note}{behind_note}
+            </div>"""
+
+        primary_card = game_card(primary, True)
+        comp_card = game_card(comp, False) if comp else ""
+
+        # Test space
+        test_space = primary.get("self_test", "")
+        test_html = (f'<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:10px 14px;margin-bottom:10px;">'
+                     f'<span style="font-size:11px;font-weight:700;color:#065F46;">🧪 Test Space — </span>'
+                     f'<span style="font-size:12px;color:#374151;">{esc(test_space)} self-test cards for athletes to run independently</span>'
+                     f'</div>') if test_space else ""
+
+        # S&C note
+        sc = primary.get("sc_note", "")
+        sc_html = (f'<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:10px 14px;">'
+                   f'<span style="font-size:11px;font-weight:700;color:#92400E;">💪 If S&amp;C is available — </span>'
+                   f'<span style="font-size:12px;color:#78350F;">{esc(sc)}</span>'
+                   f'</div>') if sc else ""
+
+        sessions_html += f"""
+        <div style="margin-bottom:24px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+            <div style="width:32px;height:32px;border-radius:50%;background:#2D323B;
+                        display:flex;align-items:center;justify-content:center;
+                        font-size:13px;font-weight:800;color:#F0A82E;flex-shrink:0;">{week}</div>
+            <h3 style="margin:0;font-size:15px;font-weight:700;color:#2D323B;">Week {week}</h3>
+          </div>
+          {primary_card}
+          {comp_card}
+          {test_html}
+          {sc_html}
+        </div>"""
+
+    plan_html = f"""
+    <div style="margin-bottom:32px;">
+      <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#9CA3AF;margin-bottom:4px;">5-Week Session Guide</h2>
+      <p style="font-size:12px;color:#9CA3AF;margin-bottom:16px;">
+        This is a suggestion — use your judgement and adjust based on what you see in the session.
+      </p>
+      {sessions_html}
+    </div>"""
+
+    if not area_analysis:
+        plan_html = '<div class="card"><p class="muted">No measurement data or thresholds set yet — complete a testing round to generate a session plan.</p></div>'
+
+    body = f"""
+    <div style="max-width:900px;margin:0 auto;padding:32px 16px 48px;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:12px;">
+        <div>
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#F0A82E;margin-bottom:4px;">Next Steps Report</div>
+          <h1 style="font-size:24px;font-weight:800;color:#2D323B;margin:0 0 4px;">{group_name}</h1>
+          <p style="font-size:13px;color:#6B7280;margin:0;">{n_athletes} athletes · Generated {today}</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <a href="/coach/group-hub" class="btn btn-ghost btn-sm">&larr; Group Hub</a>
+          <button onclick="window.print()" class="btn btn-primary btn-sm">🖨 Print</button>
+        </div>
+      </div>
+
+      <div style="background:linear-gradient(135deg,#2D323B 0%,#3D434F 100%);border-radius:12px;
+                  padding:16px 20px;margin-bottom:28px;margin-top:16px;">
+        <p style="font-size:13px;color:rgba(255,255,255,0.8);margin:0;line-height:1.6;">
+          Based on your group's latest measurement results, this report suggests a 5-week session focus —
+          mixing development areas with strengths so sessions stay engaging.
+          Each week includes a self-test space athletes can run independently.
+          <strong style="color:#F0A82E;">Adjust freely</strong> — this is a guide, not a prescription.
+        </p>
+      </div>
+
+      {snapshot_html}
+      {outliers_html}
+      {plan_html}
+    </div>
+
+    <style>
+    @media print {{
+      .btn, nav, header {{ display: none !important; }}
+      body {{ background: #fff; }}
+    }}
+    </style>"""
+
+    return layout(f"Next Steps — {group_name}", body, user=coach, active_nav="dashboard")

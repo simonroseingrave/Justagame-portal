@@ -1576,6 +1576,23 @@ def get_all_athlete_levels_by_area(conn, participant_id):
     return {(r["game_key"], r["field_key"] or ""): r["lvl"] for r in rows}
 
 
+def get_group_athletes_with_levels(conn, group_id):
+    """Return list of athlete dicts each with a 'levels' sub-dict keyed by (game_key, field_key).
+    Used for group-level analysis (Next Steps report)."""
+    athletes = conn.execute(
+        "SELECT id, name, athlete_number, sport FROM users "
+        "WHERE group_id = ? AND role = 'participant' ORDER BY name",
+        (group_id,),
+    ).fetchall()
+    result = []
+    for a in athletes:
+        levels = get_all_athlete_levels_by_area(conn, a["id"])
+        result.append({"id": a["id"], "name": a["name"],
+                       "athlete_number": a["athlete_number"],
+                       "sport": a["sport"], "levels": levels})
+    return result
+
+
 def award_level(conn, participant_id, game_key, level, field_key="", session_id=None):
     """Award a level to an athlete for a specific scoring area.
     Idempotent (UNIQUE constraint, silently skips duplicates).

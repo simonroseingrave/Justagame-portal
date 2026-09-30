@@ -1269,6 +1269,30 @@ def group_scores_table(req, group_id):
         conn.close()
 
 
+@router.get("/coach/groups/<int:group_id>/next-steps")
+def group_next_steps(req, group_id):
+    """Group Next Steps Report — 5-week session planning guide post-testing."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        group = conn.execute("SELECT * FROM participant_groups WHERE id = ?", (group_id,)).fetchone()
+        if not group:
+            return Response(views.simple_message_page("Not found", "Group not found.", user=coach), status=404)
+        if not coach["role"] in {"org_admin", "system_admin"}:
+            coach_group_ids = db.get_coach_group_ids(conn, coach["id"])
+            if group_id not in coach_group_ids:
+                return Response(views.simple_message_page("Access denied", "You don't have access to this group.", user=coach), status=403)
+        athletes_with_levels = db.get_group_athletes_with_levels(conn, group_id)
+        thresholds_raw = db.get_all_thresholds(conn)
+        return Response(views.group_next_steps_page(
+            coach, dict(group), athletes_with_levels, thresholds_raw
+        ))
+    finally:
+        conn.close()
+
+
 @router.get("/coach/participants/<int:participant_id>/progress")
 def coach_participant_progress(req, participant_id):
     coach = require_staff(req)
