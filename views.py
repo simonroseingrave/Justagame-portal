@@ -188,8 +188,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
         else:
             links = [("/dashboard", "My Dashboard", "dashboard"),
                      ("/athlete/self-directed", "Self-Directed", "self_directed"),
-                     ("/athlete/xp", "My AXP", "xp"),
-                     ("/athlete/resources", "Resources", "resources")]
+                     ("/athlete/xp", "My AXP", "xp")]
             if user.get("show_leaderboard"):
                 links.append(("/athlete/leaderboard", "Leaderboard", "leaderboard"))
             links.append(("/help", "Help", "help"))
@@ -1233,10 +1232,24 @@ def participant_dashboard(user, measurement_sessions,
           <div style="font-size:32px;font-weight:800;color:#F0A82E;line-height:1;">{total_xp:,}</div>
           <div style="font-size:11px;color:#9CA3AF;margin-bottom:8px;letter-spacing:0.05em;">TOTAL AXP</div>
           {xp_next_label}
+          <a href="/athlete/axp-info"
+             style="display:inline-block;margin-top:10px;font-size:11px;font-weight:700;
+                    color:#2D323B;background:#F0A82E;border-radius:20px;
+                    padding:4px 12px;text-decoration:none;letter-spacing:0.02em;">
+            ❓ What is AXP?
+          </a>
         </div>
       </div>
-      <!-- AXP journey line -->
-      <div style="margin-top:20px;">
+      <!-- AXP journey line — highlighted -->
+      <div style="margin-top:20px;background:rgba(16,185,129,0.12);
+                  border:1.5px solid rgba(16,185,129,0.45);
+                  border-radius:14px;padding:14px 16px 4px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;
+                    margin-bottom:10px;">
+          <span style="font-size:11px;font-weight:700;text-transform:uppercase;
+                       letter-spacing:0.07em;color:#6EE7B7;">Your AXP Journey</span>
+          <span style="font-size:11px;color:rgba(255,255,255,0.5);">{total_xp:,} AXP earned</span>
+        </div>
         {_journey_line}
       </div>
     </div>"""
@@ -2202,8 +2215,12 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
           </a>
         </div>
       </div>
-      <!-- AXP journey line -->
-      <div style="margin-top:16px;border-top:1px solid rgba(255,255,255,0.08);padding-top:14px;">
+      <!-- AXP journey line — highlighted -->
+      <div style="margin-top:16px;background:rgba(16,185,129,0.12);
+                  border:1.5px solid rgba(16,185,129,0.45);border-radius:14px;
+                  padding:14px 16px 4px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;
+                    letter-spacing:0.07em;color:#6EE7B7;margin-bottom:10px;">AXP Journey</div>
         <div style="position:relative;padding-bottom:34px;">
           <div style="position:relative;height:5px;background:rgba(255,255,255,0.1);border-radius:999px;">
             <div style="width:{_cj_fill:.1f}%;height:100%;background:#fff;border-radius:999px;
@@ -7906,7 +7923,11 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
         _next_note = '<div style="text-align:center;font-size:12px;color:rgba(255,255,255,0.85);margin-top:2px;">Maximum rank achieved — keep earning AXP!</div>'
 
     _journey = f"""
-      <div style="margin-top:18px;">
+      <div style="margin-top:18px;background:rgba(16,185,129,0.15);
+                  border:1.5px solid rgba(16,185,129,0.5);border-radius:14px;
+                  padding:14px 16px 6px;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;
+                    letter-spacing:0.07em;color:#6EE7B7;margin-bottom:10px;">AXP Journey</div>
         <div style="position:relative;padding-bottom:36px;">
           <div style="position:relative;height:6px;background:rgba(255,255,255,0.2);border-radius:999px;">
             <div style="width:{_fill:.1f}%;height:100%;background:#fff;border-radius:999px;
@@ -8605,6 +8626,102 @@ def group_leaderboard_page(coach, groups, selected_group_id=None, ranked_athlete
       {ranked_html}
     </div>"""
     return layout("Leaderboard", body, user=coach, active_nav="leaderboard")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# AXP INFO PAGE
+# ══════════════════════════════════════════════════════════════════════════════
+
+def axp_info_page(user):
+    """Plain-English explainer of the AXP points system for athletes."""
+    from constants import XP_RANK_TIERS, XP_PARTICIPATION, LEVEL_XP_AWARDS
+
+    tier_rows = ""
+    for t in XP_RANK_TIERS:
+        tier_rows += f"""
+        <div style="display:flex;align-items:center;gap:14px;padding:10px 0;
+                    border-bottom:1px solid #F3F4F6;">
+          <span style="display:inline-block;width:12px;height:12px;border-radius:50%;
+                       background:{t['colour']};flex-shrink:0;"></span>
+          <span style="font-weight:700;font-size:14px;color:#2D323B;min-width:80px;">{esc(t['label'])}</span>
+          <span style="font-size:13px;color:#6B7280;">{t['min_xp']:,} AXP{' +' if t['min_xp'] > 0 else ''}</span>
+        </div>"""
+
+    earn_rows = [
+        ("🏃 Completing a game in a testing session", "50 AXP"),
+        ("⭐ Personal best in a testing session", "50 AXP"),
+        ("🎯 Completing a self-directed session game", "25 AXP"),
+        ("🌟 Personal best in a self-directed session", "25 AXP"),
+        ("👋 First ever session (Welcome Bonus)", "100 AXP"),
+        ("🆕 First time playing a new game", "20 AXP"),
+        ("🏆 All 8 games in one session", "100 AXP"),
+        ("🔥 3-session attendance streak", "30 AXP"),
+        ("🔥🔥 5-session attendance streak", "75 AXP"),
+        ("📍 10th session milestone", "150 AXP"),
+        ("📍 25th session milestone", "300 AXP"),
+        ("📍 50th session milestone", "600 AXP"),
+    ]
+    earn_html = ""
+    for label, pts in earn_rows:
+        earn_html += f"""
+        <div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:9px 0;border-bottom:1px solid #F3F4F6;gap:12px;">
+          <span style="font-size:13px;color:#374151;">{label}</span>
+          <span style="font-size:13px;font-weight:700;color:#2D323B;white-space:nowrap;">{pts}</span>
+        </div>"""
+
+    level_rows = ""
+    for lvl, pts in LEVEL_XP_AWARDS.items():
+        level_rows += f"""
+        <div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:9px 0;border-bottom:1px solid #F3F4F6;gap:12px;">
+          <span style="font-size:13px;color:#374151;">Reaching Level {lvl} in any game</span>
+          <span style="font-size:13px;font-weight:700;color:#2D323B;">{pts} AXP (one-time)</span>
+        </div>"""
+
+    body = f"""
+    <div style="max-width:680px;margin:0 auto;padding:24px 16px 48px;">
+      <a href="/dashboard" style="font-size:13px;color:#6B7280;text-decoration:none;">&larr; Back to Dashboard</a>
+
+      <div style="background:#2D323B;border-radius:20px;padding:28px;margin:20px 0 28px;color:#fff;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;
+                    color:#F0A82E;margin-bottom:6px;">Points System</div>
+        <h1 style="font-size:26px;font-weight:800;margin:0 0 10px;">What is AXP?</h1>
+        <p style="font-size:14px;color:rgba(255,255,255,0.8);line-height:1.7;margin:0;">
+          <strong style="color:#F0A82E;">AXP (Adaptability Experience Points)</strong> is how we track
+          your effort and progress in the Athlete Adaptability Programme. Every time you turn up,
+          test yourself, hit a personal best, or reach a new level — you earn AXP.
+          It&rsquo;s not just about how good you are; it&rsquo;s about how much you&rsquo;re
+          putting in and growing.
+        </p>
+      </div>
+
+      <div class="card" style="margin-bottom:20px;">
+        <h2 style="font-size:15px;font-weight:700;color:#2D323B;margin:0 0 4px;">Ranks</h2>
+        <p style="font-size:13px;color:#6B7280;margin:0 0 12px;">
+          Your rank shows how much AXP you&rsquo;ve earned overall. Keep showing up and it keeps climbing.
+        </p>
+        {tier_rows}
+      </div>
+
+      <div class="card" style="margin-bottom:20px;">
+        <h2 style="font-size:15px;font-weight:700;color:#2D323B;margin:0 0 4px;">How you earn AXP</h2>
+        <p style="font-size:13px;color:#6B7280;margin:0 0 12px;">
+          AXP is awarded by your practitioner after each session closes.
+        </p>
+        {earn_html}
+      </div>
+
+      <div class="card">
+        <h2 style="font-size:15px;font-weight:700;color:#2D323B;margin:0 0 4px;">Level bonuses</h2>
+        <p style="font-size:13px;color:#6B7280;margin:0 0 12px;">
+          Each time you reach a new level in any game, you get a one-time bonus on top of your session AXP.
+        </p>
+        {level_rows}
+      </div>
+    </div>"""
+
+    return layout("What is AXP?", body, user=user, active_nav="xp")
 
 
 # ══════════════════════════════════════════════════════════════════════════════

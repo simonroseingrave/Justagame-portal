@@ -3446,6 +3446,15 @@ def athlete_report(req):
     ))
 
 
+@router.get("/athlete/axp-info")
+def athlete_axp_info(req):
+    """Plain-English AXP points structure explainer for athletes."""
+    user = require_participant_or_view_as(req)
+    if not user:
+        return redirect("/login")
+    return Response(views.axp_info_page(user))
+
+
 @router.get("/athlete/leaderboard")
 def athlete_leaderboard(req):
     """Athlete-facing group leaderboard — only accessible when group has show_leaderboard enabled."""
