@@ -7614,15 +7614,45 @@ def _xp_event_row(event, i):
     xp_type = event.get("xp_type", "")
     label = _XP_TYPE_LABELS.get(xp_type, xp_type.replace("_", " ").title())
     game = _GAME_DISPLAY_NAMES.get(event.get("game_key"), event.get("game_key") or "")
+    notes = event.get("notes") or ""
     amount = int(event.get("amount", 0))
     created = (event.get("created_at") or "")[:10]
-    shade = "#F3F4F5" if i % 2 == 0 else "#fff"
-    game_chip = (
-        f'<span style="font-size:11px;background:#2D323B;color:#fff;border-radius:999px;'
-        f'padding:2px 8px;margin-left:6px;">{esc(game)}</span>'
-        if game else ""
-    )
-    return f"""
+    is_level = (xp_type == "level_achievement")
+
+    if is_level:
+        # Gold highlighted row with trophy icon for level achievements
+        shade = "#FFFBEB"
+        border = "border-left:4px solid #F0A82E;"
+        # Extract level number from notes e.g. "Earned Level 1 in Skipping Rope Sprint"
+        import re as _re
+        lvl_match = _re.search(r"Level\s+(\d)", notes)
+        lvl_num = int(lvl_match.group(1)) if lvl_match else 0
+        bg, fg = _LEVEL_COLOURS.get(lvl_num, ("#F0A82E", "#2D323B"))
+        level_badge = (
+            f'<span style="font-size:11px;font-weight:800;background:{bg};color:{fg};'
+            f'border-radius:999px;padding:2px 8px;margin-left:6px;">L{lvl_num}</span>'
+            if lvl_num else ""
+        )
+        icon = '🏆 '
+        game_chip = (
+            f'<span style="font-size:11px;background:#2D323B;color:#fff;border-radius:999px;'
+            f'padding:2px 8px;margin-left:6px;">{esc(game)}</span>'
+            if game else ""
+        )
+        return f"""
+    <tr style="background:{shade};{border}">
+      <td style="padding:9px 14px;font-size:13px;color:#2D323B;font-weight:600;">{icon}{esc(label)}{level_badge}{game_chip}</td>
+      <td style="padding:9px 14px;font-size:13px;color:#6E737B;">{esc(created)}</td>
+      <td style="padding:9px 14px;font-size:13px;font-weight:800;color:#F0A82E;text-align:right;">+{amount:,} AXP</td>
+    </tr>"""
+    else:
+        shade = "#F3F4F5" if i % 2 == 0 else "#fff"
+        game_chip = (
+            f'<span style="font-size:11px;background:#2D323B;color:#fff;border-radius:999px;'
+            f'padding:2px 8px;margin-left:6px;">{esc(game)}</span>'
+            if game else ""
+        )
+        return f"""
     <tr style="background:{shade};">
       <td style="padding:9px 14px;font-size:13px;color:#2D323B;">{esc(label)}{game_chip}</td>
       <td style="padding:9px 14px;font-size:13px;color:#6E737B;">{esc(created)}</td>
