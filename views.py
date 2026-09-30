@@ -7371,7 +7371,9 @@ def resources_page(user, folder_groups, ungrouped, folders, tags=None, tags_by_r
     return layout("Resources", body, user=user, active_nav="resources")
 
 
-def edit_resource_page(user, resource, folders, all_tags=None, selected_tag_ids=None, error=None):
+def edit_resource_page(user, resource, folders, all_tags=None, selected_tag_ids=None,
+                       selected_game_keys=None, error=None):
+    from constants import CORE_AAP_GAMES, find_measurement_game
     error_html = f'<div class="alert">{esc(error)}</div>' if error else ""
     folder_opts = '<option value="">— Ungrouped —</option>' + "".join(
         f'<option value="{f["id"]}" {"selected" if resource["folder_id"] == f["id"] else ""}>{esc(f["name"])}</option>'
@@ -7379,19 +7381,62 @@ def edit_resource_page(user, resource, folders, all_tags=None, selected_tag_ids=
     )
     all_tags = all_tags or []
     selected_tag_ids = selected_tag_ids or []
+    selected_game_keys = set(selected_game_keys or [])
     tag_checkboxes = "".join(
         f'<label style="display:inline-flex;align-items:center;gap:5px;font-size:13px;font-weight:400;margin:0 8px 4px 0;cursor:pointer;">'
         f'<input type="checkbox" name="tag_ids" value="{t["id"]}" {"checked" if t["id"] in selected_tag_ids else ""} style="width:auto;margin:0;" />{esc(t["name"])}</label>'
         for t in all_tags
     )
-    tags_section = f'<label style="margin-top:10px;">Tags</label><div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:4px;">{tag_checkboxes}</div>' if all_tags else ''
+    tags_section = (f'<label style="margin-top:10px;">Tags <span style="font-weight:400;color:#6E737B;font-size:12px;">(visible to athletes)</span></label>'
+                    f'<div style="display:flex;flex-wrap:wrap;gap:2px;margin-top:4px;">{tag_checkboxes}</div>') if all_tags else ''
+
+    # ── Hidden taxonomy ───────────────────────────────────────────────────
+    game_checkboxes = ""
+    for gk in CORE_AAP_GAMES:
+        gdef = find_measurement_game(gk)
+        gname = gdef["name"] if gdef else gk
+        checked = "checked" if gk in selected_game_keys else ""
+        game_checkboxes += (
+            f'<label style="display:inline-flex;align-items:center;gap:5px;font-size:13px;'
+            f'font-weight:400;margin:0 10px 6px 0;cursor:pointer;">'
+            f'<input type="checkbox" name="game_keys" value="{esc(gk)}" {checked} style="width:auto;margin:0;" />'
+            f'{esc(gname)}</label>'
+        )
+    current_range = resource.get("level_range") or "all"
+    range_opts = ""
+    for val, label, hint in [
+        ("all",        "All levels",    "suitable for any athlete"),
+        ("entry",      "Entry",         "working toward Level 1"),
+        ("developing", "Developing",    "Level 1 → Level 2"),
+        ("progressing","Progressing",   "Level 2 and above"),
+    ]:
+        sel = "selected" if current_range == val else ""
+        range_opts += f'<option value="{val}" {sel}>{label} — {hint}</option>'
+
+    taxonomy_section = f"""
+    <div style="margin-top:18px;padding:14px 16px;background:#F8F9FA;border-radius:10px;
+                border:1px solid #E5E7EB;">
+      <div style="font-size:12px;font-weight:700;color:#6E737B;text-transform:uppercase;
+                  letter-spacing:0.07em;margin-bottom:10px;">
+        Hidden Taxonomy <span style="font-weight:400;font-size:11px;text-transform:none;">(practitioner recommendation engine — not shown to athletes)</span>
+      </div>
+      <label style="margin-bottom:6px;font-size:13px;">Linked Measurement Games</label>
+      <div style="display:flex;flex-wrap:wrap;gap:0;margin-bottom:12px;">
+        {game_checkboxes}
+      </div>
+      <label for="level_range" style="font-size:13px;">Level Range</label>
+      <select id="level_range" name="level_range" style="margin-top:4px;">
+        {range_opts}
+      </select>
+    </div>"""
+
     body = f"""
     <div class="page-head">
       <h1>Edit Resource</h1>
       <a class="btn btn-ghost" href="/coach/resources">&larr; Back</a>
     </div>
     {error_html}
-    <div class="card form-card" style="max-width:520px;">
+    <div class="card form-card" style="max-width:560px;">
       <form method="post" action="/coach/resources/{resource['id']}/edit">
         <label for="name">Name</label>
         <input type="text" id="name" name="name" required value="{esc(resource['name'])}" />
@@ -7404,6 +7449,7 @@ def edit_resource_page(user, resource, folders, all_tags=None, selected_tag_ids=
         <label for="folder_id">Folder</label>
         <select id="folder_id" name="folder_id">{folder_opts}</select>
         {tags_section}
+        {taxonomy_section}
         <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Save Changes</button>
       </form>
     </div>

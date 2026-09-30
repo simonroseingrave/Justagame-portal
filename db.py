@@ -131,6 +131,15 @@ CREATE TABLE IF NOT EXISTS resource_tag_assignments (
     PRIMARY KEY (resource_id, tag_id)
 );
 
+-- ── Resource Taxonomy (hidden structural tags) ────────────────────────────
+-- Links each resource to one or more AAP measurement games.
+-- Separate from user-facing resource_tags; never shown to athletes.
+CREATE TABLE IF NOT EXISTS resource_game_links (
+    resource_id INTEGER NOT NULL REFERENCES resources(id) ON DELETE CASCADE,
+    game_key    TEXT NOT NULL,
+    PRIMARY KEY (resource_id, game_key)
+);
+
 -- ── Attendance & Self-Directed Sessions ──────────────────────────────────
 
 -- A practitioner-created session event (one per training date per group).
@@ -354,6 +363,7 @@ def init_db():
         "ALTER TABLE measurement_sessions ADD COLUMN session_type TEXT NOT NULL DEFAULT 'formal'",
         "ALTER TABLE measurement_sessions ADD COLUMN attendance_event_id INTEGER REFERENCES session_events(id)",
         "ALTER TABLE participant_groups ADD COLUMN show_leaderboard INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE resources ADD COLUMN level_range TEXT NOT NULL DEFAULT 'all'",
     ]:
         try:
             conn.execute(sql)
@@ -1180,10 +1190,13 @@ def move_resource(conn, resource_id, folder_id):
     conn.commit()
 
 
-def update_resource(conn, resource_id, name, description, url, folder_id, self_organisation=None):
+def update_resource(conn, resource_id, name, description, url, folder_id,
+                    self_organisation=None, level_range="all"):
     conn.execute(
-        "UPDATE resources SET name = ?, description = ?, url = ?, folder_id = ?, self_organisation = ? WHERE id = ?",
-        (name, description or None, url, folder_id or None, self_organisation or None, resource_id),
+        "UPDATE resources SET name = ?, description = ?, url = ?, folder_id = ?, "
+        "self_organisation = ?, level_range = ? WHERE id = ?",
+        (name, description or None, url, folder_id or None,
+         self_organisation or None, level_range or "all", resource_id),
     )
     conn.commit()
 
@@ -1229,6 +1242,87 @@ def set_resource_tags(conn, resource_id, tag_ids):
             (resource_id, tid),
         )
     conn.commit()
+
+
+# ── Resource game-key taxonomy (hidden structural tags) ───────────────────
+
+def get_resource_game_keys(conn, resource_id):
+    """Return list of game_key strings linked to this resource."""
+    rows = conn.execute(
+        "SELECT game_key FROM resource_game_links WHERE resource_id = ? ORDER BY game_key",
+        (resource_id,),
+    ).fetchall()
+    return [r["game_key"] for r in rows]
+
+
+def set_resource_game_keys(conn, resource_id, game_keys):
+    """Replace all game_key links for a resource (idempotent)."""
+    conn.execute("DELETE FROM resource_game_links WHERE resource_id = ?", (resource_id,))
+    for gk in game_keys:
+        if gk:
+            conn.execute(
+                "INSERT OR IGNORE INTO resource_game_links (resource_id, game_key) VALUES (?, ?)",
+                (resource_id, gk),
+            )
+    conn.commit()
+
+
+def get_game_keys_for_resources(conn, resource_ids):
+    """Return {resource_id: [game_key, ...]} for a list of resource IDs."""
+    if not resource_ids:
+        return {}
+    placeholders = ",".join("?" * len(resource_ids))
+    rows = conn.execute(
+        f"SELECT resource_id, game_key FROM resource_game_links WHERE resource_id IN ({placeholders})",
+        resource_ids,
+    ).fetchall()
+    result = {rid: [] for rid in resource_ids}
+    for r in rows:
+        result[r["resource_id"]].append(r["game_key"])
+    return result
+
+
+def get_recommended_resources(conn, participant_id, limit=6):
+    """Return resources matched to an athlete's current gaps.
+
+    Logic:
+      - For each game, determine the athlete's level (0 = none).
+      - Map level to level_range:  0 → 'entry',  1 → 'developing',  2+ → 'progressing'.
+      - Find resources linked to that game_key whose level_range is either
+        the matched range or 'all'.
+      - Sort by gap size (most-needed game first) then by resource sort_order.
+      - De-duplicate; return at most `limit` resources.
+    """
+    from constants import CORE_AAP_GAMES
+    levels = get_all_athlete_levels(conn, participant_id)
+
+    RANGE_MAP = {0: "entry", 1: "developing"}  # 2+ → "progressing"
+
+    # Build a priority-ordered list of (game_key, needed_range)
+    game_priority = []
+    for gk in CORE_AAP_GAMES:
+        lvl = levels.get(gk, 0)
+        needed = RANGE_MAP.get(lvl, "progressing")
+        game_priority.append((gk, needed))
+
+    seen_ids = set()
+    results = []
+    for gk, needed_range in game_priority:
+        rows = conn.execute(
+            """SELECT r.* FROM resources r
+               JOIN resource_game_links rgl ON rgl.resource_id = r.id
+               WHERE rgl.game_key = ?
+                 AND (r.level_range = ? OR r.level_range = 'all')
+               ORDER BY r.sort_order, r.name""",
+            (gk, needed_range),
+        ).fetchall()
+        for row in rows:
+            if row["id"] not in seen_ids:
+                seen_ids.add(row["id"])
+                results.append(dict(row))
+                if len(results) >= limit:
+                    return results
+    return results
 
 
 def get_tags_for_resources(conn, resource_ids):

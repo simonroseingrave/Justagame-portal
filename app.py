@@ -2371,7 +2371,11 @@ def resource_edit_get(req, resource_id):
         folders = db.list_folders(conn)
         all_tags = db.list_tags(conn)
         selected_tag_ids = db.get_resource_tag_ids(conn, resource_id)
-        return Response(views.edit_resource_page(coach, dict(resource), folders, all_tags, selected_tag_ids))
+        selected_game_keys = db.get_resource_game_keys(conn, resource_id)
+        return Response(views.edit_resource_page(
+            coach, dict(resource), folders, all_tags, selected_tag_ids,
+            selected_game_keys=selected_game_keys,
+        ))
     finally:
         conn.close()
 
@@ -2386,7 +2390,9 @@ def resource_edit_post(req, resource_id):
     description = req.form_get("description").strip()
     self_organisation = req.form_get("self_organisation").strip() or None
     folder_id = req.form_get("folder_id").strip() or None
+    level_range = req.form_get("level_range").strip() or "all"
     tag_ids = [int(t) for t in req.form_get_list("tag_ids") if t.strip().isdigit()]
+    game_keys = [g.strip() for g in req.form_get_list("game_keys") if g.strip()]
     if not name or not url:
         conn = db.get_conn()
         try:
@@ -2394,16 +2400,23 @@ def resource_edit_post(req, resource_id):
             folders = db.list_folders(conn)
             all_tags = db.list_tags(conn)
             selected_tag_ids = db.get_resource_tag_ids(conn, resource_id)
+            selected_game_keys = db.get_resource_game_keys(conn, resource_id)
             return Response(
-                views.edit_resource_page(coach, dict(resource), folders, all_tags, selected_tag_ids, error="Name and URL are required."),
+                views.edit_resource_page(
+                    coach, dict(resource), folders, all_tags, selected_tag_ids,
+                    selected_game_keys=selected_game_keys,
+                    error="Name and URL are required.",
+                ),
                 status=400,
             )
         finally:
             conn.close()
     conn = db.get_conn()
     try:
-        db.update_resource(conn, resource_id, name, description, url, folder_id, self_organisation=self_organisation)
+        db.update_resource(conn, resource_id, name, description, url, folder_id,
+                           self_organisation=self_organisation, level_range=level_range)
         db.set_resource_tags(conn, resource_id, tag_ids)
+        db.set_resource_game_keys(conn, resource_id, game_keys)
         return flash_redirect("/coach/resources", f'"{name}" updated.')
     finally:
         conn.close()
