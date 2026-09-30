@@ -7620,14 +7620,14 @@ def _xp_event_row(event, i):
     is_level = (xp_type == "level_achievement")
 
     if is_level:
-        # Gold highlighted row with trophy icon for level achievements
-        shade = "#FFFBEB"
-        border = "border-left:4px solid #F0A82E;"
         # Extract level number from notes e.g. "Earned Level 1 in Skipping Rope Sprint"
         import re as _re
         lvl_match = _re.search(r"Level\s+(\d)", notes)
         lvl_num = int(lvl_match.group(1)) if lvl_match else 0
         bg, fg = _LEVEL_COLOURS.get(lvl_num, ("#F0A82E", "#2D323B"))
+        # Highlighted row using the level's colour
+        shade = "#FFFBEB"
+        border = f"border-left:4px solid {bg};"
         level_badge = (
             f'<span style="font-size:11px;font-weight:800;background:{bg};color:{fg};'
             f'border-radius:999px;padding:2px 8px;margin-left:6px;">L{lvl_num}</span>'
@@ -7643,7 +7643,7 @@ def _xp_event_row(event, i):
     <tr style="background:{shade};{border}">
       <td style="padding:9px 14px;font-size:13px;color:#2D323B;font-weight:600;">{icon}{esc(label)}{level_badge}{game_chip}</td>
       <td style="padding:9px 14px;font-size:13px;color:#6E737B;">{esc(created)}</td>
-      <td style="padding:9px 14px;font-size:13px;font-weight:800;color:#F0A82E;text-align:right;">+{amount:,} AXP</td>
+      <td style="padding:9px 14px;font-size:13px;font-weight:800;color:{bg};text-align:right;">+{amount:,} AXP</td>
     </tr>"""
     else:
         shade = "#F3F4F5" if i % 2 == 0 else "#fff"
