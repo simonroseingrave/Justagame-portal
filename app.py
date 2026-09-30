@@ -3765,11 +3765,11 @@ def coach_leaderboard(req):
             ranked_athletes.sort(key=lambda x: x["total_xp"], reverse=True)
     finally:
         conn.close()
-    return views.group_leaderboard_page(
+    return Response(views.group_leaderboard_page(
         coach, groups,
         selected_group_id=selected_group_id,
         ranked_athletes=ranked_athletes
-    )
+    ))
 
 
 @router.post("/coach/admin/xp-retroactive")
