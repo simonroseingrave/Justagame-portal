@@ -5368,11 +5368,11 @@ def reports_landing_page(coach, groups, orgs=None, sports=None, active_windows=N
       {_report_card("📋", "Athlete Baseline Report",
           "All athletes in the selected scope with their Round 1 (baseline) scores. Print and share at the start of a programme.",
           "baseline")}
-      {_report_card("📈", "Round 2 Progress Report",
-          "Side-by-side Round 1 vs Round 2 scores with % improvement, colour-coded green/red. Only athletes with 2+ sessions appear.",
+      {_report_card("📈", "Athlete Progress Report",
+          "Baseline vs latest session scores with % improvement and AAP Level for each athlete. Colour-coded green/red. Only athletes with 2+ sessions appear.",
           "progress")}
       {_report_card("✅", "Test Completion Sheet",
-          "At-a-glance view of which measurement tests each athlete has completed. Shows a fraction (e.g. 4/6 fields) per game. Batch-printable by group or org.",
+          "At-a-glance view of which measurement tests each athlete has completed across all active games. Shows a fraction (e.g. 4/6 fields) per game. Batch-printable by group or org.",
           "completion")}
     </div>
 
@@ -5404,19 +5404,16 @@ def reports_landing_page(coach, groups, orgs=None, sports=None, active_windows=N
 
 
 def completion_report_page(coach, group, athletes_data):
-    """Printable test completion sheet — one row per athlete, one column per game."""
-    from constants import games_for_max_level
+    """Printable test completion sheet — one row per athlete, one column per active game."""
     today = _dt.date.today().strftime("%d %B %Y")
     group_name = group.get("name", "Group")
 
-    # Build game list: (key, short_name, total_non_computed_fields) — Level 1 only
+    # Build game list: (key, short_name, total_non_computed_fields) — all active games
     games_info = []
-    for section in games_for_max_level(1):
+    for section in active_measurement_games():
         for game in section["games"]:
             total = len(game.get("fields", []))
-            # Abbreviate long names for column headers
-            name = game["name"]
-            games_info.append((game["key"], name, total))
+            games_info.append((game["key"], game["name"], total))
 
     # Table header
     th_games = "".join(
@@ -5844,11 +5841,11 @@ def baseline_report_page(coach, group, athletes_data, resources=None):
 def progress_report_page(coach, group, athletes_data, resources=None):
     """
     athletes_data: list of (athlete_row, sessions_list) ordered most-recent-first.
-    Uses sessions[-1] = R1 (baseline), sessions[-2] = R2 (second measurement).
+    Compares sessions[-1] = baseline (oldest) vs sessions[0] = latest.
     Only athletes with >= 2 sessions appear.
     resources: list of resource rows (for self-organisation tag matching).
     """
-    from constants import find_any_game
+    from constants import find_any_game, IMPROVEMENT_LEVELS
 
     today = _dt.date.today().strftime("%d %B %Y")
     group_name = group["name"] if group else "All Athletes"
@@ -5858,15 +5855,25 @@ def progress_report_page(coach, group, athletes_data, resources=None):
 
     if not eligible:
         body_content = '<p style="color:#888;margin-top:20px;">No athletes with 2 or more test sessions found in this group.</p>'
-        return _report_html_shell("Round 2 Progress Report", group_name, group_name, body_content, today)
+        return _report_html_shell("Athlete Progress Report", group_name, group_name, body_content, today)
 
-    # Collect used columns from R1 or R2 of any eligible athlete
+    def _aap_level_label(pct):
+        """Map improvement % to the highest matching IMPROVEMENT_LEVELS label."""
+        if pct is None:
+            return "—"
+        label = IMPROVEMENT_LEVELS[0][1]
+        for threshold, name in IMPROVEMENT_LEVELS:
+            if pct >= threshold:
+                label = name
+        return label
+
+    # Collect used columns from baseline or latest of any eligible athlete
     used_cols = []
     seen = set()
     for athlete, sessions in eligible:
-        r1 = sessions[-1]["results"]
-        r2 = sessions[-2]["results"]
-        for (gk, fk) in list(r1.keys()) + list(r2.keys()):
+        r_base = sessions[-1]["results"]  # oldest = baseline
+        r_latest = sessions[0]["results"]  # most recent
+        for (gk, fk) in list(r_base.keys()) + list(r_latest.keys()):
             if (gk, fk) not in seen:
                 seen.add((gk, fk))
                 game = find_any_game(gk)
@@ -5892,7 +5899,7 @@ def progress_report_page(coach, group, athletes_data, resources=None):
         if pct < 0: return "imp-neg", f"{pct:.1f}%"
         return "imp-zero", "0.0%"
 
-    # For each col: build 3 sub-columns R1 / R2 / Δ%
+    # For each col: 3 sub-columns Base / Latest / Δ%
     def _progress_th(gk, label):
         so = so_map.get(gk, "")
         so_line = f'<div style="font-size:9px;color:#F0A82E;font-weight:600;margin-top:3px;white-space:normal;line-height:1.3;">{esc(so)}</div>' if so else ""
@@ -5903,22 +5910,27 @@ def progress_report_page(coach, group, athletes_data, resources=None):
         for gk, _, label, _ in used_cols
     )
     th_sub = "".join(
-        '<th style="font-size:9px;background:#3d4451;border-left:2px solid rgba(255,255,255,0.15);">R1</th>'
-        '<th style="font-size:9px;background:#3d4451;">R2</th>'
+        '<th style="font-size:9px;background:#3d4451;border-left:2px solid rgba(255,255,255,0.15);">Base</th>'
+        '<th style="font-size:9px;background:#3d4451;">Latest</th>'
         '<th style="font-size:9px;background:#3d4451;">Δ%</th>'
         for _ in used_cols
     )
-    header = f'<tr><th rowspan="2">#</th><th rowspan="2">Athlete</th>{th_cols}<th rowspan="2" style="border-left:2px solid rgba(255,255,255,0.2);">Overall Δ%</th></tr><tr>{th_sub}</tr>'
+    header = (
+        f'<tr><th rowspan="2">#</th><th rowspan="2">Athlete</th>{th_cols}'
+        f'<th rowspan="2" style="border-left:2px solid rgba(255,255,255,0.2);">Overall Δ%</th>'
+        f'<th rowspan="2" style="border-left:2px solid rgba(255,255,255,0.2);">AAP Level</th></tr>'
+        f'<tr>{th_sub}</tr>'
+    )
 
     rows = ""
     for athlete, sessions in eligible:
-        r1 = sessions[-1]["results"]
-        r2 = sessions[-2]["results"]
+        r_base   = sessions[-1]["results"]  # oldest = baseline
+        r_latest = sessions[0]["results"]   # most recent
         field_pcts = []
         tds = ""
         for gk, fk, _, ftype in used_cols:
-            v1 = r1.get((gk, fk))
-            v2 = r2.get((gk, fk))
+            v1 = r_base.get((gk, fk))
+            v2 = r_latest.get((gk, fk))
             v1_s = str(v1) if v1 is not None else "—"
             v2_s = str(v2) if v2 is not None else "—"
             pct = None
@@ -5937,25 +5949,29 @@ def progress_report_page(coach, group, athletes_data, resources=None):
 
         overall_pct = sum(field_pcts) / len(field_pcts) if field_pcts else None
         o_css, o_s = pct_class(overall_pct)
+        aap_label = _aap_level_label(overall_pct)
+        session_count = len(sessions)
         rows += (
             f'<tr><td style="color:#888;">{esc(athlete.get("athlete_number") or "")}</td>'
-            f'<td style="font-weight:600;">{esc(athlete["name"])}</td>'
+            f'<td style="font-weight:600;">{esc(athlete["name"])}'
+            f'<div style="font-size:9px;color:#888;font-weight:400;">{session_count} session{"s" if session_count != 1 else ""}</div></td>'
             f'{tds}'
-            f'<td class="{o_css}" style="font-size:13px;border-left:2px solid #ccc;">{o_s}</td></tr>'
+            f'<td class="{o_css}" style="font-size:13px;border-left:2px solid #ccc;">{o_s}</td>'
+            f'<td style="font-size:11px;font-weight:600;color:#2D323B;border-left:2px solid #ccc;white-space:nowrap;">{esc(aap_label)}</td></tr>'
         )
 
-    r1_date = eligible[0][1][-1]["date"] if eligible else ""
-    r2_date = eligible[0][1][-2]["date"] if eligible else ""
+    base_date   = eligible[0][1][-1]["date"] if eligible else ""
+    latest_date = eligible[0][1][0]["date"]  if eligible else ""
     so_note = ' <span style="color:#F0A82E;">Gold text under each column header = self-organisation focus.</span>' if so_map else ""
     body_content = f"""
     <p style="font-size:12px;color:#555;margin-bottom:8px;">
-      Progress from Round 1 ({esc(r1_date)}) to Round 2 ({esc(r2_date)}) for <strong>{esc(group_name)}</strong>.
+      Baseline ({esc(base_date)}) vs latest session ({esc(latest_date)}) for <strong>{esc(group_name)}</strong>.
       <span style="color:#1a7a3a;font-weight:700;">Green</span> = improvement &nbsp;
       <span style="color:#c0392b;font-weight:700;">Red</span> = decline. Time fields: lower score = improvement.{so_note}
     </p>
     <div style="overflow-x:auto;"><table><thead>{header}</thead><tbody>{rows}</tbody></table></div>"""
 
-    return _report_html_shell("Round 2 Progress Report", group_name, group_name, body_content, today)
+    return _report_html_shell("Athlete Progress Report", group_name, group_name, body_content, today)
 
 
 def group_session_page(coach, participants, groups=None, session_types=None):
