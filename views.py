@@ -7494,49 +7494,55 @@ def _gdrive_thumbnail(url):
 
 def _resource_tile(r, is_admin=False, tags=None):
     """Render a single resource as a link tile card."""
-    # JAG brand palette: navy and gold alternating by id
-    jag_palette = [
-        ('#2D323B', '#F0A82E'),   # navy bg, gold icon
-        ('#F0A82E', '#2D323B'),   # gold bg, navy icon
-    ]
-    bg_color, icon_color = jag_palette[r['id'] % len(jag_palette)]
-    border_color = '#F0A82E' if bg_color == '#2D323B' else '#2D323B'
+    # Alternating accent colour: gold for even ids, navy for odd
+    accent   = '#F0A82E' if r['id'] % 2 == 0 else '#2D323B'
+    icon_col = '#2D323B' if accent == '#F0A82E' else '#F0A82E'
 
     name_q = esc(r['name']).replace("'", "\\'")
-    desc = f'<span style="font-size:12px;color:var(--jag-muted);display:block;margin-top:4px;line-height:1.4;">{esc(r["description"])}</span>' if r['description'] else ''
+    desc = f'<span style="font-size:12px;color:var(--jag-muted);display:block;margin-top:5px;line-height:1.5;">{esc(r["description"])}</span>' if r['description'] else ''
     so_val = r['self_organisation'] if 'self_organisation' in r.keys() and r['self_organisation'] else None
     self_org_badge = (
-        f'<div style="margin-top:6px;">'
-        f'<span style="font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;'
-        f'color:var(--jag-navy);opacity:0.5;">Self-organisation</span><br>'
-        f'<span style="font-size:12px;font-weight:600;color:#F0A82E;">{esc(so_val)}</span>'
+        f'<div style="margin-top:8px;padding:5px 10px;background:rgba(240,168,46,0.10);border-radius:8px;">'
+        f'<span style="font-size:10px;font-weight:700;letter-spacing:0.05em;text-transform:uppercase;color:var(--jag-muted);">Self-organisation</span><br>'
+        f'<span style="font-size:12px;font-weight:600;color:#C98B00;">{esc(so_val)}</span>'
         f'</div>'
     ) if so_val else ''
-    drag = '<span class="drag-handle" title="Drag to reorder" style="position:absolute;top:6px;left:8px;font-size:11px;color:#ccc;cursor:grab;z-index:1;">&#9776;</span>' if is_admin else ""
-    admin_actions = f"""<div style="display:flex;gap:4px;margin-top:8px;padding-top:8px;border-top:1px solid var(--jag-border);">
-        <a href="/coach/resources/{r['id']}/edit" class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;">Edit</a>
-        <form method="post" action="/coach/resources/{r['id']}/delete" style="display:inline"
+    drag = '<span class="drag-handle" title="Drag to reorder" style="position:absolute;top:10px;left:10px;font-size:12px;color:rgba(255,255,255,0.55);cursor:grab;z-index:2;">&#9776;</span>' if is_admin else ""
+    admin_actions = f"""<div style="display:flex;gap:6px;margin-top:auto;padding-top:10px;border-top:1px solid #F0F0F0;">
+        <a href="/coach/resources/{r['id']}/edit" class="btn btn-ghost btn-sm" style="flex:1;text-align:center;font-size:11px;padding:3px 0;">&#9998; Edit</a>
+        <form method="post" action="/coach/resources/{r['id']}/delete" style="flex:1;"
               onsubmit="return confirm('Delete \\'{name_q}\\'?');">
-          <button type="submit" class="btn btn-ghost btn-sm" style="font-size:11px;padding:2px 8px;">Delete</button>
+          <button type="submit" class="btn btn-ghost btn-sm" style="width:100%;font-size:11px;padding:3px 0;color:#c0392b;">&#10005; Delete</button>
         </form>
       </div>""" if is_admin else ""
+
     tag_names = [t["name"] for t in (tags or [])]
-    tags_html = ''
-    tag_data = ",".join(t.lower() for t in tag_names)
+    tag_data  = ",".join(t.lower() for t in tag_names)
+    if tag_names:
+        chips = ''.join(
+            f'<span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;'
+            f'padding:2px 8px;border-radius:20px;background:rgba(240,168,46,0.15);color:#9a6c00;">{esc(t)}</span>'
+            for t in tag_names[:4]
+        )
+        tags_html = f'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;">{chips}</div>'
+    else:
+        tags_html = ''
     search_data = (r['name'] + " " + (r['description'] or "")).lower()
 
-    # SVG uses single quotes throughout so it embeds safely in JS strings
+    # SVG document icon — uses single quotes for safe JS embedding
     placeholder_svg = (
-        f"<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36'"
-        f" fill='{icon_color}' viewBox='0 0 24 24'>"
-        f"<path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z'/>"
-        f"<path d='M14 2v6h6'/></svg>"
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='42' height='42'"
+        f" viewBox='0 0 24 24' fill='{icon_col}'>"
+        f"<path d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'/>"
+        f"<polyline points='14 2 14 8 20 8' fill='none' stroke='{icon_col}' stroke-width='1.5'/>"
+        f"<line x1='8' y1='13' x2='16' y2='13' stroke='{'#2D323B' if icon_col != '#2D323B' else '#F0A82E'}' stroke-width='1.5' stroke-linecap='round'/>"
+        f"<line x1='8' y1='17' x2='14' y2='17' stroke='{'#2D323B' if icon_col != '#2D323B' else '#F0A82E'}' stroke-width='1.5' stroke-linecap='round'/>"
+        f"</svg>"
     )
-    # Escape any single quotes in SVG for JS string embedding
     svg_js = placeholder_svg.replace("'", "\\'")
     fallback_style = (
-        f"margin:-14px -14px 12px;height:100px;border-radius:8px 8px 0 0;"
-        f"background:{bg_color};display:flex;align-items:center;justify-content:center;"
+        f"margin:-14px -14px 14px;height:110px;border-radius:8px 8px 0 0;"
+        f"background:{accent};display:flex;align-items:center;justify-content:center;"
     ).replace("'", "\\'")
 
     # Google Drive thumbnail — or branded placeholder header
@@ -7544,37 +7550,39 @@ def _resource_tile(r, is_admin=False, tags=None):
     if thumb_url:
         thumb_html = (
             f'<a href="{esc(r["url"])}" target="_blank" rel="noopener" tabindex="-1"'
-            f' style="display:block;margin:-14px -14px 12px;border-radius:8px 8px 0 0;overflow:hidden;flex-shrink:0;">'
+            f' style="display:block;margin:-14px -14px 14px;border-radius:8px 8px 0 0;overflow:hidden;flex-shrink:0;">'
             f'<img src="{thumb_url}" alt="" loading="lazy"'
-            f' style="width:100%;height:120px;object-fit:cover;display:block;"'
+            f' style="width:100%;height:140px;object-fit:cover;display:block;"'
             f" onerror=\"this.parentElement.outerHTML='<div style=\\'{fallback_style}\\'>{svg_js}</div>';\">"
             f'</a>'
         )
     else:
         thumb_html = (
-            f'<div style="margin:-14px -14px 12px;height:80px;border-radius:8px 8px 0 0;'
-            f'background:{bg_color};display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
+            f'<div style="margin:-14px -14px 14px;height:110px;border-radius:8px 8px 0 0;'
+            f'background:{accent};display:flex;align-items:center;justify-content:center;flex-shrink:0;">'
             f'{placeholder_svg}'
             f'</div>'
         )
-    pad = '20px 14px 14px 28px' if is_admin else '14px'
+    pad = '14px 14px 14px 28px' if is_admin else '14px'
     return (
         f'<div class="res-tile" data-id="{r["id"]}" data-tags="{esc(tag_data)}"'
         f' data-search="{esc(search_data)}"'
-        f' style="position:relative;background:var(--jag-card);border:2px solid {border_color};'
+        f' style="position:relative;background:var(--jag-card);'
+        f'border:1.5px solid #E8E9EB;border-top:4px solid {accent};'
         f'border-radius:10px;padding:{pad};display:flex;flex-direction:column;'
-        f'word-break:break-word;overflow:hidden;transition:box-shadow 0.15s,transform 0.15s;"'
-        f' onmouseover="this.style.boxShadow=\'0 4px 16px rgba(45,50,59,0.15)\';this.style.transform=\'translateY(-2px)\';"'
+        f'word-break:break-word;overflow:hidden;transition:box-shadow 0.18s,transform 0.15s;"'
+        f' onmouseover="this.style.boxShadow=\'0 6px 22px rgba(240,168,46,0.20)\';this.style.transform=\'translateY(-3px)\';"'
         f' onmouseout="this.style.boxShadow=\'\';this.style.transform=\'\';">'
         f'{drag}'
         f'{thumb_html}'
         f'<a href="{esc(r["url"])}" target="_blank" rel="noopener"'
         f' style="font-weight:700;font-size:14px;color:var(--jag-navy);text-decoration:none;line-height:1.3;"'
         f' onmouseover="this.style.textDecoration=\'underline\';" onmouseout="this.style.textDecoration=\'none\';">'
-        f'{esc(r["name"])} <span style="font-size:11px;opacity:0.5;">&#8599;</span></a>'
+        f'{esc(r["name"])} <span style="font-size:11px;color:#F0A82E;">&#8599;</span></a>'
         f'{desc}'
         f'{self_org_badge}'
         f'{tags_html}'
+        f'<div style="flex:1;min-height:6px;"></div>'
         f'{admin_actions}'
         f'</div>'
     )
@@ -7583,7 +7591,7 @@ def _resource_tile(r, is_admin=False, tags=None):
 def _resource_tile_wrap(tiles_html, list_id=None):
     """Wrap resource tiles in a CSS grid container."""
     list_attr = f' data-list-id="{list_id}"' if list_id is not None else ""
-    return f'<div class="res-tiles-wrap" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:18px;padding:8px 0 12px;align-items:stretch;"{list_attr}>{tiles_html}</div>'
+    return f'<div class="res-tiles-wrap" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:20px;padding:10px 0 14px;align-items:stretch;"{list_attr}>{tiles_html}</div>'
 
 
 def resources_page(user, folder_groups, ungrouped, folders, message=None, error=None):
@@ -7602,34 +7610,35 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
         count = len(resources)
         count_text = f'<span class="muted" style="font-size:14px; font-weight:400;">&nbsp;({count} link{"s" if count != 1 else ""})</span>'
         list_content = _resource_tile_wrap(tiles_html, list_id=folder['id']) if tiles_html else '<p class="muted" style="margin:8px 0 0; font-size:13px;">No resources in this folder yet.</p>'
-        folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder folders" style="cursor:grab; color:var(--jag-muted); font-size:16px;">&#9776;</span>' if is_admin else ""
+        folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder folders" style="cursor:grab; color:rgba(255,255,255,0.45); font-size:16px;">&#9776;</span>' if is_admin else ""
         is_protected_folder = folder['name'].strip().lower() in (
             "measurement games",
             "general athleticism measurement games",
         )
         delete_btn = f"""<form method="post" action="/coach/resources/folders/{folder['id']}/delete" style="display:inline"
               onsubmit="return confirm('Delete folder \\'{esc(folder['name'])}\\'? Resources will move to Ungrouped.');">
-              <button type="submit" class="btn btn-ghost btn-sm" style="font-size:12px;">Delete folder</button>
+              <button type="submit" class="btn btn-ghost btn-sm" style="font-size:12px;color:rgba(255,255,255,0.70);border-color:rgba(255,255,255,0.25);">&#10005; Delete</button>
             </form>""" if is_admin and not is_protected_folder else ""
-        rename_html = f"""<button type="button" class="btn btn-ghost btn-sm" style="font-size:12px;"
+        rename_html = f"""<button type="button" class="btn btn-ghost btn-sm" style="font-size:12px;color:rgba(255,255,255,0.70);border-color:rgba(255,255,255,0.25);"
               onclick="var w=document.getElementById('rename-wrap-{folder['id']}');w.style.display=w.style.display==='none'?'flex':'none';"
               title="Rename folder">&#9998; Rename</button>
             <span id="rename-wrap-{folder['id']}" style="display:none; align-items:center; gap:4px; margin-top:4px;">
               <form method="post" action="/coach/resources/folders/{folder['id']}/rename"
                     style="display:inline-flex; gap:4px; align-items:center;">
                 <input type="text" name="folder_name" value="{esc(folder['name'])}"
-                       style="padding:4px 8px; font-size:13px; width:200px; border-radius:6px; border:1px solid var(--jag-border);" />
+                       style="padding:4px 8px; font-size:13px; width:200px; border-radius:6px; border:1px solid rgba(255,255,255,0.3);background:rgba(255,255,255,0.10);color:#fff;" />
                 <button type="submit" class="btn btn-primary btn-sm">Save</button>
               </form>
             </span>""" if is_admin else ""
         admin_actions = f'<div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-left:auto;">{rename_html}{delete_btn}</div>' if is_admin else ""
         folder_sections += f"""
         <div class="res-section" data-folder-id="{folder['id']}" style="margin-bottom:44px;">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap;">
+          <div style="background:#2D323B;border-radius:12px;padding:14px 18px;margin-bottom:16px;
+                      display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
             {folder_handle}
-            <div style="border-left:4px solid var(--jag-green);padding-left:12px;flex:1;min-width:0;">
-              <h2 style="margin:0;font-size:20px;font-weight:700;color:var(--jag-navy);line-height:1.2;">{esc(folder['name'])}</h2>
-              <span style="font-size:13px;color:var(--jag-muted);">{count} resource{"s" if count != 1 else ""}</span>
+            <div style="flex:1;min-width:0;">
+              <h2 style="margin:0;font-size:17px;font-weight:700;color:#FFFFFF;line-height:1.2;">{esc(folder['name'])}</h2>
+              <span style="font-size:12px;color:rgba(255,255,255,0.50);">{count} resource{"s" if count != 1 else ""}</span>
             </div>
             {admin_actions}
           </div>
