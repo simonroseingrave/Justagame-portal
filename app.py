@@ -3780,7 +3780,6 @@ def coach_leaderboard(req):
                 xp_data = db.get_athlete_xp(conn, pid)
                 levels = db.get_all_athlete_levels(conn, pid)
                 total_xp = xp_data.get("total_xp", 0)
-                # Determine tier
                 tier = XP_RANK_TIERS[0]
                 for t in XP_RANK_TIERS:
                     if total_xp >= t["min_xp"]:
@@ -3794,12 +3793,45 @@ def coach_leaderboard(req):
                     "levels": levels,
                 })
             ranked_athletes.sort(key=lambda x: x["total_xp"], reverse=True)
+
+        # Programme-wide leaderboard — org_admin and system_admin only
+        all_ranked = None
+        if coach.get("role") in ("org_admin", "system_admin"):
+            all_athletes = conn.execute(
+                "SELECT u.id, u.name, u.athlete_number, u.group_id, "
+                "pg.name AS group_name "
+                "FROM users u "
+                "LEFT JOIN participant_groups pg ON pg.id = u.group_id "
+                "WHERE u.role = 'participant' AND u.active = 1 "
+                "ORDER BY u.name"
+            ).fetchall()
+            all_ranked = []
+            for a in all_athletes:
+                pid = a["id"]
+                xp_data = db.get_athlete_xp(conn, pid)
+                levels = db.get_all_athlete_levels(conn, pid)
+                total_xp = xp_data.get("total_xp", 0)
+                tier = XP_RANK_TIERS[0]
+                for t in XP_RANK_TIERS:
+                    if total_xp >= t["min_xp"]:
+                        tier = t
+                all_ranked.append({
+                    "id": pid,
+                    "name": a["name"],
+                    "athlete_number": a.get("athlete_number"),
+                    "group_name": a["group_name"] or "—",
+                    "total_xp": total_xp,
+                    "tier": tier,
+                    "levels": levels,
+                })
+            all_ranked.sort(key=lambda x: x["total_xp"], reverse=True)
     finally:
         conn.close()
     return Response(views.group_leaderboard_page(
         coach, groups,
         selected_group_id=selected_group_id,
-        ranked_athletes=ranked_athletes
+        ranked_athletes=ranked_athletes,
+        all_ranked=all_ranked,
     ))
 
 

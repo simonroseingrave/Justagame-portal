@@ -8708,8 +8708,9 @@ def self_directed_entry_page(athlete, event):
 # GROUP LEADERBOARD
 # ══════════════════════════════════════════════════════════════════════════════
 
-def group_leaderboard_page(coach, groups, selected_group_id=None, ranked_athletes=None):
-    """AXP leaderboard for a group — ranked by total AXP with rank badge and level count."""
+def group_leaderboard_page(coach, groups, selected_group_id=None, ranked_athletes=None, all_ranked=None):
+    """AXP leaderboard for a group — ranked by total AXP with rank badge and level count.
+    all_ranked: programme-wide list (org_admin / system_admin only), each entry includes group_name."""
     from constants import CORE_AAP_GAMES
 
     # Group selector
@@ -8863,9 +8864,90 @@ def group_leaderboard_page(coach, groups, selected_group_id=None, ranked_athlete
             </div>
             {rows_html}"""
 
+    # ── Programme-wide leaderboard (admins only) ──────────────────────────────
+    all_ranked_html = ""
+    if all_ranked is not None:
+        LEVEL_COLOURS_LB2 = {
+            0: ("#E5E7EB", "#6E737B"),
+            1: ("#1EBE8B", "#fff"),
+            2: ("#F0A82E", "#2D323B"),
+            3: ("#2D323B", "#fff"),
+            4: ("#F97316", "#fff"),
+            5: ("#8B5CF6", "#fff"),
+        }
+        if not all_ranked:
+            all_ranked_html = '<p style="color:#9CA3AF;font-size:14px;">No athletes with AXP yet.</p>'
+        else:
+            rows = ""
+            for i, a in enumerate(all_ranked):
+                tier = a.get("tier") or {"label": "Starter", "colour": "#6E737B"}
+                levels = a.get("levels", {})
+                games_at_l1 = sum(1 for gk in CORE_AAP_GAMES if levels.get(gk, 0) >= 1)
+                name_parts = a["name"].strip().split()
+                inits = (name_parts[0][0] + name_parts[-1][0]).upper() if len(name_parts) >= 2 else name_parts[0][0].upper()
+                pos = i + 1
+                pos_style = ""
+                if pos == 1:   pos_style = "color:#F0A82E;font-weight:800;"
+                elif pos == 2: pos_style = "color:#9CA3AF;font-weight:700;"
+                elif pos == 3: pos_style = "color:#CD7F32;font-weight:700;"
+                dots = "".join(
+                    f'<div style="width:7px;height:7px;border-radius:50%;background:{LEVEL_COLOURS_LB2.get(levels.get(gk,0),("#E5E7EB","#6E737B"))[0]};flex-shrink:0;"></div>'
+                    for gk in CORE_AAP_GAMES
+                )
+                shade = "#F9FAFB" if i % 2 == 0 else "#fff"
+                rows += f"""
+                <div style="display:flex;align-items:center;gap:12px;padding:10px 14px;
+                            background:{shade};border-radius:8px;margin-bottom:3px;">
+                  <div style="width:26px;text-align:right;font-size:13px;{pos_style}">{pos}</div>
+                  <div style="width:36px;height:36px;border-radius:50%;background:#2D323B;
+                              display:flex;align-items:center;justify-content:center;
+                              font-weight:800;font-size:13px;color:#F0A82E;flex-shrink:0;">{inits}</div>
+                  <div style="flex:1;min-width:0;">
+                    <a href="/coach/participants/{a['id']}"
+                       style="font-size:13px;font-weight:700;color:#2D323B;text-decoration:none;">
+                      {esc(a['name'])}
+                    </a>
+                    <div style="font-size:11px;color:#9CA3AF;">{esc(a['group_name'])}</div>
+                    <div style="display:flex;gap:3px;margin-top:3px;">{dots}</div>
+                  </div>
+                  <div style="text-align:right;flex-shrink:0;">
+                    <div style="font-size:13px;font-weight:800;color:#2D323B;">{a['total_xp']:,}</div>
+                    <div style="font-size:10px;color:#9CA3AF;">AXP</div>
+                  </div>
+                  <div style="flex-shrink:0;">
+                    <span style="font-size:11px;font-weight:700;background:{tier['colour']};
+                                 color:#fff;border-radius:999px;padding:2px 8px;">
+                      {esc(tier['label'])}
+                    </span>
+                  </div>
+                  <div style="flex-shrink:0;width:32px;text-align:center;">
+                    <div style="font-size:12px;font-weight:700;color:#1EBE8B;">{games_at_l1}</div>
+                    <div style="font-size:10px;color:#9CA3AF;">L1+</div>
+                  </div>
+                </div>"""
+            all_ranked_html = f"""
+            <div style="font-size:11px;color:#9CA3AF;margin-bottom:8px;padding:0 4px;">
+              Dots = game levels &nbsp;·&nbsp; grey=none · green=L1 · gold=L2 · navy=L3
+            </div>
+            {rows}"""
+
+        all_ranked_section = f"""
+        <div style="margin-bottom:40px;">
+          <div style="display:flex;align-items:baseline;gap:12px;margin-bottom:14px;">
+            <h2 style="font-size:18px;font-weight:700;color:#2D323B;margin:0;">Programme-Wide Leaderboard</h2>
+            <span style="font-size:12px;color:#9CA3AF;">{len(all_ranked)} athletes across all groups</span>
+          </div>
+          {all_ranked_html}
+        </div>
+        <hr style="border:none;border-top:1px solid #E5E7EB;margin-bottom:32px;">"""
+    else:
+        all_ranked_section = ""
+
     body = f"""
     <div style="max-width:760px;padding-top:28px;">
-      <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 20px;">Group Leaderboard</h2>
+      <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 20px;">Leaderboard</h2>
+      {all_ranked_section}
+      <h3 style="font-size:16px;font-weight:700;color:#2D323B;margin:0 0 14px;">Group Leaderboard</h3>
       {selector}
       {ranked_html}
     </div>"""
