@@ -10717,22 +10717,26 @@ def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_r
     FAMILY_META = {
         "Balance & Postural Control": {
             "icon": "⚖️", "colour": "#6366F1",
-            "plain": "Balance & Body Control",
+            "plain": "Balance and Postural Control",
+            "tag":   "staying steady under pressure",
             "desc": "How steady you are — especially when something else is happening at the same time.",
         },
         "Explosive & Landing": {
             "icon": "🚀", "colour": "#F59E0B",
-            "plain": "Power & Landing",
+            "plain": "Explosive & Landing",
+            "tag":   "power, force and safe landing",
             "desc": "Your ability to project force — jumping, leaping — and land safely.",
         },
         "Dynamic Locomotor": {
             "icon": "⚡", "colour": "#10B981",
-            "plain": "Speed & Movement",
+            "plain": "Dynamic Locomotor",
+            "tag":   "speed and efficient movement",
             "desc": "How fast and efficiently you move — straight lines, changing direction, with or without a ball.",
         },
         "Perceptual-Motor Speed": {
             "icon": "👁️", "colour": "#EF4444",
-            "plain": "Read & React",
+            "plain": "Perceptual-Motor Speed",
+            "tag":   "reading the game and reacting",
             "desc": "Your ability to pick up movement cues and respond — before your brain has time to think.",
         },
     }
@@ -10847,12 +10851,15 @@ def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_r
         family_cards += f"""
         <div style="border:1px solid #E5E7EB;border-left:4px solid {meta['colour']};border-radius:0 10px 10px 0;
                     padding:14px 16px;background:#fff;">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;flex-wrap:wrap;">
             <span style="font-size:18px;">{meta['icon']}</span>
-            <span style="font-size:13px;font-weight:700;color:#2D323B;">{esc(meta['plain'])}</span>
-            {tag}
+            <div>
+              <div style="font-size:13px;font-weight:700;color:#2D323B;">{esc(meta['plain'])}</div>
+              <div style="font-size:11px;color:{meta['colour']};font-style:italic;">{esc(meta['tag'])}</div>
+            </div>
+            <div style="margin-left:auto;">{tag}</div>
           </div>
-          <div style="font-size:12px;color:#6B7280;">{esc(meta['desc'])}</div>
+          <div style="font-size:12px;color:#6B7280;margin-top:6px;">{esc(meta['desc'])}</div>
         </div>"""
 
     families_html = f"""
@@ -10865,21 +10872,42 @@ def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_r
 
     # ── Strengths ─────────────────────────────────────────────────────────────
     if well:
-        well_cards = ""
+        # Group well items by family, preserving FAMILY_META order
+        well_by_family = {}
         for item in well:
-            well_cards += f"""
-            <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;
-                        background:#fff;border:1px solid #D1FAE5;border-radius:10px;margin-bottom:8px;">
-              <span style="font-size:18px;">✅</span>
-              <div>
-                <div style="font-size:13px;font-weight:700;color:#065F46;">{esc(item['display'])}</div>
-                <div style="font-size:12px;color:#6B7280;">Level {item['current_level']} — you're tracking well here. Keep playing and pushing the level.</div>
+            well_by_family.setdefault(item["family"], []).append(item)
+        well_groups_html = ""
+        for fam_key, meta in FAMILY_META.items():
+            items = well_by_family.get(fam_key, [])
+            if not items:
+                continue
+            well_cards_inner = ""
+            for item in items:
+                well_cards_inner += f"""
+                <div style="display:flex;align-items:center;gap:12px;padding:12px 14px;
+                            background:#fff;border:1px solid #D1FAE5;border-radius:10px;margin-bottom:8px;">
+                  <span style="font-size:18px;">&#9989;</span>
+                  <div>
+                    <div style="font-size:13px;font-weight:700;color:#065F46;">{esc(item['display'])}</div>
+                    <div style="font-size:12px;color:#6B7280;">Level {item['current_level']} — you're tracking well here. Keep playing and pushing the level.</div>
+                  </div>
+                </div>"""
+            well_groups_html += f"""
+            <div style="margin-bottom:16px;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                <span style="font-size:15px;">{meta['icon']}</span>
+                <div>
+                  <span style="font-size:12px;font-weight:700;color:#2D323B;">{esc(meta['plain'])}</span>
+                  <span style="font-size:11px;color:{meta['colour']};font-style:italic;margin-left:6px;">({esc(meta['tag'])})</span>
+                </div>
+                <div style="flex:1;height:1px;background:{meta['colour']};opacity:0.25;margin-left:4px;"></div>
               </div>
+              {well_cards_inner}
             </div>"""
         strengths_html = f"""
         <div style="margin-bottom:28px;">
-          <h2 style="font-size:14px;font-weight:700;color:#2D323B;margin:0 0 12px;">✅ Tracking Well</h2>
-          {well_cards}
+          <h2 style="font-size:14px;font-weight:700;color:#2D323B;margin:0 0 12px;">&#9989; Tracking Well</h2>
+          {well_groups_html}
         </div>"""
     else:
         strengths_html = ""
@@ -10919,11 +10947,31 @@ def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_r
         </div>"""
 
     if focus:
-        focus_cards = "".join(_focus_card(item) for item in focus)
+        # Group focus items by family, preserving FAMILY_META order
+        focus_by_family = {}
+        for item in focus:
+            focus_by_family.setdefault(item["family"], []).append(item)
+        focus_groups_html = ""
+        for fam_key, meta in FAMILY_META.items():
+            items = focus_by_family.get(fam_key, [])
+            if not items:
+                continue
+            focus_groups_html += f"""
+            <div style="margin-bottom:20px;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
+                <span style="font-size:15px;">{meta['icon']}</span>
+                <div>
+                  <span style="font-size:12px;font-weight:700;color:#2D323B;">{esc(meta['plain'])}</span>
+                  <span style="font-size:11px;color:{meta['colour']};font-style:italic;margin-left:6px;">({esc(meta['tag'])})</span>
+                </div>
+                <div style="flex:1;height:1px;background:{meta['colour']};opacity:0.25;margin-left:4px;"></div>
+              </div>
+              {"".join(_focus_card(item) for item in items)}
+            </div>"""
         focus_html = f"""
         <div style="margin-bottom:28px;">
-          <h2 style="font-size:14px;font-weight:700;color:#2D323B;margin:0 0 12px;">🎯 Your Development Areas</h2>
-          {focus_cards}
+          <h2 style="font-size:14px;font-weight:700;color:#2D323B;margin:0 0 16px;">&#127919; Your Development Areas</h2>
+          {focus_groups_html}
         </div>"""
     elif well:
         focus_html = """
