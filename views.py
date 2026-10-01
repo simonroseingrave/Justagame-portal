@@ -3111,17 +3111,29 @@ def group_achievement_summary_page(coach, group, participants_sessions, max_leve
 
             if rows:
                 game_cards += f"""
-                <div class="card" style="margin-bottom:16px;overflow-x:auto;">
-                  <h3 style="margin:0 0 14px;font-size:15px;">{esc(game['name'])}</h3>
-                  <table class="table" style="width:100%;">
-                    <thead><tr>
-                      <th>Measurement</th>
-                      <th>Group avg</th>
-                      <th>By athlete &mdash; click to view profile</th>
-                    </tr></thead>
-                    <tbody>{rows}</tbody>
-                  </table>
-                </div>"""
+                <details open style="margin-bottom:12px;">
+                  <summary style="list-style:none;cursor:pointer;display:flex;align-items:center;
+                                  justify-content:space-between;padding:13px 18px;
+                                  background:var(--jag-card);border:1.5px solid var(--jag-border);
+                                  border-radius:12px;font-weight:700;font-size:15px;
+                                  color:var(--jag-navy);user-select:none;">
+                    {esc(game['name'])}
+                    <span class="acc-chev" style="font-size:12px;color:var(--jag-muted);
+                                                  transition:transform 0.2s;display:inline-block;">▼</span>
+                  </summary>
+                  <div style="background:var(--jag-card);border:1.5px solid var(--jag-border);
+                              border-top:none;border-radius:0 0 12px 12px;
+                              padding:4px 18px 18px;overflow-x:auto;">
+                    <table class="table" style="width:100%;margin-top:12px;">
+                      <thead><tr>
+                        <th>Measurement</th>
+                        <th>Group avg</th>
+                        <th>By athlete &mdash; click to view profile</th>
+                      </tr></thead>
+                      <tbody>{rows}</tbody>
+                    </table>
+                  </div>
+                </details>"""
 
         if game_cards:
             sections_html += f'<h2 class="section-title">{esc(section["section"])}</h2>{game_cards}'
@@ -3131,6 +3143,10 @@ def group_achievement_summary_page(coach, group, participants_sessions, max_leve
 
     prog_link = f'/coach/groups/{group_id}/progress' if group_id else '/coach'
     body = f"""
+    <style>
+      details summary::-webkit-details-marker {{ display:none; }}
+      details[open] summary .acc-chev {{ transform:rotate(180deg); }}
+    </style>
     <div class="page-head">
       <div>
         <h1>{gname} &mdash; Achievement Summary</h1>
@@ -3146,7 +3162,7 @@ def group_achievement_summary_page(coach, group, participants_sessions, max_leve
     {athlete_grid}
     <div style="border-left:4px solid var(--jag-green);padding-left:12px;margin-bottom:20px;">
       <h2 style="margin:0 0 2px;font-size:17px;font-weight:700;">Measurement Breakdown</h2>
-      <p class="muted" style="margin:0;">Group average per field with individual athlete results</p>
+      <p class="muted" style="margin:0;">Group average per field with individual athlete results — click any game to expand or collapse</p>
     </div>
     {sections_html}"""
     return layout(f"{group['name']} Achievement Summary", body, user=coach, active_nav="progress")
@@ -3638,16 +3654,24 @@ def all_progress_page(coach, groups_data, sport_filter=None, max_level=None):
                      f'<a href="/coach/progress/pdf?scope=group&group_id={gid}" class="btn btn-ghost btn-sm no-print" style="font-size:12px;">&#128196; PDF</a>')
 
         group_sections_html += f"""
-        <div style="margin-bottom:44px;">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;flex-wrap:wrap;">
-            <div style="border-left:4px solid var(--jag-green);padding-left:12px;flex:1;">
-              <h2 style="margin:0;font-size:19px;font-weight:700;color:var(--jag-navy);">{gname}</h2>
-              <span style="font-size:13px;color:var(--jag-muted);">Group averages{filter_note}</span>
+        <details style="margin-bottom:12px;">
+          <summary style="list-style:none;cursor:pointer;display:flex;align-items:center;
+                          gap:12px;padding:14px 18px;
+                          background:var(--jag-card);border:1.5px solid var(--jag-border);
+                          border-radius:12px;user-select:none;flex-wrap:wrap;">
+            <div style="border-left:4px solid var(--jag-green);padding-left:12px;flex:1;min-width:0;">
+              <div style="font-size:16px;font-weight:700;color:var(--jag-navy);">{gname}</div>
+              <div style="font-size:12px;color:var(--jag-muted);">Group averages{filter_note}</div>
             </div>
-            <div style="display:flex;gap:6px;">{links}</div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;" onclick="event.stopPropagation();">{links}</div>
+            <span class="acc-chev" style="font-size:12px;color:var(--jag-muted);
+                                          transition:transform 0.2s;display:inline-block;flex-shrink:0;">▼</span>
+          </summary>
+          <div style="background:var(--jag-card);border:1.5px solid var(--jag-border);
+                      border-top:none;border-radius:0 0 12px 12px;padding:20px 18px;">
+            {tables_html}
           </div>
-          {tables_html}
-        </div>"""
+        </details>"""
 
     if not group_sections_html:
         group_sections_html = '<div class="card"><p class="muted">No test data recorded yet.</p></div>'
@@ -3694,6 +3718,10 @@ def all_progress_page(coach, groups_data, sport_filter=None, max_level=None):
     </div>""" if pdf_btns else ""
 
     body = f"""
+    <style>
+      details summary::-webkit-details-marker {{ display:none; }}
+      details[open] summary .acc-chev {{ transform:rotate(180deg); }}
+    </style>
     <div class="page-head">
       <div>
         <h1>Achievement Statistics Overview</h1>
@@ -3704,6 +3732,10 @@ def all_progress_page(coach, groups_data, sport_filter=None, max_level=None):
     {hero_card}
     {group_cards}
     {filter_bar}
+    <div style="border-left:4px solid var(--jag-green);padding-left:12px;margin-bottom:16px;">
+      <h2 style="margin:0 0 2px;font-size:17px;font-weight:700;">Group Measurement Tables</h2>
+      <p class="muted" style="margin:0;">Click a group to expand its round-by-round averages</p>
+    </div>
     {group_sections_html}
     {overall_html}"""
     return layout("Achievement Statistics", body, user=coach, active_nav="progress")
