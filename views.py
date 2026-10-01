@@ -2455,6 +2455,7 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
         {reset_btn}
         <a class="btn btn-primary" href="/coach/participants/{participant['id']}/progress">&#128200; Achievement Statistics</a>
         <a class="btn btn-ghost" href="/coach/participants/{participant['id']}/report" target="_blank">&#128196; Adaptability Progress Report</a>
+        <a class="btn btn-ghost" href="/coach/participants/{participant['id']}/quickstart.pdf" target="_blank">&#127760; Quick-Start Card</a>
         <a class="btn btn-ghost" href="/coach/participants/{participant['id']}/view-as">&#128065; View as Athlete</a>
         <a class="btn btn-ghost" href="/coach">&larr; Back</a>
       </div>
@@ -9265,6 +9266,297 @@ def system_admin_hub_page(user):
     </div>"""
 
     return layout("Admin Hub", body, user=user, active_nav="admin_hub")
+
+
+# ── Athlete Quick-Start Card PDF ──────────────────────────────────────────────
+
+def athlete_quickstart_card_pdf(participant, xp_data, levels):
+    """Generate a personalised single-page A4 Quick-Start Card PDF for an athlete."""
+    import io
+    from reportlab.lib.pagesizes import A4
+    from reportlab.lib import colors
+    from reportlab.lib.units import mm
+    from reportlab.platypus import (SimpleDocTemplate, Table, TableStyle,
+                                    Paragraph, Spacer, HRFlowable)
+    from reportlab.lib.styles import ParagraphStyle
+    from reportlab.lib.enums import TA_CENTER, TA_LEFT
+    from constants import XP_RANK_TIERS, XP_PARTICIPATION, CORE_AAP_GAMES, find_measurement_game
+
+    NAVY   = colors.HexColor("#2D323B")
+    GOLD   = colors.HexColor("#F0A82E")
+    GREEN  = colors.HexColor("#1EBE8B")
+    WHITE  = colors.white
+    LIGHT  = colors.HexColor("#F4F5F7")
+    MUTED  = colors.HexColor("#6E737B")
+    BORDER = colors.HexColor("#E5E7EB")
+
+    name       = participant.get("name", "Athlete")
+    email      = participant.get("email", "")
+    an         = participant.get("athlete_number") or ""
+    total_xp   = (xp_data or {}).get("total", 0)
+    tier       = (xp_data or {}).get("tier") or XP_RANK_TIERS[0]
+    tier_label = tier["label"]
+    tier_col   = colors.HexColor(tier["colour"])
+
+    buf = io.BytesIO()
+    doc = SimpleDocTemplate(buf, pagesize=A4,
+                            leftMargin=16*mm, rightMargin=16*mm,
+                            topMargin=0, bottomMargin=14*mm)
+    W = A4[0] - 32*mm
+
+    # ── Styles ─────────────────────────────────────────────────────────────────
+    S = lambda name, **kw: ParagraphStyle(name, **kw)
+    hdr_name  = S("hn", fontSize=20, fontName="Helvetica-Bold", textColor=WHITE, leading=24)
+    hdr_sub   = S("hs", fontSize=10, fontName="Helvetica",      textColor=GOLD)
+    body      = S("b",  fontSize=9,  fontName="Helvetica",      textColor=NAVY, leading=13)
+    body_mute = S("bm", fontSize=8,  fontName="Helvetica",      textColor=MUTED, leading=12)
+    sec_head  = S("sh", fontSize=9,  fontName="Helvetica-Bold", textColor=MUTED,
+                  spaceBefore=10, spaceAfter=4,
+                  textTransform="uppercase", letterSpacing=0.8)
+    tier_sty  = S("ts", fontSize=11, fontName="Helvetica-Bold", textColor=WHITE,
+                  alignment=TA_CENTER)
+    xp_big    = S("xb", fontSize=22, fontName="Helvetica-Bold", textColor=GOLD,
+                  alignment=TA_CENTER)
+    xp_lbl    = S("xl", fontSize=8,  fontName="Helvetica",      textColor=MUTED,
+                  alignment=TA_CENTER)
+    cell_sty  = S("cs", fontSize=8,  fontName="Helvetica",      textColor=NAVY, leading=11)
+    cell_bold = S("cb", fontSize=8,  fontName="Helvetica-Bold", textColor=NAVY, leading=11)
+    cell_gold = S("cg", fontSize=8,  fontName="Helvetica-Bold", textColor=GOLD, leading=11,
+                  alignment=TA_CENTER)
+    step_num  = S("sn", fontSize=10, fontName="Helvetica-Bold", textColor=WHITE,
+                  alignment=TA_CENTER)
+    step_txt  = S("st", fontSize=8,  fontName="Helvetica",      textColor=NAVY, leading=12)
+    footer_s  = S("fs", fontSize=7,  fontName="Helvetica",      textColor=MUTED,
+                  alignment=TA_CENTER)
+
+    story = []
+
+    # ── Header banner ──────────────────────────────────────────────────────────
+    an_str = f"  ·  #{an}" if an else ""
+    hdr_table = Table(
+        [[Paragraph(name, hdr_name)],
+         [Paragraph(f"Athlete Quick-Start Card{an_str}", hdr_sub)]],
+        colWidths=[W]
+    )
+    hdr_table.setStyle(TableStyle([
+        ("BACKGROUND",   (0, 0), (-1, -1), NAVY),
+        ("TOPPADDING",   (0, 0), (-1, -1), 14),
+        ("BOTTOMPADDING",(0, 0), (-1, -1), 14),
+        ("LEFTPADDING",  (0, 0), (-1, -1), 16),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 16),
+    ]))
+    story.append(hdr_table)
+    story.append(Spacer(1, 8))
+
+    # ── XP hero + tier ────────────────────────────────────────────────────────
+    tier_chip = Table(
+        [[Paragraph(tier_label, tier_sty)]],
+        colWidths=[36*mm]
+    )
+    tier_chip.setStyle(TableStyle([
+        ("BACKGROUND",    (0, 0), (-1, -1), tier_col),
+        ("TOPPADDING",    (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 6),
+    ]))
+
+    # Find next tier
+    next_tier = None
+    for t in XP_RANK_TIERS:
+        if total_xp < t["min_xp"]:
+            next_tier = t
+            break
+    next_str = (f"{next_tier['min_xp'] - total_xp:,} AXP to {next_tier['label']}"
+                if next_tier else "Maximum rank achieved!")
+
+    xp_cell = [
+        Paragraph(f"{total_xp:,}", xp_big),
+        Paragraph("YOUR AXP", xp_lbl),
+        Spacer(1, 4),
+        tier_chip,
+        Spacer(1, 4),
+        Paragraph(next_str, body_mute),
+    ]
+
+    # Tier ladder mini-table
+    tier_rows = []
+    for t in XP_RANK_TIERS:
+        tc = colors.HexColor(t["colour"])
+        achieved = total_xp >= t["min_xp"]
+        mark = "✓" if achieved else ""
+        tier_rows.append([
+            Paragraph(mark, S("m", fontSize=8, fontName="Helvetica-Bold",
+                               textColor=tc, alignment=TA_CENTER)),
+            Paragraph(t["label"], S("tl", fontSize=8, fontName="Helvetica-Bold",
+                                     textColor=tc if achieved else MUTED)),
+            Paragraph(f"{t['min_xp']:,} AXP",
+                      S("tv", fontSize=8, fontName="Helvetica", textColor=MUTED)),
+        ])
+    tier_ladder = Table(tier_rows, colWidths=[8*mm, 28*mm, 28*mm])
+    tier_ladder.setStyle(TableStyle([
+        ("TOPPADDING",    (0, 0), (-1, -1), 2),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
+    ]))
+
+    xp_section = Table(
+        [[xp_cell, tier_ladder]],
+        colWidths=[W * 0.45, W * 0.55]
+    )
+    xp_section.setStyle(TableStyle([
+        ("BACKGROUND",    (0, 0), (-1, -1), LIGHT),
+        ("TOPPADDING",    (0, 0), (-1, -1), 12),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 12),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 12),
+        ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+        ("LINEAFTER",     (0, 0), (0, -1), 0.5, BORDER),
+    ]))
+    story.append(xp_section)
+    story.append(Spacer(1, 8))
+
+    # ── How to earn AXP ───────────────────────────────────────────────────────
+    story.append(Paragraph("How You Earn AXP", sec_head))
+    earn_rows = [
+        [Paragraph("Activity", cell_bold), Paragraph("AXP", cell_gold)],
+        [Paragraph("Attending a measurement session", cell_sty),
+         Paragraph(f"+{XP_PARTICIPATION['formal_game']} per game", cell_gold)],
+        [Paragraph("Personal best in a formal session", cell_sty),
+         Paragraph(f"+{XP_PARTICIPATION['pb_formal']} per PB", cell_gold)],
+        [Paragraph("Self-directed session (self-test)", cell_sty),
+         Paragraph(f"+{XP_PARTICIPATION['self_directed_game']} per game", cell_gold)],
+        [Paragraph("First ever session — welcome bonus", cell_sty),
+         Paragraph(f"+{XP_PARTICIPATION['welcome_bonus']}", cell_gold)],
+        [Paragraph("Attendance streak (3 sessions)", cell_sty),
+         Paragraph(f"+{XP_PARTICIPATION['streak_3']}", cell_gold)],
+        [Paragraph("Attendance streak (5 sessions)", cell_sty),
+         Paragraph(f"+{XP_PARTICIPATION['streak_5']}", cell_gold)],
+        [Paragraph("Complete all 8 games in one session", cell_sty),
+         Paragraph(f"+{XP_PARTICIPATION['all_8_session']}", cell_gold)],
+        [Paragraph("Reach L1 in all 8 core games", cell_sty),
+         Paragraph(f"+{XP_PARTICIPATION['all_8_l1']}", cell_gold)],
+    ]
+    earn_table = Table(earn_rows, colWidths=[W * 0.78, W * 0.22])
+    earn_table.setStyle(TableStyle([
+        ("BACKGROUND",    (0, 0), (-1, 0),  NAVY),
+        ("TEXTCOLOR",     (0, 0), (-1, 0),  WHITE),
+        ("BACKGROUND",    (0, 1), (-1, -1), WHITE),
+        ("ROWBACKGROUNDS",(0, 1), (-1, -1), [WHITE, LIGHT]),
+        ("TOPPADDING",    (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
+        ("LINEBELOW",     (0, 0), (-1, -1), 0.5, BORDER),
+    ]))
+    story.append(earn_table)
+    story.append(Spacer(1, 8))
+
+    # ── Game levels ───────────────────────────────────────────────────────────
+    story.append(Paragraph("Your Game Levels", sec_head))
+    level_cols = []
+    LEVEL_LABELS = {0: "—", 1: "L1", 2: "L2", 3: "L3", 4: "L4", 5: "L5"}
+    LEVEL_COLOURS_RL = {
+        0: (colors.HexColor("#E5E7EB"), MUTED),
+        1: (GREEN, WHITE),
+        2: (GOLD, NAVY),
+        3: (NAVY, WHITE),
+        4: (colors.HexColor("#F97316"), WHITE),
+        5: (colors.HexColor("#8B5CF6"), WHITE),
+    }
+    badge_rows = []
+    row = []
+    for i, gk in enumerate(CORE_AAP_GAMES):
+        gdef = find_measurement_game(gk)
+        gname = (gdef["name"][:18] + "…" if gdef and len(gdef["name"]) > 18
+                 else (gdef["name"] if gdef else gk))
+        lvl = (levels or {}).get(gk, 0)
+        bg, fg = LEVEL_COLOURS_RL.get(lvl, (LIGHT, MUTED))
+        lbl = LEVEL_LABELS.get(lvl, "—")
+        badge = Table(
+            [[Paragraph(lbl, S("lv", fontSize=9, fontName="Helvetica-Bold",
+                               textColor=fg, alignment=TA_CENTER))],
+             [Paragraph(gname, S("gn", fontSize=7, fontName="Helvetica",
+                                  textColor=MUTED, alignment=TA_CENTER, leading=9))]],
+            colWidths=[(W / 4) - 2*mm]
+        )
+        badge.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (0, 0), bg),
+            ("BACKGROUND",    (0, 1), (0, 1), WHITE),
+            ("TOPPADDING",    (0, 0), (-1, -1), 4),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 2),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 2),
+            ("BOX",           (0, 0), (-1, -1), 0.5, BORDER),
+        ]))
+        row.append(badge)
+        if len(row) == 4 or i == len(CORE_AAP_GAMES) - 1:
+            while len(row) < 4:
+                row.append("")
+            badge_rows.append(row)
+            row = []
+
+    badge_grid = Table(badge_rows,
+                       colWidths=[(W / 4) - 1*mm] * 4,
+                       hAlign="LEFT")
+    badge_grid.setStyle(TableStyle([
+        ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING",    (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 1),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 1),
+    ]))
+    story.append(badge_grid)
+    story.append(Spacer(1, 8))
+
+    # ── Getting started steps ─────────────────────────────────────────────────
+    story.append(Paragraph("Getting Started", sec_head))
+    steps = [
+        ("1", "Log in", f"Use your email: {email or 'ask your practitioner'}"),
+        ("2", "Check your dashboard", "See your current level, AXP total, and recent sessions"),
+        ("3", "Attend sessions", "Your practitioner will record your scores and you'll earn AXP"),
+        ("4", "Try self-directed", "Practise games on your own from the Self-Directed section"),
+    ]
+    step_cells = []
+    for num, title, desc in steps:
+        num_cell = Table([[Paragraph(num, step_num)]], colWidths=[7*mm])
+        num_cell.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, -1), GOLD),
+            ("TOPPADDING",    (0, 0), (-1, -1), 2),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+        ]))
+        txt_cell = [
+            Paragraph(title, S("st", fontSize=8, fontName="Helvetica-Bold", textColor=NAVY)),
+            Paragraph(desc,  S("sd", fontSize=7, fontName="Helvetica",      textColor=MUTED, leading=10)),
+        ]
+        step_cells.append([num_cell, txt_cell])
+
+    steps_table = Table(step_cells, colWidths=[10*mm, W - 10*mm])
+    steps_table.setStyle(TableStyle([
+        ("VALIGN",        (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING",    (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+        ("LINEBELOW",     (0, 0), (-1, -2), 0.5, BORDER),
+    ]))
+    story.append(steps_table)
+
+    # ── Footer ────────────────────────────────────────────────────────────────
+    story.append(Spacer(1, 6))
+    story.append(HRFlowable(width=W, thickness=0.5, color=BORDER))
+    story.append(Spacer(1, 4))
+    story.append(Paragraph(
+        "Just A Game  ·  Adaptability Assessment Programme  ·  justagame.co.nz",
+        footer_s
+    ))
+
+    doc.build(story)
+    buf.seek(0)
+    return buf.read()
 
 
 # ── Measurement Window views ───────────────────────────────────────────────────

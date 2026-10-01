@@ -590,6 +590,35 @@ def coach_participant_detail(req, participant_id):
         conn.close()
 
 
+@router.get("/coach/participants/<int:participant_id>/quickstart.pdf")
+def participant_quickstart_pdf(req, participant_id):
+    """Generate and serve a personalised Athlete Quick-Start Card PDF."""
+    import traceback as _tb
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        participant = conn.execute(
+            "SELECT * FROM users WHERE id = ? AND role = 'participant'", (participant_id,)
+        ).fetchone()
+        if not participant:
+            return Response(views.simple_message_page("Not found", "Participant not found.", user=coach), status=404)
+        xp_data = db.get_athlete_xp(conn, participant_id)
+        levels  = db.get_all_athlete_levels(conn, participant_id)
+    finally:
+        conn.close()
+    try:
+        pdf_bytes = views.athlete_quickstart_card_pdf(dict(participant), xp_data, levels)
+    except Exception:
+        return Response(f"<pre style='color:red;padding:20px;'>PDF error:\n{_tb.format_exc()}</pre>", status=500)
+    safe_name = (participant["name"] or "athlete").replace(" ", "_")
+    resp = Response(body=pdf_bytes, content_type="application/pdf")
+    resp.headers.append(("Content-Disposition", f'inline; filename="{safe_name}_quickstart.pdf"'))
+    resp.headers.append(("Content-Length", str(len(pdf_bytes))))
+    return resp
+
+
 @router.get("/coach/participants/<int:participant_id>/view-as")
 def start_view_as(req, participant_id):
     """Set view-as cookie and redirect to the athlete dashboard."""
