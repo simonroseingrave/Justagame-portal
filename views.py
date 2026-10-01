@@ -8646,9 +8646,14 @@ def game_thresholds_page(coach, thresholds, scoring_areas, xp_game_config, thres
 
         rows_html += f"""
         <tr>
-          <td colspan="4" style="padding:12px 14px 4px;background:#2D323B;">
-            <div style="font-size:13px;font-weight:700;color:#F0A82E;letter-spacing:0.04em;">{display}{pooled_note}</div>
-            <div style="font-size:11px;color:#9CA3AF;margin-top:2px;">field: {esc(stored_fk)}</div>
+          <td colspan="4" style="padding:14px 16px 10px;background:#2D323B;
+                                  border-bottom:2px solid rgba(240,168,46,0.30);">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <span style="font-size:14px;font-weight:800;color:#F0A82E;letter-spacing:0.02em;">{display}</span>
+              {pooled_note}
+              <span style="font-size:11px;color:rgba(255,255,255,0.40);background:rgba(255,255,255,0.10);
+                           border-radius:999px;padding:1px 8px;">field: {esc(stored_fk)}</span>
+            </div>
             {hint_html}
           </td>
         </tr>"""
@@ -8662,75 +8667,100 @@ def game_thresholds_page(coach, thresholds, scoring_areas, xp_game_config, thres
             desc_html = (f'<div style="font-size:11px;color:#6E737B;margin-top:2px;">{esc(lvl_desc)}</div>'
                          if lvl_desc else "")
             rows_html += f"""
-            <tr style="background:{shade};">
-              <td style="padding:8px 14px;vertical-align:top;">
-                <span style="font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;
-                  background:{bg};color:{fg};">L{level}</span>
-                {desc_html}
+            <tr style="background:{shade};border-bottom:1px solid #F0F1F3;">
+              <td style="padding:10px 16px;vertical-align:middle;">
+                <div style="display:flex;align-items:flex-start;gap:8px;">
+                  <span style="font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;
+                                background:{bg};color:{fg};white-space:nowrap;flex-shrink:0;">L{level}</span>
+                  <div style="font-size:12px;color:#6E737B;line-height:1.4;padding-top:2px;">{esc(lvl_desc) if lvl_desc else ""}</div>
+                </div>
               </td>
-              <td style="padding:8px 14px;font-size:13px;color:#2D323B;vertical-align:middle;">
-                {f'<strong>{curr_val}</strong>' if curr_val else '<em style="color:#9CA3AF;">not set</em>'}
+              <td style="padding:10px 16px;vertical-align:middle;">
+                {f'<span style="font-size:14px;font-weight:800;color:#2D323B;">{curr_val}</span>' if curr_val else '<span style="font-size:13px;color:#C4C7CC;font-style:italic;">not set</span>'}
               </td>
-              <td style="padding:8px 14px;vertical-align:middle;">
+              <td style="padding:10px 16px;vertical-align:middle;">
                 <form method="post" action="/coach/admin/game-thresholds/set"
-                      style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+                      style="display:flex;gap:6px;align-items:center;">
                   <input type="hidden" name="game_key" value="{esc(game_key)}" />
                   <input type="hidden" name="field_key" value="{esc(stored_fk)}" />
                   <input type="hidden" name="level" value="{level}" />
                   <input type="hidden" name="lower_is_better" value="{'1' if lower else '0'}" />
                   <input type="number" name="threshold_value" value="{esc(curr_val)}"
-                         step="0.01" style="width:100px;font-size:12px;" placeholder="value" />
+                         step="0.01" style="width:90px;font-size:12px;" placeholder="value" />
                   <button type="submit" class="btn btn-primary btn-sm" style="font-size:12px;">Save</button>
                 </form>
               </td>
-              <td style="padding:8px 14px;vertical-align:middle;">
+              <td style="padding:10px 16px;vertical-align:middle;">
                 {f'''<form method="post" action="/coach/admin/game-thresholds/delete">
                   <input type="hidden" name="game_key" value="{esc(game_key)}" />
                   <input type="hidden" name="field_key" value="{esc(stored_fk)}" />
                   <input type="hidden" name="level" value="{level}" />
-                  <button class="btn btn-ghost btn-sm" style="font-size:12px;color:#DC2626;"
-                    onclick="return confirm('Remove this threshold?')">Remove</button>
+                  <button class="btn btn-ghost btn-sm" style="font-size:11px;color:#DC2626;"
+                    onclick="return confirm('Remove this threshold?')">&#10005; Remove</button>
                 </form>''' if t else ''}
               </td>
             </tr>"""
 
     body = f"""
-    <div class="container" style="max-width:960px;padding-top:32px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
-        <div>
-          <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 4px;">Game Level Thresholds</h2>
-          <p style="font-size:13px;color:#6E737B;margin:0;">
-            Set the score required for each level in each core game.
-            Each game shows its threshold field and a plain-English description of what the level means.
-            Thresholds can be updated at any time — once earned, an athlete's level is permanent.
-          </p>
+    <div class="container" style="max-width:960px;">
+
+      <!-- Hero banner with utility actions embedded -->
+      <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                  padding:24px 28px;margin-bottom:28px;display:flex;align-items:center;
+                  justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:16px;">
+          <div style="width:48px;height:48px;border-radius:13px;background:rgba(240,168,46,0.18);
+                      border:1.5px solid rgba(240,168,46,0.35);display:flex;align-items:center;
+                      justify-content:center;font-size:22px;color:#F0A82E;flex-shrink:0;font-weight:700;">&#9881;</div>
+          <div>
+            <div style="font-size:20px;font-weight:800;color:#FFFFFF;line-height:1.2;">AXP Thresholds</div>
+            <div style="font-size:13px;color:rgba(255,255,255,0.50);margin-top:3px;">
+              Set the score required for L1–L5 in each core game. Once earned, levels are permanent.
+            </div>
+          </div>
         </div>
+        <!-- Utility actions: secondary, embedded in hero -->
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <form method="post" action="/coach/admin/xp-retroactive"
                 onsubmit="return confirm('Run retroactive AXP pass over ALL existing sessions? This is safe to run multiple times but may take a moment.')">
-            <button class="btn btn-primary">Re-run AXP Pass</button>
+            <button style="background:rgba(240,168,46,0.18);border:1px solid rgba(240,168,46,0.40);
+                           color:#F0A82E;border-radius:8px;padding:7px 14px;font-size:12px;
+                           font-weight:700;cursor:pointer;letter-spacing:0.02em;">
+              &#8635; Re-run AXP Pass
+            </button>
           </form>
           <form method="post" action="/coach/admin/level-retroactive"
                 onsubmit="return confirm('Re-check level thresholds across ALL sessions? Run this after setting thresholds for the first time. Safe to run multiple times.')">
-            <button class="btn btn-primary" style="background:#1EBE8B;">Re-check Levels</button>
+            <button style="background:rgba(30,190,139,0.18);border:1px solid rgba(30,190,139,0.40);
+                           color:#1EBE8B;border-radius:8px;padding:7px 14px;font-size:12px;
+                           font-weight:700;cursor:pointer;letter-spacing:0.02em;">
+              &#10003; Re-check Levels
+            </button>
           </form>
         </div>
       </div>
-      <div style="background:#EFF6FF;border-left:4px solid #2D323B;border-radius:8px;padding:12px 16px;
-        margin-bottom:24px;font-size:13px;color:#2D323B;">
+
+      <!-- Reading guide — JAG gold-tinted -->
+      <div style="background:rgba(240,168,46,0.08);border-left:4px solid #F0A82E;border-radius:10px;
+                  padding:14px 18px;margin-bottom:24px;font-size:13px;color:#2D323B;line-height:1.6;">
         <strong>How to set a threshold:</strong> enter the minimum score an athlete must reach on the
         listed field to earn that level. The field key is pre-filled from the game definition —
         only change it if you intentionally want a different field to drive the level check.
-        For Skipping Rope Sprint, lower times are better (the system checks score ≤ threshold).
+        For timed games (lower = better), the system checks score &#8804; threshold.
       </div>
-      <div style="border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">
+
+      <!-- Threshold table -->
+      <div style="border:1.5px solid #E8E9EB;border-radius:14px;overflow:hidden;">
         <table style="width:100%;border-collapse:collapse;">
           <thead>
             <tr style="background:#2D323B;">
-              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Level</th>
-              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Threshold</th>
-              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Update</th>
-              <th style="padding:10px 14px;font-size:12px;color:#fff;"></th>
+              <th style="padding:12px 16px;text-align:left;font-size:11px;font-weight:700;
+                         color:rgba(255,255,255,0.60);text-transform:uppercase;letter-spacing:0.06em;">Level</th>
+              <th style="padding:12px 16px;text-align:left;font-size:11px;font-weight:700;
+                         color:rgba(255,255,255,0.60);text-transform:uppercase;letter-spacing:0.06em;">Current</th>
+              <th style="padding:12px 16px;text-align:left;font-size:11px;font-weight:700;
+                         color:rgba(255,255,255,0.60);text-transform:uppercase;letter-spacing:0.06em;">Update</th>
+              <th style="padding:12px 16px;font-size:11px;color:rgba(255,255,255,0.30);"></th>
             </tr>
           </thead>
           <tbody>{rows_html}</tbody>
