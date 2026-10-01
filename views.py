@@ -9473,8 +9473,8 @@ def score_distribution_page(coach, distributions):
         n = d.get("n", 0)
         if n == 0:
             cards_html += f"""
-            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;
-                        padding:20px 24px;margin-bottom:20px;opacity:0.6;">
+            <div style="background:#fff;border:1.5px solid #E8E9EB;border-left:4px solid #E8E9EB;
+                        border-radius:12px;padding:20px 24px;margin-bottom:20px;opacity:0.55;">
               <div style="font-size:15px;font-weight:700;color:#2D323B;margin-bottom:4px;">
                 {esc(d['display_name'])}
               </div>
@@ -9482,132 +9482,157 @@ def score_distribution_page(coach, distributions):
             </div>"""
             continue
 
-        # Distribution bar — visual spread
         mn, mx = d.get("min_val", 0), d.get("max_val", 1)
         rng = mx - mn or 1
 
         def _bar_pos(v):
             return max(0, min(100, round((v - mn) / rng * 100)))
 
+        # Coloured fill strips on the track
+        p25_pct = _bar_pos(d["p25"]) if d.get("p25") is not None else 0
+        p75_pct = _bar_pos(d["p75"]) if d.get("p75") is not None else 0
+        p90_pct = _bar_pos(d["p90"]) if d.get("p90") is not None else 0
+        fill_iq  = f'<div style="position:absolute;left:{p25_pct}%;width:{max(0,p75_pct-p25_pct)}%;height:100%;background:rgba(240,168,46,0.35);border-radius:3px;"></div>' if d.get("p25") and d.get("p75") else ""
+        fill_top = f'<div style="position:absolute;left:{p75_pct}%;width:{max(0,p90_pct-p75_pct)}%;height:100%;background:rgba(249,115,22,0.28);border-radius:3px;"></div>' if d.get("p75") and d.get("p90") else ""
+
         markers = [
-            ("P25", d["p25"], "#9CA3AF"),
-            ("Mean", d["mean"], "#2D323B"),
-            ("P75", d["p75"], "#F0A82E"),
-            ("P90", d["p90"], "#F97316"),
+            ("P25", d.get("p25"), "#9CA3AF"),
+            ("Mean", d.get("mean"), "#2D323B"),
+            ("P75", d.get("p75"), "#F0A82E"),
+            ("P90", d.get("p90"), "#F97316"),
         ]
         marker_html = ""
         for label, val, col in markers:
             if val is None:
                 continue
             pos = _bar_pos(val)
-            marker_html += f"""
-            <div style="position:absolute;left:{pos}%;top:0;height:100%;
-                        border-left:2px solid {col};"></div>
-            <div style="position:absolute;left:{pos}%;top:-18px;
-                        transform:translateX(-50%);font-size:10px;font-weight:700;color:{col};
-                        white-space:nowrap;">{label}: {_fmt(val, lower)}</div>"""
+            marker_html += (
+                f'<div style="position:absolute;left:{pos}%;top:0;height:100%;'
+                f'border-left:2px solid {col};z-index:1;"></div>'
+                f'<div style="position:absolute;left:{pos}%;top:-20px;'
+                f'transform:translateX(-50%);font-size:10px;font-weight:700;color:{col};'
+                f'white-space:nowrap;">{label}: {_fmt(val, lower)}</div>'
+            )
 
         bar_html = f"""
-        <div style="position:relative;margin:28px 0 8px;">
+        <div style="position:relative;margin:32px 0 10px;">
           {marker_html}
-          <div style="height:10px;background:#F3F4F5;border-radius:999px;overflow:visible;
-                      border:1px solid #E5E7EB;position:relative;"></div>
+          <div style="height:12px;background:#F0F1F3;border-radius:999px;overflow:hidden;
+                      border:1px solid #E5E7EB;position:relative;">
+            {fill_iq}{fill_top}
+          </div>
           <div style="display:flex;justify-content:space-between;font-size:10px;
-                      color:#9CA3AF;margin-top:4px;">
+                      color:#9CA3AF;margin-top:5px;">
             <span>Min {_fmt(mn, lower)}</span>
             <span>Max {_fmt(mx, lower)}</span>
           </div>
         </div>"""
 
-        # Stats row
+        # Stats row — key stats highlighted, secondary muted
         stats = [
-            ("n", str(n), "#2D323B"),
-            ("Min", _fmt(d.get("min_val"), lower), "#6E737B"),
-            ("P25", _fmt(d.get("p25"), lower), "#9CA3AF"),
-            ("Median", _fmt(d.get("p50"), lower), "#6E737B"),
-            ("Mean", _fmt(d.get("mean"), lower), "#2D323B"),
-            ("P75", _fmt(d.get("p75"), lower), "#F0A82E"),
-            ("P90", _fmt(d.get("p90"), lower), "#F97316"),
-            ("Max", _fmt(d.get("max_val"), lower), "#6E737B"),
+            ("n",      str(n),                    "#2D323B", False),
+            ("Min",    _fmt(d.get("min_val"),lower), "#9CA3AF", False),
+            ("P25",    _fmt(d.get("p25"),lower),   "#6E737B", False),
+            ("Median", _fmt(d.get("p50"),lower),   "#6E737B", False),
+            ("Mean",   _fmt(d.get("mean"),lower),  "#2D323B", True),
+            ("P75",    _fmt(d.get("p75"),lower),   "#F0A82E", True),
+            ("P90",    _fmt(d.get("p90"),lower),   "#F97316", True),
+            ("Max",    _fmt(d.get("max_val"),lower),"#9CA3AF", False),
         ]
         stats_html = "".join(
-            f"""<div style="text-align:center;flex:1;min-width:56px;">
-              <div style="font-size:14px;font-weight:800;color:{col};">{val}</div>
-              <div style="font-size:10px;color:#9CA3AF;margin-top:2px;">{lbl}</div>
-            </div>"""
-            for lbl, val, col in stats
+            f'<div style="text-align:center;flex:1;min-width:52px;'
+            f'{"background:rgba(240,168,46,0.07);border-radius:8px;padding:6px 4px;" if bold else "padding:6px 4px;"}">'
+            f'<div style="font-size:{"16" if bold else "13"}px;font-weight:{"900" if bold else "700"};color:{col};">{val}</div>'
+            f'<div style="font-size:10px;color:#9CA3AF;margin-top:2px;">{lbl}</div>'
+            f'</div>'
+            for lbl, val, col, bold in stats
         )
 
-        # Suggested thresholds badges
+        # Suggested thresholds — horizontal row
         sugg = d.get("suggested", {})
-        sugg_html = ""
+        sugg_badges = ""
         for lvl in range(1, 6):
             sv = sugg.get(lvl)
             bg, fg = LEVEL_C.get(lvl, ("#E5E7EB", "#2D323B"))
             sv_str = _fmt(sv, lower) if sv is not None else "—"
-            sugg_html += f"""
-            <div style="display:flex;align-items:center;gap:8px;padding:5px 0;
-                        border-bottom:1px solid #F3F4F5;">
-              <span style="font-size:11px;font-weight:700;background:{bg};color:{fg};
-                           border-radius:999px;padding:1px 8px;min-width:28px;text-align:center;">
-                L{lvl}
-              </span>
-              <span style="font-size:13px;font-weight:600;color:#2D323B;">{sv_str}</span>
-              {'<span style="font-size:10px;color:#9CA3AF;">(lower is better)</span>' if lower and sv is not None else ''}
-            </div>"""
+            sugg_badges += (
+                f'<div style="display:flex;flex-direction:column;align-items:center;gap:5px;'
+                f'padding:10px 14px;background:#FAFAFA;border:1.5px solid #EFEFEF;border-radius:10px;min-width:64px;">'
+                f'<span style="font-size:11px;font-weight:700;background:{bg};color:{fg};'
+                f'border-radius:999px;padding:1px 10px;">L{lvl}</span>'
+                f'<span style="font-size:13px;font-weight:800;color:#2D323B;">{sv_str}</span>'
+                f'</div>'
+            )
 
-        lower_note = ' <span style="font-size:11px;color:#6E737B;font-weight:400;">(lower = better)</span>' if lower else ''
+        lower_note = (' <span style="font-size:11px;font-weight:600;color:#6E737B;'
+                      'background:#F3F4F5;border-radius:999px;padding:1px 8px;">lower = better</span>') if lower else ''
         cards_html += f"""
-        <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;
-                    padding:20px 24px;margin-bottom:20px;">
-          <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:4px;flex-wrap:wrap;">
-            <div style="font-size:16px;font-weight:800;color:#2D323B;">{esc(d['display_name'])}</div>
-            <div style="font-size:12px;color:#9CA3AF;">field: <code>{esc(d['field_key'])}</code></div>
-            {lower_note}
+        <div style="background:#fff;border:1.5px solid #E8E9EB;border-left:4px solid #2D323B;
+                    border-radius:12px;overflow:hidden;margin-bottom:20px;">
+          <!-- Card header -->
+          <div style="padding:16px 20px 14px;border-bottom:1px solid #F3F4F5;">
+            <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+              <span style="font-size:16px;font-weight:800;color:#2D323B;">{esc(d['display_name'])}</span>
+              <span style="font-size:11px;color:#9CA3AF;background:#F3F4F5;border-radius:999px;
+                           padding:1px 8px;">field: {esc(d['field_key'])}</span>
+              {lower_note}
+              <span style="margin-left:auto;font-size:12px;color:#9CA3AF;font-weight:600;">n = {n}</span>
+            </div>
+            {bar_html}
           </div>
-          {bar_html}
-          <div style="display:flex;flex-wrap:wrap;gap:4px;padding:14px 0;
-                      border-top:1px solid #F3F4F5;border-bottom:1px solid #F3F4F5;
-                      margin-bottom:14px;">
+          <!-- Stats row -->
+          <div style="display:flex;flex-wrap:wrap;gap:0;padding:4px 12px;">
             {stats_html}
           </div>
-          <div style="font-size:12px;font-weight:700;color:#2D323B;margin-bottom:6px;
-                      text-transform:uppercase;letter-spacing:0.05em;">
-            Suggested Thresholds
+          <!-- Suggested thresholds -->
+          <div style="padding:14px 20px 18px;border-top:1px solid #F3F4F5;">
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;
+                        letter-spacing:0.06em;color:var(--jag-muted);margin-bottom:10px;
+                        display:flex;align-items:center;gap:8px;">
+              Suggested Thresholds
+              <span style="font-weight:400;text-transform:none;letter-spacing:0;">
+                — <a href="/coach/admin/game-thresholds" style="color:#2D323B;">set final values in AXP Thresholds &#8599;</a>
+              </span>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              {sugg_badges}
+            </div>
           </div>
-          <div style="font-size:11px;color:#6E737B;margin-bottom:8px;">
-            L1 ≈ just above mean &nbsp;·&nbsp;
-            L2 ≈ P75 &nbsp;·&nbsp;
-            L3 ≈ midpoint P75–P90 &nbsp;·&nbsp;
-            L4 ≈ P90 &nbsp;·&nbsp;
-            L5 ≈ beyond P90.
-            These are starting points — set final values in
-            <a href="/coach/admin/game-thresholds" style="color:#2D323B;font-weight:600;">
-              AXP Thresholds</a>.
-          </div>
-          {sugg_html}
         </div>"""
 
     body = f"""
-    <div style="max-width:800px;padding-top:28px;">
-      <div style="margin-bottom:24px;">
-        <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 4px;">
-          Score Distribution Report
-        </h2>
-        <p style="font-size:13px;color:#6E737B;margin:0;">
-          Percentiles calculated across all recorded scores for each core game's primary
-          level-threshold field. Use these to set JAG Standard thresholds in
-          <a href="/coach/admin/game-thresholds" style="color:#2D323B;font-weight:600;">
-            AXP Thresholds</a>.
-        </p>
+    <!-- Hero banner -->
+    <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                padding:24px 28px;margin-bottom:28px;display:flex;align-items:center;
+                justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:16px;">
+        <div style="width:48px;height:48px;border-radius:13px;background:rgba(240,168,46,0.18);
+                    border:1.5px solid rgba(240,168,46,0.35);display:flex;align-items:center;
+                    justify-content:center;font-size:22px;color:#F0A82E;flex-shrink:0;font-weight:700;">&#9698;</div>
+        <div>
+          <div style="font-size:20px;font-weight:800;color:#FFFFFF;line-height:1.2;">Score Distribution Report</div>
+          <div style="font-size:13px;color:rgba(255,255,255,0.50);margin-top:3px;">
+            Percentile breakdown per game — use to set thresholds in
+            <a href="/coach/admin/game-thresholds" style="color:#F0A82E;font-weight:600;">AXP Thresholds &#8599;</a>
+          </div>
+        </div>
       </div>
-      <div style="background:#EFF6FF;border-left:4px solid #2D323B;border-radius:8px;
-                  padding:12px 16px;margin-bottom:24px;font-size:13px;color:#2D323B;">
-        <strong>Reading this report:</strong> P25 = 25th percentile (bottom quarter of athletes),
-        P75 = top quarter threshold, P90 = top 10%. The bar shows relative spread —
-        P75 (gold) and P90 (orange) markers indicate natural level break points.
-        Suggested thresholds are computed automatically; always review against programme context.
-      </div>
+    </div>
+
+    <!-- Reading guide -->
+    <div style="background:rgba(240,168,46,0.08);border-left:4px solid #F0A82E;border-radius:10px;
+                padding:14px 18px;margin-bottom:24px;font-size:13px;color:#2D323B;line-height:1.6;">
+      <strong>Reading this report:</strong> P25 = 25th percentile (bottom quarter of athletes),
+      P75 = top quarter threshold, P90 = top 10%. The
+      <span style="display:inline-block;width:14px;height:8px;background:rgba(240,168,46,0.45);
+                   border-radius:2px;vertical-align:middle;margin:0 2px;"></span> gold bar = interquartile range (P25→P75),
+      <span style="display:inline-block;width:14px;height:8px;background:rgba(249,115,22,0.35);
+                   border-radius:2px;vertical-align:middle;margin:0 2px;"></span> orange = P75→P90.
+      Key stats (Mean, P75, P90) are highlighted in each row.
+      Suggested thresholds are computed automatically — always review against programme context.
+    </div>
+
+    <div style="max-width:800px;">
       {cards_html}
     </div>"""
 
