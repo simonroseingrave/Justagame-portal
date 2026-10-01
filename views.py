@@ -1720,7 +1720,8 @@ def practitioner_home_page(coach):
         display: flex;
         align-items: center;
         justify-content: center;
-        background: rgba(255,255,255,0.08);
+        background: rgba(240,168,46,0.18);
+        border: 1px solid rgba(240,168,46,0.30);
         border-radius: 12px;
         flex-shrink: 0;
       }}
@@ -5020,7 +5021,82 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
         </div>"""
 
     if not content_html:
-        content_html = '<p class="muted" style="margin-top:24px;">Select a group and phase above to get started.</p>'
+        content_html = """
+    <div style="margin-top:8px;">
+
+      <!-- ── How it works strip ─────────────────────────────────────── -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;">
+
+        <div style="background:#fff;border:1.5px solid #E5E7EB;border-radius:14px;
+                    padding:20px 18px;display:flex;gap:14px;align-items:flex-start;">
+          <div style="width:40px;height:40px;border-radius:10px;background:#2D323B;
+                      display:flex;align-items:center;justify-content:center;
+                      font-size:18px;color:#F0A82E;flex-shrink:0;font-weight:700;">◎</div>
+          <div>
+            <div style="font-weight:700;color:#2D323B;font-size:14px;margin-bottom:4px;">
+              Athlete Overview
+            </div>
+            <div style="font-size:13px;color:#6E737B;line-height:1.5;">
+              See every athlete's XP tier and level progress across all core measurement games at a glance.
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1.5px solid #E5E7EB;border-radius:14px;
+                    padding:20px 18px;display:flex;gap:14px;align-items:flex-start;">
+          <div style="width:40px;height:40px;border-radius:10px;background:#2D323B;
+                      display:flex;align-items:center;justify-content:center;
+                      font-size:18px;color:#F0A82E;flex-shrink:0;font-weight:700;">✓</div>
+          <div>
+            <div style="font-weight:700;color:#2D323B;font-size:14px;margin-bottom:4px;">
+              Completion Matrix
+            </div>
+            <div style="font-size:13px;color:#6E737B;line-height:1.5;">
+              Track which athletes have been scored for each game. Click any gap to jump straight to data entry.
+            </div>
+          </div>
+        </div>
+
+        <div style="background:#fff;border:1.5px solid #E5E7EB;border-radius:14px;
+                    padding:20px 18px;display:flex;gap:14px;align-items:flex-start;">
+          <div style="width:40px;height:40px;border-radius:10px;background:#2D323B;
+                      display:flex;align-items:center;justify-content:center;
+                      font-size:18px;color:#F0A82E;flex-shrink:0;font-weight:700;">▤</div>
+          <div>
+            <div style="font-weight:700;color:#2D323B;font-size:14px;margin-bottom:4px;">
+              Session Sheet
+            </div>
+            <div style="font-size:13px;color:#6E737B;line-height:1.5;">
+              Download a printable PDF recording sheet for your group — blank or pre-filled with existing scores.
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- ── Quick-start prompt ─────────────────────────────────────── -->
+      <div style="background:linear-gradient(135deg,#2D323B 0%,#3d434d 100%);
+                  border-radius:16px;padding:28px 32px;
+                  display:flex;align-items:center;gap:24px;">
+        <div style="width:52px;height:52px;border-radius:12px;background:rgba(240,168,46,0.15);
+                    display:flex;align-items:center;justify-content:center;
+                    font-size:26px;color:#F0A82E;font-weight:700;flex-shrink:0;">▲</div>
+        <div style="flex:1;">
+          <div style="font-size:17px;font-weight:700;color:#fff;margin-bottom:6px;">
+            Select a group and test phase to get started
+          </div>
+          <div style="font-size:13px;color:#adb3bb;line-height:1.6;">
+            Choose your group, the test phase, and optionally a month using the form above,
+            then click <strong style="color:#F0A82E;">Load</strong> to see your full session hub.
+          </div>
+        </div>
+        <div style="background:#F0A82E;border-radius:10px;padding:10px 20px;
+                    font-weight:700;font-size:13px;color:#2D323B;white-space:nowrap;flex-shrink:0;">
+          ↑ Start above
+        </div>
+      </div>
+
+    </div>"""
 
     # ── Measurement Window panel (shown when a group is selected) ─────────────
     window_panel = ""
@@ -5129,7 +5205,11 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
         <p class="muted">Completion overview · results entry · session sheet — all in one place.</p>
       </div>
     </div>
-    <div class="card form-card" style="margin-bottom:20px;">{selector_form}</div>
+    <div class="card form-card" style="margin-bottom:20px;">
+      <div style="font-size:11px;font-weight:700;color:#6E737B;text-transform:uppercase;
+                  letter-spacing:0.07em;margin-bottom:10px;">Load Session</div>
+      {selector_form}
+    </div>
     {window_panel}
     {content_html}
     <style>
