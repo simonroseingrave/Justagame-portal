@@ -11184,7 +11184,8 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
 
     snapshot_html = f"""
     <div style="margin-bottom:32px;">
-      <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#9CA3AF;margin-bottom:12px;">Group Snapshot</h2>
+      <h2 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+                 color:#2D323B;margin-bottom:12px;border-left:3px solid #F0A82E;padding-left:10px;">Group Snapshot</h2>
       <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">
         <table style="width:100%;border-collapse:collapse;">
           <thead>
@@ -11231,7 +11232,8 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
     if outlier_items:
         outliers_html = f"""
         <div style="margin-bottom:32px;">
-          <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#9CA3AF;margin-bottom:12px;">Athletes to Watch</h2>
+          <h2 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+                     color:#2D323B;margin-bottom:12px;border-left:3px solid #F0A82E;padding-left:10px;">Athletes to Watch</h2>
           <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:4px 16px;">
             {outlier_items}
           </div>
@@ -11285,23 +11287,27 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
         def game_card(area, is_primary=True):
             col = FAMILY_COLOURS.get(area["family"], "#6366F1")
             badge = "Primary Focus" if is_primary else "Complementary"
-            badge_col = "#EF4444" if is_primary else "#10B981"
+            if is_primary:
+                badge_style = "font-size:11px;font-weight:700;color:#2D323B;background:#F0A82E;border-radius:999px;padding:1px 9px;"
+            else:
+                badge_style = "font-size:11px;font-weight:700;color:rgba(255,255,255,0.80);background:#2D323B;border-radius:999px;padding:1px 9px;"
+            fam_plain = FAMILY_META.get(area["family"], {}).get("plain", area["family"])
             lvl_note = f"Group modal level: L{area['modal_level']}"
             adv = ", ".join(area["advanced_outliers"])
-            adv_note = (f'<div style="font-size:11px;color:#6366F1;margin-top:4px;">⭐ {esc(adv)} — extend constraints for these athletes</div>'
+            adv_note = (f'<div style="font-size:11px;color:#6366F1;margin-top:4px;">&#11088; {esc(adv)} — extend constraints</div>'
                         if adv else "")
             behind = ", ".join(area["behind_outliers"])
-            behind_note = (f'<div style="font-size:11px;color:#F59E0B;margin-top:4px;">🔍 {esc(behind)} — simplify constraints or extra reps</div>'
+            behind_note = (f'<div style="font-size:11px;color:#7A5800;margin-top:4px;">&#128269; {esc(behind)} — simplify or extra reps</div>'
                            if behind else "")
             pg = area.get("programme_games", [])
             if pg:
                 pg_chips = "".join(
-                    f'<span style="font-size:11px;font-weight:600;background:#EEF2FF;color:#3730A3;'
-                    f'border-radius:999px;padding:2px 10px;">{esc(g)}</span>'
+                    f'<span style="font-size:11px;font-weight:600;background:rgba(240,168,46,0.12);color:#7A5800;'
+                    f'border-radius:999px;padding:2px 10px;border:1px solid rgba(240,168,46,0.25);">{esc(g)}</span>'
                     for g in pg
                 )
                 pg_html = (f'<div style="margin-bottom:6px;">'
-                           f'<span style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.04em;">Programme games</span>'
+                           f'<span style="font-size:10px;font-weight:700;color:#9CA3AF;text-transform:uppercase;letter-spacing:.05em;">Programme games</span>'
                            f'<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;">{pg_chips}</div>'
                            f'</div>')
             else:
@@ -11310,13 +11316,12 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
             <div style="background:#fff;border:1px solid #E5E7EB;border-left:3px solid {col};
                         border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:10px;">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
-                <span style="font-size:11px;font-weight:700;color:{badge_col};background:{'#FEF2F2' if is_primary else '#D1FAE5'};
-                             border-radius:999px;padding:1px 8px;">{badge}</span>
+                <span style="{badge_style}">{badge}</span>
                 <span style="font-size:13px;font-weight:700;color:#2D323B;">{esc(area['display'])}</span>
-                <span style="font-size:11px;color:#9CA3AF;">{esc(area['family'])}</span>
+                <span style="font-size:11px;color:{col};font-style:italic;">{esc(fam_plain)}</span>
               </div>
               {pg_html}
-              <div style="font-size:11px;color:#6B7280;">{lvl_note}</div>
+              <div style="font-size:11px;color:#9CA3AF;">{lvl_note}</div>
               {adv_note}{behind_note}
             </div>"""
 
@@ -11327,14 +11332,15 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
         test_games = primary.get("test_games", [])
         if test_games:
             tg_chips = "".join(
-                f'<span style="font-size:11px;font-weight:600;background:#F0FDF4;color:#065F46;'
-                f'border-radius:999px;padding:2px 10px;border:1px solid #BBF7D0;">{esc(g)}</span>'
+                f'<span style="font-size:11px;font-weight:600;background:rgba(45,50,59,0.07);color:#2D323B;'
+                f'border-radius:999px;padding:2px 10px;border:1px solid rgba(45,50,59,0.15);">{esc(g)}</span>'
                 for g in test_games
             )
-            test_html = (f'<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:10px 14px;margin-bottom:10px;">'
-                         f'<div style="font-size:11px;font-weight:700;color:#065F46;margin-bottom:6px;">🧪 Optional Test Games</div>'
+            test_html = (f'<div style="background:rgba(45,50,59,0.04);border:1px solid rgba(45,50,59,0.12);'
+                         f'border-radius:8px;padding:10px 14px;margin-bottom:10px;">'
+                         f'<div style="font-size:11px;font-weight:700;color:#2D323B;margin-bottom:6px;">&#128203; Optional Test Games</div>'
                          f'<div style="display:flex;flex-wrap:wrap;gap:5px;">{tg_chips}</div>'
-                         f'<div style="font-size:11px;color:#374151;margin-top:6px;">Run these alongside sessions for informal self-testing.</div>'
+                         f'<div style="font-size:11px;color:#6B7280;margin-top:6px;">Run alongside sessions for informal self-testing.</div>'
                          f'</div>')
         else:
             test_html = ""
@@ -11354,8 +11360,9 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
 
     plan_html = f"""
     <div style="margin-bottom:32px;">
-      <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#9CA3AF;margin-bottom:4px;">5-Week Session Guide</h2>
-      <p style="font-size:12px;color:#9CA3AF;margin-bottom:16px;">
+      <h2 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+                 color:#2D323B;margin-bottom:4px;border-left:3px solid #F0A82E;padding-left:10px;">5-Week Session Guide</h2>
+      <p style="font-size:12px;color:#6B7280;margin-bottom:16px;padding-left:13px;">
         This is a suggestion — use your judgement and adjust based on what you see in the session.
       </p>
       {sessions_html}
@@ -11366,10 +11373,18 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
 
     # ── Family summary cards ──────────────────────────────────────────────────
     FAMILY_META = {
-        "Balance & Postural Control": {"icon": "⚖️", "colour": "#6366F1"},
-        "Explosive & Landing":        {"icon": "🚀", "colour": "#F59E0B"},
-        "Dynamic Locomotor":          {"icon": "⚡", "colour": "#10B981"},
-        "Perceptual-Motor Speed":     {"icon": "👁️", "colour": "#EF4444"},
+        "Balance & Postural Control": {"icon": "⚖️", "colour": "#6366F1",
+                                       "plain": "Balance and Postural Control",
+                                       "tag": "staying steady under pressure"},
+        "Explosive & Landing":        {"icon": "🚀", "colour": "#F59E0B",
+                                       "plain": "Explosive & Landing",
+                                       "tag": "power, force and safe landing"},
+        "Dynamic Locomotor":          {"icon": "⚡", "colour": "#10B981",
+                                       "plain": "Dynamic Locomotor",
+                                       "tag": "speed and efficient movement"},
+        "Perceptual-Motor Speed":     {"icon": "👁️", "colour": "#EF4444",
+                                       "plain": "Perceptual-Motor Speed",
+                                       "tag": "reading the game and reacting"},
     }
     family_buckets = {}
     for a in area_analysis:
@@ -11391,36 +11406,53 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
         if not gaps and not strengths and not mixed:
             continue
         if gaps and not strengths:
-            status_tag = '<span style="font-size:11px;font-weight:700;color:#991B1B;background:#FEF2F2;border-radius:999px;padding:2px 10px;">Focus area</span>'
+            status_tag = ('<span style="font-size:11px;font-weight:700;color:#991B1B;'
+                          'background:rgba(239,68,68,0.10);border-radius:999px;padding:2px 10px;">Focus area</span>')
         elif strengths and not gaps:
-            status_tag = '<span style="font-size:11px;font-weight:700;color:#065F46;background:#D1FAE5;border-radius:999px;padding:2px 10px;">Strength</span>'
+            status_tag = ('<span style="font-size:11px;font-weight:700;color:#065F46;'
+                          'background:rgba(30,190,139,0.12);border-radius:999px;padding:2px 10px;">Strength</span>')
         else:
-            status_tag = '<span style="font-size:11px;font-weight:700;color:#92400E;background:#FEF3C7;border-radius:999px;padding:2px 10px;">Mixed</span>'
+            status_tag = ('<span style="font-size:11px;font-weight:700;color:#92400E;'
+                          'background:rgba(240,168,46,0.15);border-radius:999px;padding:2px 10px;">Mixed</span>')
 
         detail_parts = []
         if gaps:
-            detail_parts.append(f'<span style="color:#EF4444;">▼ {", ".join(gaps)}</span>')
+            detail_parts.append(
+                f'<span style="font-size:11px;color:#6B7280;">'
+                f'<span style="color:#B91C1C;font-weight:700;">&#9660;</span> '
+                f'{", ".join(gaps)}</span>')
         if strengths:
-            detail_parts.append(f'<span style="color:#10B981;">✓ {", ".join(strengths)}</span>')
+            detail_parts.append(
+                f'<span style="font-size:11px;color:#6B7280;">'
+                f'<span style="color:#1EBE8B;font-weight:700;">&#10003;</span> '
+                f'{", ".join(strengths)}</span>')
         if mixed:
-            detail_parts.append(f'<span style="color:#F59E0B;">~ {", ".join(mixed)}</span>')
+            detail_parts.append(
+                f'<span style="font-size:11px;color:#6B7280;">'
+                f'<span style="color:#F0A82E;font-weight:700;">~</span> '
+                f'{", ".join(mixed)}</span>')
 
         family_cards_html += f"""
         <div style="border:1px solid #E5E7EB;border-left:4px solid {meta['colour']};
                     border-radius:0 10px 10px 0;padding:14px 16px;background:#fff;">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
             <span style="font-size:18px;">{meta['icon']}</span>
-            <span style="font-size:13px;font-weight:700;color:#2D323B;">{esc(fam)}</span>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:13px;font-weight:700;color:#2D323B;">{esc(meta['plain'])}</div>
+              <div style="font-size:11px;color:{meta['colour']};font-style:italic;">{esc(meta['tag'])}</div>
+            </div>
             {status_tag}
           </div>
-          <div style="font-size:11px;line-height:1.8;display:flex;flex-direction:column;gap:2px;">
-            {"".join(f"<span>{p}</span>" for p in detail_parts)}
+          <div style="margin-top:8px;display:flex;flex-direction:column;gap:3px;">
+            {"".join(f"<div>{p}</div>" for p in detail_parts)}
           </div>
         </div>"""
 
     families_section = f"""
     <div style="margin-bottom:28px;">
-      <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#9CA3AF;margin-bottom:12px;">Movement Families Overview</h2>
+      <h2 style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+                 color:#2D323B;margin-bottom:12px;border-left:3px solid #F0A82E;padding-left:10px;">
+        Movement Families Overview</h2>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">
         {family_cards_html}
       </div>
@@ -11428,26 +11460,37 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
 
     body = f"""
     <div style="max-width:900px;margin:0 auto;padding:32px 16px 48px;">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:12px;">
-        <div>
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#F0A82E;margin-bottom:4px;">Next Steps Report</div>
-          <h1 style="font-size:24px;font-weight:800;color:#2D323B;margin:0 0 4px;">{group_name}</h1>
-          <p style="font-size:13px;color:#6B7280;margin:0;">{n_athletes} athletes · Generated {today}</p>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <a href="/coach/group-hub" class="btn btn-ghost btn-sm">&larr; Group Hub</a>
-          <button onclick="window.print()" class="btn btn-primary btn-sm">🖨 Print</button>
-        </div>
-      </div>
 
-      <div style="background:linear-gradient(135deg,#2D323B 0%,#3D434F 100%);border-radius:12px;
-                  padding:16px 20px;margin-bottom:28px;margin-top:16px;">
-        <p style="font-size:13px;color:rgba(255,255,255,0.8);margin:0;line-height:1.6;">
+      <!-- Hero banner -->
+      <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                  padding:24px 28px;margin-bottom:24px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;
+                    gap:16px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:16px;">
+            <div style="width:48px;height:48px;border-radius:13px;background:rgba(240,168,46,0.18);
+                        border:1px solid rgba(240,168,46,0.35);display:flex;align-items:center;
+                        justify-content:center;font-size:20px;font-weight:700;color:#F0A82E;
+                        flex-shrink:0;">&#9654;</div>
+            <div>
+              <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;
+                          color:rgba(255,255,255,0.45);margin-bottom:3px;">Next Steps Report</div>
+              <h1 style="font-size:22px;font-weight:800;color:#FFFFFF;margin:0 0 3px;">{group_name}</h1>
+              <p style="font-size:12px;color:rgba(255,255,255,0.45);margin:0;">{n_athletes} athletes &middot; Generated {today}</p>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <a href="/coach/group-hub" class="btn btn-ghost btn-sm"
+               style="color:rgba(255,255,255,0.70);border-color:rgba(255,255,255,0.25);">&larr; Group Hub</a>
+            <button onclick="window.print()" class="btn btn-primary btn-sm">&#128438; Print</button>
+          </div>
+        </div>
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.10);
+                    font-size:13px;color:rgba(255,255,255,0.65);line-height:1.6;">
           Based on your group's latest measurement results, this report suggests a 5-week session focus —
           mixing development areas with strengths so sessions stay engaging.
           Each week shows recommended programme games and optional test games to run alongside.
           <strong style="color:#F0A82E;">Adjust freely</strong> — this is a guide, not a prescription.
-        </p>
+        </div>
       </div>
 
       {families_section}
