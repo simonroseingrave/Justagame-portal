@@ -146,6 +146,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
                 ("/coach/group-hub",  "Group Hub",    "group_hub"),
                 ("/coach/leaderboard","Leaderboard",  "leaderboard"),
                 ("/coach/progress",   "Reports",      "progress"),
+                ("/coach/resources",  "Resources",    "resources"),
                 ("/help",             "Help",         "help"),
             ]
             nav_items = "".join(
