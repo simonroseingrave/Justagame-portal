@@ -1806,8 +1806,25 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
                       f'{tiles_html or empty_msg}</div>')
         folder_handle = '<span class="drag-handle folder-handle" title="Drag to reorder groups" style="color:var(--jag-muted);cursor:grab;font-size:16px;">&#9776;</span>' if is_admin else ""
         summary_link = (f'<a href="/coach/groups/{group["id"]}/achievement-summary" class="btn btn-sm" style="font-size:12px;background:var(--jag-green);color:var(--jag-navy);font-weight:600;border:none;">&#128200; Group Stats</a>'
-                        f'<a href="/coach/groups/{group["id"]}/scores" class="btn btn-sm btn-ghost" style="font-size:12px;">&#128203; Scores Table</a>'
-                        f'<a href="/coach/groups/{group["id"]}/next-steps" class="btn btn-sm btn-ghost" style="font-size:12px;">&#128161; Next Steps</a>')
+                        f'<a href="/coach/groups/{group["id"]}/scores" class="btn btn-sm btn-ghost" style="font-size:12px;">&#128203; Scores Table</a>')
+        next_steps_cta = f"""
+        <a href="/coach/groups/{group['id']}/next-steps"
+           style="display:flex;align-items:center;gap:14px;
+                  background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);
+                  border-radius:12px;padding:14px 18px;margin-bottom:12px;
+                  text-decoration:none;box-shadow:0 2px 8px rgba(45,50,59,0.12);"
+           onmouseover="this.style.boxShadow='0 6px 20px rgba(240,168,46,0.22)'"
+           onmouseout="this.style.boxShadow='0 2px 8px rgba(45,50,59,0.12)'">
+          <div style="width:36px;height:36px;border-radius:10px;flex-shrink:0;
+                      background:rgba(240,168,46,0.18);border:1px solid rgba(240,168,46,0.38);
+                      display:flex;align-items:center;justify-content:center;
+                      font-size:16px;color:#F0A82E;">&#9654;</div>
+          <div style="flex:1;min-width:0;">
+            <div style="font-size:14px;font-weight:800;color:#FFFFFF;line-height:1.2;">Next Steps</div>
+            <div style="font-size:11px;color:rgba(255,255,255,0.45);margin-top:1px;">Programme Progress Design</div>
+          </div>
+          <div style="font-size:18px;color:#F0A82E;font-weight:700;">&#8594;</div>
+        </a>"""
         type_opts_rl = "".join(
             f'<option value="{s["key"]}">{esc(s["label"])}</option>'
             for s in SESSION_TYPES
@@ -1887,6 +1904,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
             </div>
           </div>
           {relabel_form}
+          {next_steps_cta}
           {tiles_wrap}
         </div>"""
 
