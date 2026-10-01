@@ -9900,9 +9900,9 @@ def athlete_quickstart_card_pdf(participant, xp_data, levels):
     hdr_sub   = S("hs", fontSize=10, fontName="Helvetica",      textColor=GOLD)
     body      = S("b",  fontSize=9,  fontName="Helvetica",      textColor=NAVY, leading=13)
     body_mute = S("bm", fontSize=8,  fontName="Helvetica",      textColor=MUTED, leading=12)
-    sec_head  = S("sh", fontSize=9,  fontName="Helvetica-Bold", textColor=MUTED,
+    sec_head  = S("sh", fontSize=8,  fontName="Helvetica-Bold", textColor=NAVY,
                   spaceBefore=10, spaceAfter=4,
-                  textTransform="uppercase", letterSpacing=0.8)
+                  textTransform="uppercase", letterSpacing=1.0)
     tier_sty  = S("ts", fontSize=11, fontName="Helvetica-Bold", textColor=WHITE,
                   alignment=TA_CENTER)
     xp_big    = S("xb", fontSize=22, fontName="Helvetica-Bold", textColor=GOLD,
@@ -9939,17 +9939,8 @@ def athlete_quickstart_card_pdf(participant, xp_data, levels):
     story.append(Spacer(1, 8))
 
     # ── XP hero + tier ────────────────────────────────────────────────────────
-    tier_chip = Table(
-        [[Paragraph(tier_label, tier_sty)]],
-        colWidths=[36*mm]
-    )
-    tier_chip.setStyle(TableStyle([
-        ("BACKGROUND",    (0, 0), (-1, -1), tier_col),
-        ("TOPPADDING",    (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 6),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 6),
-    ]))
+    DARK_DIV = colors.HexColor("#3D4350")   # subtle divider on navy bg
+    PALE     = colors.HexColor("#9CA3AF")   # muted text on navy bg
 
     # Find next tier
     next_tier = None
@@ -9960,49 +9951,87 @@ def athlete_quickstart_card_pdf(participant, xp_data, levels):
     next_str = (f"{next_tier['min_xp'] - total_xp:,} AXP to {next_tier['label']}"
                 if next_tier else "Maximum rank achieved!")
 
-    xp_cell = [
-        Paragraph(f"{total_xp:,}", xp_big),
-        Paragraph("YOUR AXP", xp_lbl),
-        Spacer(1, 4),
+    # LEFT: number block — explicit rowHeights prevent the overlap bug
+    num_block = Table(
+        [[Paragraph(f"{total_xp:,}", S("xb2", fontSize=26, fontName="Helvetica-Bold",
+                                        textColor=GOLD, alignment=TA_CENTER, leading=30))],
+         [Paragraph("YOUR AXP", S("xl2", fontSize=8,  fontName="Helvetica",
+                                   textColor=PALE, alignment=TA_CENTER))]],
+        colWidths=[W * 0.28],
+        rowHeights=[32, 14],
+    )
+    num_block.setStyle(TableStyle([
+        ("TOPPADDING",    (0, 0), (-1, -1), 0),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+    ]))
+
+    # MIDDLE: tier badge + progress note
+    tier_chip = Table(
+        [[Paragraph(tier_label, S("tc2", fontSize=10, fontName="Helvetica-Bold",
+                                   textColor=WHITE, alignment=TA_CENTER))]],
+        colWidths=[34*mm]
+    )
+    tier_chip.setStyle(TableStyle([
+        ("BACKGROUND",    (0, 0), (-1, -1), tier_col),
+        ("TOPPADDING",    (0, 0), (-1, -1), 4),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 8),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 8),
+    ]))
+    mid_cell = [
         tier_chip,
-        Spacer(1, 4),
-        Paragraph(next_str, body_mute),
+        Spacer(1, 5),
+        Paragraph(next_str, S("ns2", fontSize=8, fontName="Helvetica",
+                               textColor=PALE, leading=11)),
     ]
 
-    # Tier ladder mini-table
+    # RIGHT: tier ladder with coloured dots
+    DIM_NAVY = colors.HexColor("#3A404B")
     tier_rows = []
     for t in XP_RANK_TIERS:
-        tc = colors.HexColor(t["colour"])
+        tc       = colors.HexColor(t["colour"])
         achieved = total_xp >= t["min_xp"]
-        mark = "✓" if achieved else ""
-        tier_rows.append([
-            Paragraph(mark, S("m", fontSize=8, fontName="Helvetica-Bold",
-                               textColor=tc, alignment=TA_CENTER)),
-            Paragraph(t["label"], S("tl", fontSize=8, fontName="Helvetica-Bold",
-                                     textColor=tc if achieved else MUTED)),
-            Paragraph(f"{t['min_xp']:,} AXP",
-                      S("tv", fontSize=8, fontName="Helvetica", textColor=MUTED)),
-        ])
-    tier_ladder = Table(tier_rows, colWidths=[8*mm, 28*mm, 28*mm])
-    tier_ladder.setStyle(TableStyle([
-        ("TOPPADDING",    (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 2),
+        current  = (t["label"] == tier_label)
+        dot_bg   = tc if achieved else DIM_NAVY
+        dot = Table([[""]], colWidths=[3.5*mm], rowHeights=[3.5*mm])
+        dot.setStyle(TableStyle([
+            ("BACKGROUND",    (0, 0), (-1, -1), dot_bg),
+            ("TOPPADDING",    (0, 0), (-1, -1), 0),
+            ("BOTTOMPADDING", (0, 0), (-1, -1), 0),
+            ("LEFTPADDING",   (0, 0), (-1, -1), 0),
+            ("RIGHTPADDING",  (0, 0), (-1, -1), 0),
+        ]))
+        name_style = S("tl2", fontSize=8,
+                       fontName="Helvetica-Bold" if current else "Helvetica",
+                       textColor=tc if achieved else PALE)
+        val_style  = S("tv2", fontSize=7, fontName="Helvetica", textColor=PALE)
+        tier_rows.append([dot,
+                          Paragraph(t["label"], name_style),
+                          Paragraph(f"{t['min_xp']:,} AXP", val_style)])
+    ladder = Table(tier_rows, colWidths=[5*mm, 26*mm, 24*mm])
+    ladder.setStyle(TableStyle([
+        ("TOPPADDING",    (0, 0), (-1, -1), 2.5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 2.5),
         ("LEFTPADDING",   (0, 0), (-1, -1), 0),
         ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
+        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
     ]))
 
     xp_section = Table(
-        [[xp_cell, tier_ladder]],
-        colWidths=[W * 0.45, W * 0.55]
+        [[num_block, mid_cell, ladder]],
+        colWidths=[W * 0.28, W * 0.38, W * 0.34]
     )
     xp_section.setStyle(TableStyle([
-        ("BACKGROUND",    (0, 0), (-1, -1), LIGHT),
-        ("TOPPADDING",    (0, 0), (-1, -1), 12),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 12),
-        ("LEFTPADDING",   (0, 0), (-1, -1), 12),
-        ("RIGHTPADDING",  (0, 0), (-1, -1), 12),
-        ("VALIGN",        (0, 0), (-1, -1), "TOP"),
-        ("LINEAFTER",     (0, 0), (0, -1), 0.5, BORDER),
+        ("BACKGROUND",    (0, 0), (-1, -1), NAVY),
+        ("TOPPADDING",    (0, 0), (-1, -1), 14),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 14),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 14),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 14),
+        ("VALIGN",        (0, 0), (-1, -1), "MIDDLE"),
+        ("LINEAFTER",     (0, 0), (0, -1), 0.5, DARK_DIV),
+        ("LINEAFTER",     (1, 0), (1, -1), 0.5, DARK_DIV),
     ]))
     story.append(xp_section)
     story.append(Spacer(1, 8))
