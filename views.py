@@ -6103,31 +6103,8 @@ def group_session_page(coach, participants, groups=None, session_types=None):
     today = __import__("datetime").date.today().isoformat()
     show_group_filter = "block" if groups else "none"
 
-    body = f"""
-    <div class="page-head"><h1>Record Session</h1></div>
-
-    <!-- Recording-for banner: hidden until athlete selected -->
-    <div id="qs-banner" style="display:none;position:sticky;top:0;z-index:100;
-         background:#2D323B;color:#F0A82E;padding:10px 20px;margin-bottom:16px;
-         border-radius:8px;display:flex;align-items:center;justify-content:space-between;
-         flex-wrap:wrap;gap:8px;font-size:14px;font-weight:700;">
-      <span>&#128203; Recording for: <span id="qs-banner-name" style="color:#fff;"></span></span>
-      <span id="qs-progress-badge"
-            style="background:#F0A82E;color:#2D323B;border-radius:999px;
-                   padding:3px 12px;font-size:12px;font-weight:800;">0 saved</span>
-    </div>
-
-    <div class="card form-card" style="max-width:560px;">
-      {_session_label_pickers()}
-
-      <div id="qs-group-wrap" style="display:{show_group_filter}; margin-bottom:16px;">
-        <label for="qs-group">Group</label>
-        <select id="qs-group">{group_opts}</select>
-      </div>
-
-      <label for="qs-athlete">Athlete</label>
-      <select id="qs-athlete" style="margin-bottom:16px;">{athlete_opts}</select>
-
+    has_sport_specific = bool(SPORT_SPECIFIC_GAMES)
+    sport_section = f"""
       <div style="padding-top:14px; border-top:1px solid var(--jag-border); margin-bottom:12px;">
         <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin:0 0 12px; font-size:14px; font-weight:600;">
           <input type="checkbox" id="qs-sport-check" style="width:auto; margin:0;" />
@@ -6140,17 +6117,76 @@ def group_session_page(coach, participants, groups=None, session_types=None):
             {qs_sport_opts}
           </select>
         </div>
+      </div>""" if has_sport_specific else ""
+
+    body = f"""
+    <!-- Recording-for banner: hidden until athlete selected -->
+    <div id="qs-banner" style="display:none;position:sticky;top:0;z-index:100;
+         background:#2D323B;padding:12px 20px;margin-bottom:20px;
+         border-radius:10px;flex-direction:row;align-items:center;justify-content:space-between;
+         flex-wrap:wrap;gap:8px;">
+      <div style="display:flex;align-items:center;gap:10px;">
+        <div style="width:36px;height:36px;border-radius:50%;background:#F0A82E;
+                    display:flex;align-items:center;justify-content:center;
+                    font-size:16px;flex-shrink:0;">📋</div>
+        <div>
+          <div style="font-size:11px;color:rgba(255,255,255,0.5);text-transform:uppercase;letter-spacing:.06em;">Recording for</div>
+          <div id="qs-banner-name" style="font-size:16px;font-weight:800;color:#fff;line-height:1.2;"></div>
+        </div>
       </div>
-
-      <label for="qs-field">Measurement Field</label>
-      <select id="qs-field" style="margin-bottom:16px;">{field_opts}</select>
-
-      <div id="qs-fields" style="margin-top:4px;"></div>
+      <span id="qs-progress-badge"
+            style="background:#F0A82E;color:#2D323B;border-radius:999px;
+                   padding:5px 16px;font-size:13px;font-weight:800;">0 saved</span>
     </div>
 
-    <div class="card" style="max-width:560px; margin-top:16px;">
-      <h3 style="margin:0 0 10px; font-size:15px; color:#2D323B;">Session Log</h3>
-      <div id="qs-log" style="font-size:13px; color:var(--jag-muted);">Nothing saved yet.</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:900px;align-items:start;">
+
+      <!-- LEFT: Setup card -->
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="background:#2D323B;padding:14px 18px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#F0A82E;margin-bottom:2px;">Step 1</div>
+          <div style="font-size:15px;font-weight:700;color:#fff;">Session Setup</div>
+        </div>
+        <div style="padding:18px;">
+          {_session_label_pickers()}
+          <div id="qs-group-wrap" style="display:{show_group_filter}; margin-bottom:16px;">
+            <label for="qs-group">Group</label>
+            <select id="qs-group">{group_opts}</select>
+          </div>
+          <label for="qs-athlete">Athlete</label>
+          <select id="qs-athlete" style="margin-bottom:0;">{athlete_opts}</select>
+        </div>
+      </div>
+
+      <!-- RIGHT: Score entry card -->
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="background:#2D323B;padding:14px 18px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#F0A82E;margin-bottom:2px;">Step 2</div>
+          <div style="font-size:15px;font-weight:700;color:#fff;">Enter Score</div>
+        </div>
+        <div style="padding:18px;">
+          {sport_section}
+          <label for="qs-field">Measurement Field</label>
+          <select id="qs-field" style="margin-bottom:16px;">{field_opts}</select>
+          <div id="qs-fields" style="margin-top:4px;"></div>
+          <div id="qs-score-hint" style="color:var(--jag-muted);font-size:13px;margin-top:8px;">
+            Select an athlete and a measurement field to enter a score.
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Session Log -->
+    <div style="max-width:900px;margin-top:16px;">
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div style="background:#F9FAFB;border-bottom:1px solid #E5E7EB;padding:12px 18px;
+                    display:flex;align-items:center;justify-content:space-between;">
+          <span style="font-size:13px;font-weight:700;color:#2D323B;">Session Log</span>
+          <span id="qs-log-count" style="font-size:12px;color:var(--jag-muted);">Nothing saved yet</span>
+        </div>
+        <div id="qs-log" style="padding:12px 18px;font-size:13px;color:var(--jag-muted);min-height:60px;"></div>
+      </div>
     </div>
 
     <script>
@@ -6172,6 +6208,8 @@ def group_session_page(coach, participants, groups=None, session_types=None):
       var bannerEl     = document.getElementById('qs-banner');
       var bannerNameEl = document.getElementById('qs-banner-name');
       var progressEl   = document.getElementById('qs-progress-badge');
+      var scoreHintEl  = document.getElementById('qs-score-hint');
+      var logCountEl   = document.getElementById('qs-log-count');
 
       // Cache original base field options (optgroups + options)
       var baseFieldOpts = Array.from(fieldEl.childNodes).map(function(n) {{ return n.cloneNode(true); }});
@@ -6188,6 +6226,9 @@ def group_session_page(coach, participants, groups=None, session_types=None):
           bannerNameEl.textContent = name;
         }} else if (bannerEl) {{
           bannerEl.style.display = 'none';
+        }}
+        if (scoreHintEl) {{
+          scoreHintEl.style.display = athleteEl.value ? 'none' : 'block';
         }}
       }}
       athleteEl.addEventListener('change', updateBanner);
@@ -6259,12 +6300,15 @@ def group_session_page(coach, participants, groups=None, session_types=None):
         div.className = 'mg-field';
         div.style.marginBottom = '12px';
         div.innerHTML =
-          '<label style="font-size:13px; font-weight:600; display:block; margin-bottom:4px;">' +
-            f.label + suffix +
-          '</label>' +
-          '<div class="mg-field-row">' +
-            '<input type="number" step="' + step + '" min="0" id="qs-single-input" style="max-width:160px;" />' +
-            '<button type="button" class="mg-save-btn" id="qs-single-btn">&#10003; Save</button>' +
+          '<div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;padding:14px 16px;">' +
+            '<div style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#9CA3AF;margin-bottom:6px;">' + f.game_name + '</div>' +
+            '<label style="font-size:14px; font-weight:700; display:block; margin-bottom:10px;color:#2D323B;">' +
+              f.label + suffix +
+            '</label>' +
+            '<div class="mg-field-row" style="display:flex;gap:8px;align-items:center;">' +
+              '<input type="number" step="' + step + '" min="0" id="qs-single-input" style="max-width:140px;font-size:20px;font-weight:700;text-align:center;padding:8px 12px;" />' +
+              '<button type="button" class="mg-save-btn btn btn-primary" id="qs-single-btn" style="white-space:nowrap;padding:8px 20px;">&#10003; Save</button>' +
+            '</div>' +
           '</div>';
         fieldsEl.appendChild(div);
 
@@ -6336,15 +6380,18 @@ def group_session_page(coach, participants, groups=None, session_types=None):
           var timeStr = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
           var displayVal = value + (fieldType === 'time' ? 's' : '');
           var entry = document.createElement('div');
-          entry.style.cssText = 'padding:8px 12px;margin-bottom:8px;border-radius:6px;border-left:3px solid #F0A82E;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.06);';
+          entry.style.cssText = 'padding:10px 14px;margin-bottom:8px;border-radius:8px;border-left:3px solid #F0A82E;background:#FFFBEB;display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;';
           entry.innerHTML =
-            '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:4px;">' +
-              '<span style="font-weight:700;color:#2D323B;font-size:13px;">' + athleteName + '</span>' +
-              '<span style="font-size:11px;color:#6E737B;">' + timeStr + '</span>' +
+            '<div>' +
+              '<div style="font-weight:700;color:#2D323B;font-size:13px;">' + athleteName + '</div>' +
+              '<div style="font-size:12px;color:#6E737B;margin-top:1px;">' + gameName + ' — ' + fieldLabel + '</div>' +
             '</div>' +
-            '<div style="font-size:12px;color:#6E737B;margin-top:2px;">' + gameName + ' &mdash; ' + fieldLabel + '</div>' +
-            '<div style="font-size:15px;font-weight:800;color:#2D323B;margin-top:4px;">' + displayVal + '</div>';
+            '<div style="display:flex;align-items:center;gap:10px;">' +
+              '<span style="font-size:18px;font-weight:800;color:#2D323B;">' + displayVal + '</span>' +
+              '<span style="font-size:11px;color:#9CA3AF;">' + timeStr + '</span>' +
+            '</div>';
           logEl.insertBefore(entry, logEl.firstChild);
+          if (logCountEl) logCountEl.textContent = savedCount + ' score' + (savedCount !== 1 ? 's' : '') + ' saved';
         }} catch(e) {{
           markBtn(btn, 'error');
         }}
