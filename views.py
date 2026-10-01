@@ -3948,30 +3948,43 @@ def achievement_stats_pdf(title, subtitle, groups_sections, max_level=None):
     )
 
     # Styles
-    t_style  = ParagraphStyle("t",  fontName="Helvetica-Bold", fontSize=16, textColor=JAG_NAVY)
-    s_style  = ParagraphStyle("s",  fontName="Helvetica",      fontSize=9,  textColor=JAG_GREY)
-    g_style  = ParagraphStyle("g",  fontName="Helvetica-Bold", fontSize=11, textColor=colors.white)
-    gm_style = ParagraphStyle("gm", fontName="Helvetica-Bold", fontSize=9,  textColor=JAG_NAVY)
-    hdr_s    = ParagraphStyle("hd", fontName="Helvetica-Bold", fontSize=7,  textColor=colors.white,
-                               alignment=TA_CENTER, leading=9)
-    fld_s    = ParagraphStyle("fl", fontName="Helvetica-Bold", fontSize=7,  textColor=JAG_NAVY,
-                               alignment=TA_LEFT, leading=9)
-    val_s    = ParagraphStyle("vl", fontName="Helvetica",      fontSize=8,  alignment=TA_CENTER)
-    pct_s    = ParagraphStyle("pc", fontName="Helvetica-Bold", fontSize=8,  alignment=TA_CENTER)
-    pct_g    = ParagraphStyle("pg", fontName="Helvetica-Bold", fontSize=8,  textColor=JAG_GREEN, alignment=TA_CENTER)
-    pct_r    = ParagraphStyle("pr", fontName="Helvetica-Bold", fontSize=8,  textColor=JAG_RED,   alignment=TA_CENTER)
-    sec_s    = ParagraphStyle("sc", fontName="Helvetica-Bold", fontSize=7,  textColor=JAG_GREY,
-                               alignment=TA_LEFT, leading=9)
+    t_style      = ParagraphStyle("t",  fontName="Helvetica-Bold", fontSize=16, textColor=JAG_NAVY)
+    s_style      = ParagraphStyle("s",  fontName="Helvetica",      fontSize=9,  textColor=JAG_GREY)
+    hero_title_s = ParagraphStyle("ht", fontName="Helvetica-Bold", fontSize=20, textColor=colors.white, leading=26)
+    hero_sub_s   = ParagraphStyle("hs", fontName="Helvetica",      fontSize=9,  textColor=JAG_GOLD,     leading=13)
+    g_style      = ParagraphStyle("g",  fontName="Helvetica-Bold", fontSize=11, textColor=colors.white)
+    gm_style     = ParagraphStyle("gm", fontName="Helvetica-Bold", fontSize=9,  textColor=JAG_NAVY)
+    hdr_s        = ParagraphStyle("hd", fontName="Helvetica-Bold", fontSize=7,  textColor=colors.white,
+                                   alignment=TA_CENTER, leading=9)
+    fld_s        = ParagraphStyle("fl", fontName="Helvetica-Bold", fontSize=7,  textColor=JAG_NAVY,
+                                   alignment=TA_LEFT, leading=9)
+    val_s        = ParagraphStyle("vl", fontName="Helvetica",      fontSize=8,  alignment=TA_CENTER)
+    pct_s        = ParagraphStyle("pc", fontName="Helvetica-Bold", fontSize=8,  alignment=TA_CENTER)
+    pct_g        = ParagraphStyle("pg", fontName="Helvetica-Bold", fontSize=8,  textColor=JAG_GREEN, alignment=TA_CENTER)
+    pct_r        = ParagraphStyle("pr", fontName="Helvetica-Bold", fontSize=8,  textColor=JAG_RED,   alignment=TA_CENTER)
+    sec_s        = ParagraphStyle("sc", fontName="Helvetica-Bold", fontSize=7,  textColor=JAG_NAVY,
+                                   alignment=TA_LEFT, leading=9)
 
     today = _dt.date.today().strftime("%d %B %Y")
     story = []
 
-    # Page title block
-    story.append(Paragraph(title, t_style))
-    story.append(Spacer(1, 1*mm))
-    story.append(Paragraph(f"{subtitle} &nbsp;&middot;&nbsp; Generated {today} &nbsp;&middot;&nbsp; Just A Game", s_style))
-    story.append(Spacer(1, 4*mm))
-    story.append(HRFlowable(width="100%", thickness=1.5, color=JAG_GOLD))
+    # Hero banner
+    hero_tbl = Table(
+        [[Paragraph(title, hero_title_s)],
+         [Paragraph(f"{subtitle} &nbsp;&middot;&nbsp; Generated {today} &nbsp;&middot;&nbsp; Just A Game", hero_sub_s)]],
+        colWidths=[page_w],
+    )
+    hero_tbl.setStyle(TableStyle([
+        ("BACKGROUND",    (0, 0), (-1, -1), JAG_NAVY),
+        ("TOPPADDING",    (0, 0), (0,  0),  12),
+        ("BOTTOMPADDING", (0, 0), (0,  0),  4),
+        ("TOPPADDING",    (0, 1), (0,  1),  0),
+        ("BOTTOMPADDING", (0, 1), (0,  1),  12),
+        ("LEFTPADDING",   (0, 0), (-1, -1), 16),
+        ("RIGHTPADDING",  (0, 0), (-1, -1), 16),
+        ("LINEBELOW",     (0, 1), (-1, 1),  2.5, JAG_GOLD),
+    ]))
+    story.append(hero_tbl)
     story.append(Spacer(1, 6*mm))
 
     page_w = page_size[0] - 24*mm   # usable width after margins
@@ -4050,8 +4063,19 @@ def achievement_stats_pdf(title, subtitle, groups_sections, max_level=None):
                 has_any_data = True
 
                 if not section_header_added:
-                    story.append(Paragraph(section["section"].upper(), sec_s))
-                    story.append(Spacer(1, 1*mm))
+                    sec_tbl = Table(
+                        [[Paragraph(section["section"].upper(), sec_s)]],
+                        colWidths=[page_w]
+                    )
+                    sec_tbl.setStyle(TableStyle([
+                        ("LINEBEFORE",    (0, 0), (0, -1), 3, JAG_GOLD),
+                        ("TOPPADDING",    (0, 0), (-1, -1), 4),
+                        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+                        ("LEFTPADDING",   (0, 0), (-1, -1), 10),
+                        ("RIGHTPADDING",  (0, 0), (-1, -1), 4),
+                    ]))
+                    story.append(sec_tbl)
+                    story.append(Spacer(1, 2*mm))
                     section_header_added = True
 
                 # Game name row
@@ -6714,7 +6738,7 @@ def help_page(user):
         return f"""
         <details class="help-section"{open_attr}>
           <summary class="help-section-summary">
-            <span class="help-icon">{icon}</span>
+            <div class="help-icon-box">{icon}</div>
             <span class="help-title">{title}</span>
             <span class="help-chevron">&#9660;</span>
           </summary>
@@ -6897,73 +6921,69 @@ def help_page(user):
 
     body = f"""
     <style>
-      .help-role-badge {{
-        display: inline-block;
-        background: {GOLD};
-        color: {NAVY};
-        font-weight: 700;
-        font-size: 13px;
-        padding: 3px 12px;
-        border-radius: 20px;
-        margin-bottom: 18px;
-        letter-spacing: 0.03em;
-      }}
-      .help-intro {{
-        color: #4B5563;
-        margin-bottom: 28px;
-        font-size: 15px;
-      }}
       .help-section {{
         border: 1px solid #DDE0E3;
+        border-left: 3px solid rgba(240,168,46,0.35);
         border-radius: 10px;
-        margin-bottom: 12px;
+        margin-bottom: 10px;
         background: #fff;
         overflow: hidden;
+        transition: border-color 0.15s;
       }}
       .help-section[open] {{
-        box-shadow: 0 2px 8px rgba(0,0,0,.06);
+        border-left-color: {GOLD};
+        box-shadow: 0 2px 10px rgba(45,50,59,0.10);
       }}
       .help-section-summary {{
         display: flex;
         align-items: center;
         gap: 12px;
-        padding: 15px 18px;
+        padding: 14px 18px;
         cursor: pointer;
         list-style: none;
         user-select: none;
         background: #fff;
+        transition: background 0.15s;
       }}
       .help-section-summary::-webkit-details-marker {{ display: none; }}
       .help-section[open] .help-section-summary {{
         background: {NAVY};
         color: #fff;
       }}
-      .help-section[open] .help-title {{
-        color: #fff;
-      }}
+      .help-section[open] .help-title {{ color: #fff; }}
       .help-section[open] .help-chevron {{
         transform: rotate(180deg);
         color: {GOLD};
       }}
-      .help-icon {{
-        font-size: 20px;
+      .help-icon-box {{
+        width: 34px; height: 34px; min-width: 34px;
+        border-radius: 9px;
+        background: rgba(240,168,46,0.14);
+        border: 1px solid rgba(240,168,46,0.30);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 17px;
         flex-shrink: 0;
+        transition: background 0.15s, border-color 0.15s;
+      }}
+      .help-section[open] .help-icon-box {{
+        background: rgba(240,168,46,0.22);
+        border-color: rgba(240,168,46,0.50);
       }}
       .help-title {{
         font-weight: 700;
-        font-size: 16px;
+        font-size: 15px;
         color: {NAVY};
         flex: 1;
       }}
       .help-chevron {{
-        font-size: 12px;
+        font-size: 11px;
         color: #9CA3AF;
-        transition: transform 0.2s;
+        transition: transform 0.2s, color 0.15s;
         flex-shrink: 0;
       }}
       .help-body {{
         padding: 20px 22px 22px;
-        border-top: 1px solid #DDE0E3;
+        border-top: 1px solid rgba(240,168,46,0.20);
         font-size: 15px;
         color: #374151;
         line-height: 1.7;
@@ -6986,9 +7006,7 @@ def help_page(user):
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 26px;
-        height: 26px;
-        min-width: 26px;
+        width: 26px; height: 26px; min-width: 26px;
         background: {GOLD};
         color: {NAVY};
         font-weight: 800;
@@ -7003,44 +7021,58 @@ def help_page(user):
       }}
       .help-list li {{ margin-bottom: 7px; }}
       .help-tip {{
-        background: #FFFBEB;
+        background: rgba(240,168,46,0.08);
         border-left: 3px solid {GOLD};
         padding: 10px 14px;
         border-radius: 0 6px 6px 0;
         margin: 12px 0;
         font-size: 14px;
-        color: #92400E;
+        color: #7A5800;
         display: flex;
         gap: 8px;
         align-items: flex-start;
       }}
       .help-note {{
-        background: #EFF6FF;
-        border-left: 3px solid #3B82F6;
+        background: rgba(45,50,59,0.05);
+        border-left: 3px solid {NAVY};
         padding: 10px 14px;
         border-radius: 0 6px 6px 0;
         margin: 12px 0;
         font-size: 14px;
-        color: #1E40AF;
+        color: {NAVY};
         display: flex;
         gap: 8px;
         align-items: flex-start;
       }}
     </style>
 
-    <h1 style="margin-bottom:6px;">Help &amp; Guide</h1>
-    <div class="help-role-badge">Viewing as: {esc(role_label)}</div>
-    <p class="help-intro">
-      Find answers to common questions below. Sections are shown based on your access level.
-      Click a section heading to expand it.
-    </p>
+    <div style="background:linear-gradient(135deg,{NAVY} 0%,#3d4350 100%);
+                border-radius:16px;padding:24px 28px;margin-bottom:24px;">
+      <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <div style="width:46px;height:46px;border-radius:13px;flex-shrink:0;
+                    background:rgba(240,168,46,0.18);border:1px solid rgba(240,168,46,0.38);
+                    display:flex;align-items:center;justify-content:center;font-size:22px;">&#10067;</div>
+        <div style="flex:1;min-width:0;">
+          <h1 style="margin:0 0 2px;font-size:22px;font-weight:800;color:#fff;line-height:1.2;">Help &amp; Guide</h1>
+          <div style="font-size:13px;color:rgba(255,255,255,0.55);">
+            Sections shown for your access level — click a heading to expand
+          </div>
+        </div>
+        <div style="background:{GOLD};color:{NAVY};font-weight:700;font-size:12px;
+                    padding:4px 14px;border-radius:20px;letter-spacing:0.04em;white-space:nowrap;">
+          {esc(role_label)}
+        </div>
+      </div>
+    </div>
 
     {sections_html}
 
-    <div style="margin-top:32px;padding:20px 22px;background:#F3F4F5;border-radius:10px;font-size:14px;color:#6E737B;">
-      <strong style="color:{NAVY};">Need more help?</strong>
+    <div style="margin-top:24px;padding:18px 22px;
+                background:linear-gradient(135deg,{NAVY} 0%,#3d4350 100%);
+                border-radius:12px;font-size:14px;color:rgba(255,255,255,0.70);">
+      <strong style="color:#fff;display:block;margin-bottom:4px;">Need more help?</strong>
       Contact your practitioner or system administrator, or email
-      <a href="mailto:info@justagame.co.nz">info@justagame.co.nz</a>.
+      <a href="mailto:info@justagame.co.nz" style="color:{GOLD};text-decoration:none;">info@justagame.co.nz</a>.
     </div>
     """
 
