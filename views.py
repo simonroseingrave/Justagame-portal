@@ -2572,11 +2572,11 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
         </div>
       </div>
       <!-- AXP journey line — highlighted -->
-      <div style="margin-top:16px;background:rgba(16,185,129,0.12);
-                  border:1.5px solid rgba(16,185,129,0.45);border-radius:14px;
+      <div style="margin-top:16px;background:rgba(240,168,46,0.08);
+                  border:1.5px solid rgba(240,168,46,0.22);border-radius:14px;
                   padding:14px 16px 4px;">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;
-                    letter-spacing:0.07em;color:#6EE7B7;margin-bottom:10px;">AXP Journey</div>
+                    letter-spacing:0.07em;color:#F0A82E;margin-bottom:10px;">AXP Journey</div>
         <div style="position:relative;padding-bottom:34px;">
           <div style="position:relative;height:5px;background:rgba(255,255,255,0.1);border-radius:999px;">
             <div style="width:{_cj_fill:.1f}%;height:100%;background:#fff;border-radius:999px;
@@ -2609,29 +2609,78 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
           Their full session history is shown below; group stats pages only count sessions recorded while in each group.</span>
         </div>"""
 
+    # Inline group-assign form for the hero (admin only)
+    group_assign_inline = ""
+    if is_admin and groups:
+        group_assign_inline = f"""
+        <div style="margin-top:16px;padding-top:14px;border-top:1px solid rgba(255,255,255,0.10);
+                    display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+          <span style="font-size:11px;font-weight:700;text-transform:uppercase;
+                       letter-spacing:0.07em;color:rgba(255,255,255,0.40);white-space:nowrap;">Group</span>
+          <form method="post" action="/coach/participants/{participant['id']}/assign-group"
+                style="display:flex;gap:8px;align-items:center;flex:1;min-width:200px;">
+            <select name="group_id"
+                    style="flex:1;font-size:12px;padding:5px 8px;border-radius:7px;
+                           border:1px solid rgba(255,255,255,0.20);
+                           background:rgba(255,255,255,0.08);color:#fff;">
+              {group_opts}
+            </select>
+            <button type="submit" class="btn btn-primary btn-sm"
+                    style="font-size:12px;padding:5px 14px;white-space:nowrap;">Save</button>
+          </form>
+        </div>"""
+
     body = f"""
-    <div style="display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
-      {avatar}
-      <div style="flex:1;min-width:0;">
-        <h1 style="margin:0 0 4px;font-size:26px;">{esc(participant['name'])}</h1>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-bottom:8px;">
-          {number_pill}{sport_pill}{gender_pill}{group_pill}
-          <span style="font-size:12px;color:var(--jag-muted);">{esc(participant['email'] or '')}</span>
+    <!-- Athlete hero banner -->
+    <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                padding:24px 28px;margin-bottom:24px;">
+      <div style="display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap;">
+        <!-- Avatar -->
+        <div style="width:64px;height:64px;border-radius:50%;background:rgba(240,168,46,0.18);
+                    border:2px solid rgba(240,168,46,0.40);display:flex;align-items:center;
+                    justify-content:center;font-weight:800;font-size:22px;color:#F0A82E;
+                    flex-shrink:0;">{inits}</div>
+        <!-- Name + pills -->
+        <div style="flex:1;min-width:0;">
+          <h1 style="margin:0 0 8px;font-size:24px;font-weight:800;color:#FFFFFF;">
+            {esc(participant['name'])}
+          </h1>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+            {number_pill}{sport_pill}{gender_pill}{group_pill}
+            {f'<span style="font-size:12px;color:rgba(255,255,255,0.40);">{esc(participant["email"] or "")}</span>' if participant.get("email") else ""}
+          </div>
+          {f'<p style="margin:6px 0 0;font-size:12px;color:rgba(255,255,255,0.45);">{esc(participant["programme"])}</p>' if participant.get("programme") else ""}
         </div>
-        {org_text}
-        {f'<p style="margin:0;font-size:13px;color:var(--jag-muted);">{esc(participant["programme"])}</p>' if participant.get("programme") else ""}
+        <!-- Primary CTA -->
+        <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;flex-shrink:0;">
+          <a class="btn btn-primary"
+             href="/coach/participants/{participant['id']}/progress"
+             style="white-space:nowrap;">&#128200; Achievement Statistics</a>
+          <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
+            <a href="/coach/participants/{participant['id']}/report" target="_blank"
+               style="font-size:12px;color:rgba(255,255,255,0.55);text-decoration:none;font-weight:600;"
+               onmouseover="this.style.color='#F0A82E';" onmouseout="this.style.color='rgba(255,255,255,0.55)';">
+              &#128196; Progress Report</a>
+            <a href="/coach/participants/{participant['id']}/quickstart.pdf" target="_blank"
+               style="font-size:12px;color:rgba(255,255,255,0.55);text-decoration:none;font-weight:600;"
+               onmouseover="this.style.color='#F0A82E';" onmouseout="this.style.color='rgba(255,255,255,0.55)';">
+              &#127760; Quick-Start</a>
+            <a href="/coach/participants/{participant['id']}/view-as"
+               style="font-size:12px;color:rgba(255,255,255,0.55);text-decoration:none;font-weight:600;"
+               onmouseover="this.style.color='#F0A82E';" onmouseout="this.style.color='rgba(255,255,255,0.55)';">
+              &#128065; View as Athlete</a>
+            {(f'<span style="color:rgba(255,255,255,0.20);">|</span>' + reset_btn.replace('class="btn btn-ghost btn-sm"','style="font-size:12px;color:rgba(255,255,255,0.55);background:none;border:none;cursor:pointer;font-weight:600;padding:0;"')) if reset_btn else ""}
+          </div>
+          <a href="/coach"
+             style="font-size:12px;color:rgba(255,255,255,0.35);text-decoration:none;"
+             onmouseover="this.style.color='rgba(255,255,255,0.70)';" onmouseout="this.style.color='rgba(255,255,255,0.35)';">
+            &larr; Back to Dashboard</a>
+        </div>
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:flex-start;">
-        {reset_btn}
-        <a class="btn btn-primary" href="/coach/participants/{participant['id']}/progress">&#128200; Achievement Statistics</a>
-        <a class="btn btn-ghost" href="/coach/participants/{participant['id']}/report" target="_blank">&#128196; Adaptability Progress Report</a>
-        <a class="btn btn-ghost" href="/coach/participants/{participant['id']}/quickstart.pdf" target="_blank">&#127760; Quick-Start Card</a>
-        <a class="btn btn-ghost" href="/coach/participants/{participant['id']}/view-as">&#128065; View as Athlete</a>
-        <a class="btn btn-ghost" href="/coach">&larr; Back</a>
-      </div>
+      {group_assign_inline}
     </div>
+
     {message_html}
-    {group_form}
     {transfer_notice}
     {xp_card}
 
