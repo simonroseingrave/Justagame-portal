@@ -10521,7 +10521,7 @@ def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_r
 # Group Next Steps Report — practitioner session planning guide
 # ─────────────────────────────────────────────────────────────────────────────
 
-def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw):
+def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, game_resources=None):
     """
     5-week session planning guide for a group post-testing.
     Analyses group-level gaps and strengths across SCORING_AREAS, calls out
@@ -10549,43 +10549,7 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw):
     for row in (thresholds_raw or []):
         thresholds[(row["game_key"], row["field_key"])] = row["threshold_value"]
 
-    # ── Programme games per SCORING_AREA (from SC_GAP_LANGUAGE athlete_games) ─
-    # Maps area key → list of suggested programme game names
-    AREA_PROGRAMME_GAMES = {
-        ("balance_ball_catching", "large_ball_wall_bounce"): ["Lob Scotch", "Step Up"],
-        ("balance_ball_catching", "one_foot_balance_catch"):  ["Step Up", "Grid Leap"],
-        ("lob_scotch",            "squares_scored"):           ["Lob Scotch", "Grid Leap"],
-        ("leap_catching_throwing", "points"):                  ["Grid Leap", "Diamond Gates"],
-        ("step_up",               "step_bench"):               ["Step Up", "Diamond Gates"],
-        ("skipping_rope_sprint",  "average"):                  ["Skipping Rope Sprint", "Diamond Dribble"],
-        ("diamond_gates",         "small_group"):              ["Diamond Gates", "Split Step"],
-        ("diamond_dribble",       "small_group"):              ["Diamond Dribble", "Diamond Gates"],
-        ("split_step",            "catches"):                  ["Split Step", "Split Decision"],
-    }
-
-    SELF_TEST_GAME = {
-        ("balance_ball_catching", "large_ball_wall_bounce"): "Balance Ball Catching (Two Feet)",
-        ("balance_ball_catching", "one_foot_balance_catch"):  "Balance Ball Catching (One Foot)",
-        ("lob_scotch",            "squares_scored"):           "Lob Scotch",
-        ("leap_catching_throwing", "points"):                  "Grid Leap",
-        ("step_up",               "step_bench"):               "Step Up",
-        ("skipping_rope_sprint",  "average"):                  "Skipping Rope Sprint",
-        ("diamond_gates",         "small_group"):              "Diamond Gates",
-        ("diamond_dribble",       "small_group"):              "Diamond Dribble",
-        ("split_step",            "catches"):                  "Split Step",
-    }
-
-    SC_NOTE = {
-        ("balance_ball_catching", "large_ball_wall_bounce"): "Balance work: single-leg holds, standing on one foot with eyes closed, or catching a ball while balanced.",
-        ("balance_ball_catching", "one_foot_balance_catch"):  "Single-leg stability: one-leg holds progressing to one-leg catch drills.",
-        ("lob_scotch",            "squares_scored"):           "Landing control: small hops to a spot, focusing on a quiet, controlled landing.",
-        ("leap_catching_throwing", "points"):                  "Horizontal power: broad jumps to a target zone. Accuracy and distance together.",
-        ("step_up",               "step_bench"):               "Step-up rhythm: box step-ups at pace, then add a wall catch once the movement is smooth.",
-        ("skipping_rope_sprint",  "average"):                  "Speed foundation: short acceleration drills — wall drives, A-skips, 5-metre burst starts.",
-        ("diamond_gates",         "small_group"):              "Change of direction: short shuttle runs focusing on the slow-down before the turn.",
-        ("diamond_dribble",       "small_group"):              "Movement first: COD drills without the ball, then reintroduce the ball once movement is sharp.",
-        ("split_step",            "catches"):                  "Reaction work: partner signal drills, drop-catch, or 1v1 mirroring to sharpen reactive speed.",
-    }
+    game_resources = game_resources or {}
 
     # ── Analyse each area across the group ───────────────────────────────────
     area_analysis = []
@@ -10634,6 +10598,7 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw):
         # Athletes significantly behind
         behind_outliers = [n for n, _, l in athlete_levels if modal_level >= 2 and l == 0]
 
+        gk_resources = game_resources.get(gk, {})
         area_analysis.append({
             "key": area_key,
             "display": lang["display"],
@@ -10645,9 +10610,8 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw):
             "athlete_levels": athlete_levels,
             "advanced_outliers": advanced_outliers,
             "behind_outliers": behind_outliers,
-            "programme_games": AREA_PROGRAMME_GAMES.get(area_key, []),
-            "self_test": SELF_TEST_GAME.get(area_key, ""),
-            "sc_note": SC_NOTE.get(area_key, ""),
+            "programme_games": gk_resources.get("programme", [])[:3],
+            "test_games": gk_resources.get("test", [])[:3],
         })
 
     # Sort: gaps first (highest pct_gap), then strengths
@@ -10795,7 +10759,6 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw):
             col = FAMILY_COLOURS.get(area["family"], "#6366F1")
             badge = "Primary Focus" if is_primary else "Complementary"
             badge_col = "#EF4444" if is_primary else "#10B981"
-            games = " · ".join(area["programme_games"]) if area["programme_games"] else "—"
             lvl_note = f"Group modal level: L{area['modal_level']}"
             adv = ", ".join(area["advanced_outliers"])
             adv_note = (f'<div style="font-size:11px;color:#6366F1;margin-top:4px;">⭐ {esc(adv)} — extend constraints for these athletes</div>'
@@ -10803,18 +10766,29 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw):
             behind = ", ".join(area["behind_outliers"])
             behind_note = (f'<div style="font-size:11px;color:#F59E0B;margin-top:4px;">🔍 {esc(behind)} — simplify constraints or extra reps</div>'
                            if behind else "")
+            pg = area.get("programme_games", [])
+            if pg:
+                pg_chips = "".join(
+                    f'<span style="font-size:11px;font-weight:600;background:#EEF2FF;color:#3730A3;'
+                    f'border-radius:999px;padding:2px 10px;">{esc(g)}</span>'
+                    for g in pg
+                )
+                pg_html = (f'<div style="margin-bottom:6px;">'
+                           f'<span style="font-size:11px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.04em;">Programme games</span>'
+                           f'<div style="display:flex;flex-wrap:wrap;gap:5px;margin-top:4px;">{pg_chips}</div>'
+                           f'</div>')
+            else:
+                pg_html = '<div style="font-size:12px;color:#9CA3AF;margin-bottom:6px;">No programme games tagged for this area yet.</div>'
             return f"""
-            <div style="border-left:3px solid {col};border-radius:0 8px 8px 0;background:#fff;
-                        border:1px solid #E5E7EB;border-left:3px solid {col};padding:12px 14px;margin-bottom:10px;">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;">
+            <div style="background:#fff;border:1px solid #E5E7EB;border-left:3px solid {col};
+                        border-radius:0 8px 8px 0;padding:12px 14px;margin-bottom:10px;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;">
                 <span style="font-size:11px;font-weight:700;color:{badge_col};background:{'#FEF2F2' if is_primary else '#D1FAE5'};
                              border-radius:999px;padding:1px 8px;">{badge}</span>
                 <span style="font-size:13px;font-weight:700;color:#2D323B;">{esc(area['display'])}</span>
                 <span style="font-size:11px;color:#9CA3AF;">{esc(area['family'])}</span>
               </div>
-              <div style="font-size:12px;color:#374151;margin-bottom:4px;">
-                <strong>Programme games:</strong> {esc(games)}
-              </div>
+              {pg_html}
               <div style="font-size:11px;color:#6B7280;">{lvl_note}</div>
               {adv_note}{behind_note}
             </div>"""
@@ -10822,19 +10796,21 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw):
         primary_card = game_card(primary, True)
         comp_card = game_card(comp, False) if comp else ""
 
-        # Test space
-        test_space = primary.get("self_test", "")
-        test_html = (f'<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:10px 14px;margin-bottom:10px;">'
-                     f'<span style="font-size:11px;font-weight:700;color:#065F46;">🧪 Test Space — </span>'
-                     f'<span style="font-size:12px;color:#374151;">{esc(test_space)} self-test cards for athletes to run independently</span>'
-                     f'</div>') if test_space else ""
-
-        # S&C note
-        sc = primary.get("sc_note", "")
-        sc_html = (f'<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:8px;padding:10px 14px;">'
-                   f'<span style="font-size:11px;font-weight:700;color:#92400E;">💪 If S&amp;C is available — </span>'
-                   f'<span style="font-size:12px;color:#78350F;">{esc(sc)}</span>'
-                   f'</div>') if sc else ""
+        # Optional test games — from primary area's tagged test resources
+        test_games = primary.get("test_games", [])
+        if test_games:
+            tg_chips = "".join(
+                f'<span style="font-size:11px;font-weight:600;background:#F0FDF4;color:#065F46;'
+                f'border-radius:999px;padding:2px 10px;border:1px solid #BBF7D0;">{esc(g)}</span>'
+                for g in test_games
+            )
+            test_html = (f'<div style="background:#F0FDF4;border:1px solid #BBF7D0;border-radius:8px;padding:10px 14px;margin-bottom:10px;">'
+                         f'<div style="font-size:11px;font-weight:700;color:#065F46;margin-bottom:6px;">🧪 Optional Test Games</div>'
+                         f'<div style="display:flex;flex-wrap:wrap;gap:5px;">{tg_chips}</div>'
+                         f'<div style="font-size:11px;color:#374151;margin-top:6px;">Run these alongside sessions for informal self-testing.</div>'
+                         f'</div>')
+        else:
+            test_html = ""
 
         sessions_html += f"""
         <div style="margin-bottom:24px;">
@@ -10847,7 +10823,6 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw):
           {primary_card}
           {comp_card}
           {test_html}
-          {sc_html}
         </div>"""
 
     plan_html = f"""
@@ -10943,7 +10918,7 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw):
         <p style="font-size:13px;color:rgba(255,255,255,0.8);margin:0;line-height:1.6;">
           Based on your group's latest measurement results, this report suggests a 5-week session focus —
           mixing development areas with strengths so sessions stay engaging.
-          Each week includes a self-test space athletes can run independently.
+          Each week shows recommended programme games and optional test games to run alongside.
           <strong style="color:#F0A82E;">Adjust freely</strong> — this is a guide, not a prescription.
         </p>
       </div>

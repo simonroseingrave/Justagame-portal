@@ -1409,8 +1409,27 @@ def group_next_steps(req, group_id):
                 return Response(views.simple_message_page("Access denied", "You don't have access to this group.", user=coach), status=403)
         athletes_with_levels = db.get_group_athletes_with_levels(conn, group_id)
         thresholds_raw = db.get_all_thresholds(conn)
+        # Build per-game-key resource lists from taxonomy tagging
+        resource_rows = conn.execute(
+            "SELECT rgl.game_key, r.name, rf.name AS folder_name "
+            "FROM resource_game_links rgl "
+            "JOIN resources r ON r.id = rgl.resource_id "
+            "LEFT JOIN resource_folders rf ON rf.id = r.folder_id "
+            "ORDER BY rgl.game_key, r.name"
+        ).fetchall()
+        game_resources = {}
+        for row in resource_rows:
+            gk = row["game_key"]
+            if gk not in game_resources:
+                game_resources[gk] = {"programme": [], "test": []}
+            folder = (row["folder_name"] or "").lower()
+            if "programme" in folder:
+                game_resources[gk]["programme"].append(row["name"])
+            else:
+                game_resources[gk]["test"].append(row["name"])
         return Response(views.group_next_steps_page(
-            coach, dict(group), athletes_with_levels, thresholds_raw
+            coach, dict(group), athletes_with_levels, thresholds_raw,
+            game_resources=game_resources
         ))
     finally:
         conn.close()
