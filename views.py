@@ -5270,10 +5270,11 @@ def session_sheet_pdf(label_display, month_str, group_name, athletes, games_fiel
 # Statistics & Reports landing page + printable reports
 # ---------------------------------------------------------------------------
 
-def reports_landing_page(coach, groups, orgs=None, sports=None):
+def reports_landing_page(coach, groups, orgs=None, sports=None, active_windows=None):
     """Hub page: links to existing stats pages + new printable reports."""
     orgs = orgs or []
     sports = sports or []
+    active_windows = active_windows or []
 
     group_opts = '<option value="">— All groups in org —</option>' + "".join(
         f'<option value="{g["id"]}">{esc(g["name"])}</option>' for g in groups
@@ -5284,6 +5285,43 @@ def reports_landing_page(coach, groups, orgs=None, sports=None):
     sport_opts = '<option value="">— All sports —</option>' + "".join(
         f'<option value="{esc(s)}">{esc(s)}</option>' for s in sports
     )
+
+    # ── Measurement window status widget ────────────────────────────────────
+    def _window_widget(windows):
+        if not windows:
+            return ""
+        cards = ""
+        for w in windows:
+            try:
+                dt = _dt.datetime.fromisoformat(w["opened_at"])
+                opened_fmt = dt.strftime("%-d %b %Y")
+            except Exception:
+                opened_fmt = (w["opened_at"] or "")[:10]
+            sub_count = w["submission_count"] or 0
+            sub_label = f'{sub_count} submission{"s" if sub_count != 1 else ""}'
+            session_lbl = esc(w["session_label"] or "Untitled Session")
+            grp_name    = esc(w["group_name"])
+            opened_by   = esc(w["opened_by_name"] or "")
+            win_id      = w["id"]
+            cards += f"""
+            <div style="background:var(--jag-card);border:1px solid rgba(30,190,139,0.25);border-left:4px solid #1EBE8B;border-radius:8px;padding:16px 20px;display:flex;align-items:center;gap:16px;">
+              <div style="flex:1;min-width:0;">
+                <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;">
+                  <span style="background:rgba(30,190,139,0.12);color:#1EBE8B;font-size:10px;font-weight:700;letter-spacing:0.07em;padding:2px 9px;border-radius:20px;text-transform:uppercase;">OPEN</span>
+                  <span style="font-weight:700;font-size:14px;color:var(--jag-navy);">{grp_name}</span>
+                  <span style="font-size:13px;color:var(--jag-text);">— {session_lbl}</span>
+                </div>
+                <div style="font-size:12px;color:var(--jag-muted);">Opened {opened_fmt} by {opened_by} &nbsp;·&nbsp; {sub_label}</div>
+              </div>
+              <a href="/coach/window/{win_id}" class="btn btn-ghost" style="white-space:nowrap;font-size:13px;flex-shrink:0;">Manage &rarr;</a>
+            </div>"""
+        return f"""
+        <div style="margin-bottom:28px;">
+          <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--jag-muted);margin-bottom:12px;">Active Measurement Windows</h2>
+          <div style="display:flex;flex-direction:column;gap:10px;">{cards}</div>
+        </div>"""
+
+    windows_widget = _window_widget(active_windows)
 
     def _report_card(icon, title, desc, report_type, btn_label="Generate Report"):
         return f"""
@@ -5303,6 +5341,8 @@ def reports_landing_page(coach, groups, orgs=None, sports=None):
         <p class="muted">View live statistics or generate printable reports for coaches and organisations.</p>
       </div>
     </div>
+
+    {windows_widget}
 
     <div style="background:var(--jag-card);border:1px solid var(--jag-border);border-radius:10px;padding:20px;margin-bottom:32px;">
       <h3 style="margin:0 0 14px;font-size:14px;font-weight:700;color:var(--jag-navy);">Report Scope</h3>

@@ -681,9 +681,19 @@ def reports_landing(req):
         sports = [r["sport"] for r in conn.execute(
             "SELECT DISTINCT sport FROM users WHERE role='participant' AND sport IS NOT NULL AND sport != '' ORDER BY sport"
         ).fetchall()]
+        # All currently open measurement windows across every group
+        active_windows = conn.execute(
+            "SELECT mw.*, pg.name AS group_name, u.name AS opened_by_name, "
+            "(SELECT COUNT(*) FROM window_submissions ws WHERE ws.window_id = mw.id) AS submission_count "
+            "FROM measurement_windows mw "
+            "JOIN participant_groups pg ON pg.id = mw.group_id "
+            "JOIN users u ON u.id = mw.opened_by "
+            "WHERE mw.status = 'open' "
+            "ORDER BY mw.opened_at DESC"
+        ).fetchall()
     finally:
         conn.close()
-    return Response(views.reports_landing_page(coach, groups, orgs=orgs, sports=sports))
+    return Response(views.reports_landing_page(coach, groups, orgs=orgs, sports=sports, active_windows=active_windows))
 
 
 def _resolve_report_scope(req, conn):
