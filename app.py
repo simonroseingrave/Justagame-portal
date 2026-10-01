@@ -3520,17 +3520,10 @@ def athlete_leaderboard(req):
         ).fetchone() if group_id else None
         group_name = group["name"] if group else ""
         athletes = conn.execute(
-            "SELECT u.id, u.name FROM users u "
-            "JOIN group_members gm ON gm.user_id = u.id "
-            "WHERE gm.group_id = ? AND u.role = 'participant' AND u.active = 1",
+            "SELECT id, name FROM users "
+            "WHERE group_id = ? AND role = 'participant' AND active = 1",
             (group_id,)
         ).fetchall() if group_id else []
-        # Fallback: use group_id column on users if no group_members rows
-        if not athletes and group_id:
-            athletes = conn.execute(
-                "SELECT id, name FROM users WHERE group_id = ? AND role = 'participant' AND active = 1",
-                (group_id,)
-            ).fetchall()
         ranked = []
         for a in athletes:
             pid = a["id"]
@@ -3776,10 +3769,9 @@ def coach_leaderboard(req):
         ranked_athletes = None
         if selected_group_id:
             athletes = conn.execute(
-                "SELECT u.id, u.name, u.athlete_number FROM users u "
-                "JOIN group_members gm ON gm.user_id = u.id "
-                "WHERE gm.group_id = ? AND u.role = 'participant' AND u.active = 1 "
-                "ORDER BY u.name",
+                "SELECT id, name, athlete_number FROM users "
+                "WHERE group_id = ? AND role = 'participant' AND active = 1 "
+                "ORDER BY name",
                 (selected_group_id,)
             ).fetchall()
             ranked_athletes = []
