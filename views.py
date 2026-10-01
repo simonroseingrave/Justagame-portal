@@ -158,21 +158,37 @@ def layout(title, body, user=None, flash=None, active_nav=None):
             manage_html = ""
             if is_admin:
                 manage_active = active_nav in ("new_participant", "coaches", "organisations", "admin_hub")
-                manage_items = [
-                    ("/coach/participants/new", "➕ Add Participant"),
-                    ("/coach/coaches",          "👤 Practitioners"),
-                    ("/coach/organisations",    "🏢 Organisations"),
-                ]
-                if is_sys:
-                    manage_items += [
-                        ("/coach/admin/hub",              "⚙ Admin Hub"),
-                        ("/coach/admin/score-distribution","📊 Score Distribution"),
-                        ("/coach/admin/game-thresholds",  "🎯 AAXP Thresholds"),
-                    ]
-                dropdown_links = "".join(
-                    f'<a class="nav-dropdown-item" href="{h}">{l}</a>'
-                    for h, l in manage_items
+
+                def _drop_item(href, label, sym, sym_col="#F0A82E"):
+                    return (
+                        f'<a class="nav-dropdown-item" href="{href}">'
+                        f'<span style="width:24px;height:24px;border-radius:6px;'
+                        f'background:rgba(255,255,255,0.09);display:inline-flex;flex-shrink:0;'
+                        f'align-items:center;justify-content:center;font-size:12px;'
+                        f'color:{sym_col};font-weight:700;">{sym}</span>'
+                        f'{label}</a>'
+                    )
+
+                def _drop_divider(label=""):
+                    if label:
+                        return (f'<div style="padding:6px 10px 2px;font-size:10px;font-weight:700;'
+                                f'text-transform:uppercase;letter-spacing:0.08em;'
+                                f'color:rgba(255,255,255,0.30);">{label}</div>')
+                    return '<div style="height:1px;background:rgba(255,255,255,0.10);margin:4px 8px;"></div>'
+
+                dropdown_links = (
+                    _drop_item("/coach/participants/new", "Add Participant", "+") +
+                    _drop_item("/coach/coaches",          "Practitioners",   "◉") +
+                    _drop_item("/coach/organisations",    "Organisations",   "▣")
                 )
+                if is_sys:
+                    dropdown_links += (
+                        _drop_divider("System Admin") +
+                        _drop_item("/coach/admin/hub",               "Admin Hub",         "⚙", "#F0A82E") +
+                        _drop_item("/coach/admin/score-distribution", "Score Distribution","▦", "#F0A82E") +
+                        _drop_item("/coach/admin/game-thresholds",    "AXP Thresholds",   "◎", "#F0A82E")
+                    )
+
                 manage_html = f"""
                 <div class="nav-dropdown{' active' if manage_active else ''}">
                   <button class="nav-link nav-dropdown-toggle" onclick="
@@ -205,16 +221,26 @@ def layout(title, body, user=None, flash=None, active_nav=None):
           .nav-dropdown-toggle {{ background: none; border: none; cursor: pointer;
             font-size: inherit; font-family: inherit; padding: 0; }}
           .nav-dropdown-menu {{
-            position: absolute; top: calc(100% + 8px); left: 0;
-            background: #fff; border: 1px solid #E5E7EB; border-radius: 10px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.12); min-width: 200px;
-            z-index: 999; padding: 6px 0;
+            position: absolute; top: calc(100% + 10px); left: 0;
+            background: #2D323B;
+            border: 1.5px solid rgba(255,255,255,0.10);
+            border-radius: 12px;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.28);
+            min-width: 220px;
+            z-index: 999; padding: 8px;
           }}
           .nav-dropdown-item {{
-            display: block; padding: 8px 16px; font-size: 13px;
-            color: #2D323B; text-decoration: none; white-space: nowrap;
+            display: flex; align-items: center; gap: 10px;
+            padding: 8px 10px; border-radius: 8px;
+            font-size: 13px; font-weight: 600;
+            color: rgba(255,255,255,0.78); text-decoration: none; white-space: nowrap;
+            transition: background 0.12s, color 0.12s;
           }}
-          .nav-dropdown-item:hover {{ background: #F4F5F7; }}
+          .nav-dropdown-item:hover {{
+            background: rgba(240,168,46,0.15);
+            color: #F0A82E;
+          }}
+          .nav-dropdown-item:hover span {{ background: rgba(240,168,46,0.25) !important; }}
           .nav-dropdown.active .nav-dropdown-toggle {{ color: var(--jag-gold, #F0A82E); font-weight: 700; }}
         </style>
         <script>
