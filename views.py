@@ -7290,35 +7290,44 @@ def coach_list_page(user, coaches, groups=None, coach_group_map=None, organisati
                 f'<button type="submit" class="btn btn-ghost btn-sm">Set Org</button>'
                 f'</form>'
             ) if organisations else ""
+            deactivate_color = "color:#c0392b;" if c["active"] else ""
             action_html = f"""
-            <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start;min-width:180px;">
-              <div style="display:flex;gap:6px;flex-wrap:wrap;">
-                <form method="post" action="/coach/coaches/{c['id']}/reset-password" style="display:contents"
-                      onsubmit="return confirm('Reset {esc(c['name'])}&#39;s password?');">
-                  <button type="submit" class="btn btn-ghost btn-sm">Reset Password</button>
-                </form>
+            <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-start;min-width:200px;">
+              <!-- Row 1: role + status actions -->
+              <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;">
                 <form method="post" action="/coach/coaches/{c['id']}/toggle-admin" style="display:contents"
                       onsubmit="return confirm('{admin_toggle_label} for {esc(c['name'])}?');">
-                  <button type="submit" class="btn btn-ghost btn-sm">{admin_toggle_label}</button>
+                  <button type="submit" class="btn btn-ghost btn-sm"
+                          style="font-size:11px;">{admin_toggle_label}</button>
                 </form>
                 <form method="post" action="/coach/coaches/{c['id']}/toggle" style="display:contents">
-                  <button type="submit" class="btn btn-ghost btn-sm">{toggle_label}</button>
+                  <button type="submit" class="btn btn-ghost btn-sm"
+                          style="font-size:11px;{deactivate_color}">{toggle_label}</button>
                 </form>
               </div>
+              <!-- Row 2: password reset (secondary) -->
+              <form method="post" action="/coach/coaches/{c['id']}/reset-password"
+                    onsubmit="return confirm('Reset {esc(c['name'])}&#39;s password?');">
+                <button type="submit" class="btn btn-ghost btn-sm"
+                        style="font-size:11px;color:var(--jag-muted);">&#128273; Reset Password</button>
+              </form>
+              <!-- Row 3: org assignment -->
               {org_form}
+              <!-- Row 4: group assignment accordion -->
               <details style="width:100%;">
                 <summary style="font-size:12px;font-weight:600;color:var(--jag-muted);cursor:pointer;
                                 list-style:none;display:flex;align-items:center;gap:4px;user-select:none;">
-                  <span>&#9654;</span> Assign Groups
+                  <span class="acc-chev" style="font-size:10px;transition:transform 0.15s;display:inline-block;">&#9654;</span> Assign Groups
                 </summary>
                 <form method="post" action="/coach/coaches/{c['id']}/assign-group"
-                      style="margin-top:6px;">
-                  <div style="border:1px solid var(--jag-border);border-radius:6px;
-                               padding:6px 10px;background:#FAFAFA;margin-bottom:6px;
+                      style="margin-top:8px;">
+                  <div style="border:1px solid var(--jag-border);border-radius:8px;
+                               padding:8px 12px;background:#FAFAFA;margin-bottom:8px;
                                max-height:140px;overflow-y:auto;">
                     {checkboxes}
                   </div>
-                  <button type="submit" class="btn btn-ghost btn-sm">Save Groups</button>
+                  <button type="submit" class="btn btn-ghost btn-sm"
+                          style="font-size:11px;">Save Groups</button>
                 </form>
               </details>
             </div>"""
@@ -7395,10 +7404,25 @@ def coach_list_page(user, coaches, groups=None, coach_group_map=None, organisati
     </script>"""
 
     body = f"""
-    <div class="page-head">
-      <h1>Practitioners</h1>
-      <a class="btn btn-primary" href="/coach/coaches/new">Add Practitioner</a>
+    <!-- Hero banner -->
+    <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                padding:24px 28px;margin-bottom:28px;display:flex;align-items:center;
+                justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div style="display:flex;align-items:center;gap:16px;">
+        <div style="width:48px;height:48px;border-radius:13px;background:rgba(240,168,46,0.18);
+                    border:1.5px solid rgba(240,168,46,0.35);display:flex;align-items:center;
+                    justify-content:center;font-size:22px;flex-shrink:0;color:#F0A82E;font-weight:700;">&#128101;</div>
+        <div>
+          <div style="font-size:20px;font-weight:800;color:#FFFFFF;line-height:1.2;">Practitioners</div>
+          <div style="font-size:13px;color:rgba(255,255,255,0.50);margin-top:3px;">
+            Manage accounts, roles, and organisation assignments.
+          </div>
+        </div>
+      </div>
+      <a class="btn btn-primary" href="/coach/coaches/new"
+         style="white-space:nowrap;">+ Add Practitioner</a>
     </div>
+
     {message_html}
     {filter_bar}
     <div class="card">
@@ -7479,40 +7503,59 @@ def organisations_page(user, orgs_data, message=None):
     rows_html = "".join(rows) if rows else '<tr><td colspan="4" class="muted" style="text-align:center;padding:24px;">No organisations yet.</td></tr>'
 
     body = f"""
-    <div class="page-head">
+    <!-- Hero banner -->
+    <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                padding:24px 28px;margin-bottom:28px;display:flex;align-items:center;gap:18px;">
+      <div style="width:48px;height:48px;border-radius:13px;background:rgba(240,168,46,0.18);
+                  border:1.5px solid rgba(240,168,46,0.35);display:flex;align-items:center;
+                  justify-content:center;font-size:22px;color:#F0A82E;flex-shrink:0;font-weight:700;">&#9962;</div>
       <div>
-        <h1>Organisations</h1>
-        <p class="muted">Schools, clubs, and programmes — used to scope coaches to their own athletes.</p>
+        <div style="font-size:20px;font-weight:800;color:#FFFFFF;line-height:1.2;">Organisations</div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.50);margin-top:3px;">
+          Schools, clubs, and programmes — scope practitioners to their own athletes.
+        </div>
       </div>
     </div>
+
     {message_html}
-    <div class="card" style="margin-bottom:24px;">
-      <table class="table">
-        <thead><tr><th>Name</th><th style="text-align:center;">Groups</th><th style="text-align:center;">Practitioners</th><th></th></tr></thead>
-        <tbody>{rows_html}</tbody>
-      </table>
-    </div>
-    <div class="card form-card" style="max-width:500px;">
-      <h2 style="margin-bottom:16px;">Add Organisation</h2>
-      <form method="post" action="/coach/organisations/new" style="display:flex;flex-direction:column;gap:12px;">
-        <div>
-          <label for="new-org-name" style="margin-bottom:4px;">Name</label>
-          <input type="text" id="new-org-name" name="name" placeholder="e.g. Makoura College" required />
+
+    <!-- Two-column layout: table + form -->
+    <div style="display:grid;grid-template-columns:1fr auto;gap:24px;align-items:start;flex-wrap:wrap;">
+
+      <!-- Left: org table -->
+      <div class="card" style="min-width:0;">
+        <table class="table">
+          <thead><tr><th>Name</th><th style="text-align:center;">Groups</th><th style="text-align:center;">Practitioners</th><th></th></tr></thead>
+          <tbody>{rows_html}</tbody>
+        </table>
+      </div>
+
+      <!-- Right: add form -->
+      <div class="card form-card" style="width:320px;flex-shrink:0;">
+        <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;
+                    color:var(--jag-muted);margin-bottom:16px;display:flex;align-items:center;gap:8px;">
+          Add Organisation
+          <div style="flex:1;height:1px;background:var(--jag-border);"></div>
         </div>
-        <div>
-          <label for="new-org-type" style="margin-bottom:4px;">Type <span style="font-weight:400;color:var(--jag-muted);">(optional)</span></label>
+        <form method="post" action="/coach/organisations/new">
+          <label for="new-org-name">Name</label>
+          <input type="text" id="new-org-name" name="name" placeholder="e.g. Makoura College" required />
+          <label for="new-org-type">Type <span style="font-weight:400;color:var(--jag-muted);">(optional)</span></label>
           <select id="new-org-type" name="type">
             <option value="">— Select type —</option>
             {type_options}
           </select>
-        </div>
-        <div>
-          <label for="new-org-icon" style="margin-bottom:4px;">Logo URL <span style="font-weight:400;color:var(--jag-muted);">(optional — paste a public image link)</span></label>
+          <label for="new-org-icon">Logo URL <span style="font-weight:400;color:var(--jag-muted);">(optional)</span></label>
           <input type="url" id="new-org-icon" name="icon_url" placeholder="https://…" />
-          <p style="font-size:12px;color:var(--jag-muted);margin-top:4px;">Google Drive: open file → Share → Anyone with link → copy URL.</p>
-        </div>
-        <div><button type="submit" class="btn btn-primary">Create Organisation</button></div>
-      </form>
+          <p style="font-size:11px;color:var(--jag-muted);margin-top:4px;line-height:1.4;">
+            Google Drive: Share → Anyone with link → copy URL.
+          </p>
+          <div style="margin-top:16px;">
+            <button type="submit" class="btn btn-primary btn-block">Create Organisation</button>
+          </div>
+        </form>
+      </div>
+
     </div>
     """
     return layout("Organisations", body, user=user, active_nav="organisations")
@@ -9576,91 +9619,105 @@ def score_distribution_page(coach, distributions):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def system_admin_hub_page(user):
-    def _section(title, icon, cards_html):
+    def _section(title, sym, cards_html):
         return f"""
         <div style="margin-bottom:36px;">
-          <h3 style="font-size:14px;font-weight:700;text-transform:uppercase;
-                     letter-spacing:0.08em;color:#9CA3AF;margin:0 0 12px;">{icon} {esc(title)}</h3>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:12px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+            <div style="width:28px;height:28px;border-radius:8px;background:#2D323B;
+                        display:flex;align-items:center;justify-content:center;
+                        font-size:13px;color:#F0A82E;font-weight:700;flex-shrink:0;">{sym}</div>
+            <span style="font-size:11px;font-weight:700;text-transform:uppercase;
+                         letter-spacing:0.08em;color:var(--jag-muted);">{esc(title)}</span>
+            <div style="flex:1;height:1px;background:var(--jag-border);"></div>
+          </div>
+          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;">
             {cards_html}
           </div>
         </div>"""
 
-    def _card(href, label, desc, colour="#2D323B", icon="→"):
+    def _card(href, label, desc, icon_sym="▶", icon_bg="#2D323B", icon_col="#F0A82E", label_col="#2D323B"):
         return f"""
-        <a href="{href}" style="display:block;background:#fff;border:1px solid #E5E7EB;
+        <a href="{href}" style="display:flex;gap:14px;align-items:flex-start;
+                   background:#fff;border:1.5px solid #E8E9EB;
                    border-radius:12px;padding:16px 18px;text-decoration:none;
-                   transition:box-shadow 0.15s,transform 0.15s;"
-           onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,0.10)';this.style.transform='translateY(-2px)'"
-           onmouseout="this.style.boxShadow='';this.style.transform=''">
-          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
-            <span style="font-size:20px;">{icon}</span>
-            <span style="font-size:14px;font-weight:700;color:{colour};">{esc(label)}</span>
+                   transition:box-shadow 0.18s,transform 0.15s,border-color 0.15s;"
+           onmouseover="this.style.boxShadow='0 6px 20px rgba(240,168,46,0.15)';this.style.transform='translateY(-2px)';this.style.borderColor='#F0A82E';"
+           onmouseout="this.style.boxShadow='';this.style.transform='';this.style.borderColor='#E8E9EB';">
+          <div style="width:36px;height:36px;border-radius:10px;background:{icon_bg};
+                      display:flex;align-items:center;justify-content:center;
+                      font-size:15px;color:{icon_col};flex-shrink:0;font-weight:700;">{icon_sym}</div>
+          <div>
+            <div style="font-size:14px;font-weight:700;color:{label_col};margin-bottom:4px;">{esc(label)}</div>
+            <div style="font-size:12px;color:#6E737B;line-height:1.5;">{esc(desc)}</div>
           </div>
-          <div style="font-size:12px;color:#6E737B;line-height:1.5;">{esc(desc)}</div>
         </a>"""
 
-    thresholds = _section("JAG Standard — Thresholds & Standards", "🎯",
+    thresholds = _section("JAG Standard — Thresholds &amp; Standards", "◎",
         _card("/coach/admin/score-distribution", "Score Distribution",
               "Percentile breakdown per game — P25, mean, P75, P90, max. Use to decide threshold values.",
-              "#F0A82E", "📊") +
-        _card("/coach/admin/game-thresholds", "AAXP Thresholds",
+              "▦", "#F0A82E", "#2D323B", "#B07800") +
+        _card("/coach/admin/game-thresholds", "AXP Thresholds",
               "Set the official JAG Standard level thresholds (L1–L5) for all 8 core games.",
-              "#2D323B", "⚙")
+              "⚙", "#2D323B", "#F0A82E", "#2D323B")
     )
 
-    data_tools = _section("Data — Import & Export", "📁",
+    data_tools = _section("Data — Import &amp; Export", "↕",
         _card("/coach/participants/import", "Import Athletes",
               "Bulk-upload athletes from a CSV file. Auto-assigns athlete numbers.",
-              "#1EBE8B", "⬆") +
+              "▲", "#1EBE8B", "#fff", "#0d7a5a") +
         _card("/coach/participants/export.csv", "Export Athletes",
               "Download all athletes with temporary passwords as a CSV.",
-              "#6E737B", "⬇") +
+              "▼", "#6E737B", "#fff", "#4a5057") +
         _card("/coach/scores/import", "Import Scores",
               "Bulk-upload measurement session scores from a CSV file.",
-              "#1EBE8B", "⬆")
+              "▲", "#1EBE8B", "#fff", "#0d7a5a")
     )
 
-    xp_tools = _section("AXP Engine", "⚡",
+    xp_tools = _section("AXP Engine", "★",
         _card("/coach/admin/game-thresholds#retroactive", "Retroactive AXP Pass",
               "Re-run the AXP engine across all historical sessions. Use after changing thresholds.",
-              "#F97316", "🔄") +
+              "↺", "#F97316", "#fff", "#c05a0a") +
         _card("/coach/leaderboard", "Group Leaderboard",
               "View AXP rankings within any group. Toggle per-group leaderboard visibility in group settings.",
-              "#8B5CF6", "🏆")
+              "▲", "#8B5CF6", "#fff", "#5b2fc9")
     )
 
-    people = _section("People & Organisations", "👥",
+    people = _section("People &amp; Organisations", "◈",
         _card("/coach/coaches", "Practitioners",
-              "Manage practitioner accounts, roles, and school assignments.",
-              "#2D323B", "👤") +
+              "Manage practitioner accounts, roles, and organisation assignments.",
+              "◉", "#2D323B", "#F0A82E", "#2D323B") +
         _card("/coach/organisations", "Organisations",
               "Manage partner organisations and their branding.",
-              "#2D323B", "🏢") +
+              "▣", "#2D323B", "#F0A82E", "#2D323B") +
         _card("/coach", "Practitioner Dashboard",
               "Main dashboard — groups, athletes, and session recording.",
-              "#6E737B", "🏠")
+              "⌂", "#6E737B", "#fff", "#4a5057")
     )
 
-    reports = _section("Reports & Statistics", "📈",
-        _card("/coach/reports", "Statistics & Reports",
+    reports = _section("Reports &amp; Statistics", "▤",
+        _card("/coach/reports", "Statistics &amp; Reports",
               "All-groups progress overview, completion tracker, and achievement summaries.",
-              "#2D323B", "📈") +
+              "▤", "#2D323B", "#F0A82E", "#2D323B") +
         _card("/coach/admin/sessions", "Session Browser",
               "Browse, merge, and manage all recorded measurement sessions.",
-              "#6E737B", "📋")
+              "≡", "#6E737B", "#fff", "#4a5057")
     )
 
     body = f"""
-    <div style="max-width:900px;padding-top:28px;">
-      <div style="margin-bottom:28px;">
-        <h2 style="font-size:24px;font-weight:800;color:#2D323B;margin:0 0 4px;">
-          System Admin Hub
-        </h2>
-        <p style="font-size:13px;color:#6E737B;margin:0;">
-          All admin tools in one place. These pages are only visible to system admins.
-        </p>
+    <!-- Hero banner -->
+    <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                padding:24px 28px;margin-bottom:32px;display:flex;align-items:center;gap:18px;">
+      <div style="width:52px;height:52px;border-radius:14px;background:rgba(240,168,46,0.18);
+                  border:1.5px solid rgba(240,168,46,0.35);display:flex;align-items:center;
+                  justify-content:center;font-size:24px;color:#F0A82E;flex-shrink:0;font-weight:700;">&#9881;</div>
+      <div>
+        <div style="font-size:22px;font-weight:800;color:#FFFFFF;line-height:1.2;">System Admin Hub</div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.50);margin-top:4px;">
+          All admin tools in one place — only visible to system admins.
+        </div>
       </div>
+    </div>
+    <div style="max-width:900px;">
       {thresholds}
       {data_tools}
       {xp_tools}
