@@ -253,9 +253,9 @@ def layout(title, body, user=None, flash=None, active_nav=None):
     flash_html = f'<div class="flash">{esc(flash)}</div>' if flash else ""
 
     if user and user.get("role") != "participant" and active_nav != "home":
-        home_btn = ('<div style="margin-bottom:12px;">'
+        home_btn = ('<div style="margin-bottom:16px;">'
                     '<a href="/coach" class="return-home-btn">'
-                    '&#8962; Return to Home'
+                    '&larr; Home'
                     '</a></div>')
     else:
         home_btn = ""
@@ -285,14 +285,15 @@ def layout(title, body, user=None, flash=None, active_nav=None):
     .res-folder-toggle:hover .res-folder-name {{ text-decoration: underline; }}
     .return-home-btn {{
       display: inline-flex; align-items: center; gap: 6px;
-      font-size: 12px; font-weight: 600; color: rgba(255,255,255,0.55);
-      text-decoration: none; padding: 5px 12px; border-radius: 20px;
-      background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.1);
-      transition: background 0.15s, color 0.15s;
+      font-size: 13px; font-weight: 600; color: #2D323B;
+      text-decoration: none; padding: 6px 14px; border-radius: 20px;
+      background: #F4F5F7; border: 1px solid #E5E7EB;
+      transition: background 0.15s, color 0.15s, border-color 0.15s;
     }}
     .return-home-btn:hover {{
-      background: rgba(255,255,255,0.12) !important;
+      background: #2D323B !important;
       color: #F0A82E !important;
+      border-color: #2D323B !important;
     }}
   </style>
 
