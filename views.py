@@ -2265,45 +2265,127 @@ def new_participant_form(user, error=None, groups=None):
         f'<option value="{g["id"]}">{esc(g["name"])}</option>' for g in groups
     )
     body = f"""
-    <div class="page-head"><h1>Add Participant</h1></div>
+    <style>
+      .form-section-label {{
+        font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;
+        color:var(--jag-muted);margin-bottom:14px;display:flex;align-items:center;gap:8px;
+      }}
+      .form-section-label::after {{
+        content:'';flex:1;height:1px;background:var(--jag-border);
+      }}
+      .login-toggle-card {{
+        border:1.5px solid var(--jag-border);border-radius:12px;padding:16px 18px;
+        cursor:pointer;transition:border-color 0.15s,background 0.15s;
+        display:flex;align-items:flex-start;gap:14px;
+      }}
+      .login-toggle-card:hover {{ border-color:#F0A82E;background:rgba(240,168,46,0.04); }}
+      .login-toggle-card.active {{ border-color:#F0A82E;background:rgba(240,168,46,0.07); }}
+    </style>
+
+    <!-- Hero banner -->
+    <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                padding:28px 28px 24px;margin-bottom:28px;display:flex;align-items:center;gap:18px;">
+      <div style="width:52px;height:52px;border-radius:14px;background:rgba(240,168,46,0.18);
+                  border:1.5px solid rgba(240,168,46,0.35);display:flex;align-items:center;
+                  justify-content:center;font-size:24px;flex-shrink:0;">&#43;&#128100;</div>
+      <div>
+        <div style="font-size:22px;font-weight:800;color:#FFFFFF;line-height:1.2;">Add Participant</div>
+        <div style="font-size:13px;color:rgba(255,255,255,0.55);margin-top:4px;">
+          Register a new athlete and optionally set up their login access.
+        </div>
+      </div>
+    </div>
+
     {error_html}
+
     <div class="card form-card">
       <form method="post" action="/coach/participants/new">
+
+        <!-- Section 1: Athlete Details -->
+        <div class="form-section-label">Athlete Details</div>
+
         <label for="name">Full name</label>
-        <input type="text" id="name" name="name" required />
-        <label for="gender">Gender</label>
-        <select id="gender" name="gender">
-          <option value="">— Not specified —</option>
-          <option value="Male">Male</option>
-          <option value="Female">Female</option>
-          <option value="Non-binary">Non-binary</option>
-          <option value="Prefer not to say">Prefer not to say</option>
-        </select>
-        <label for="sport">Sport</label>
-        <select id="sport" name="sport">{sport_options}</select>
+        <input type="text" id="name" name="name" required placeholder="e.g. Alex Johnson" />
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+          <div>
+            <label for="gender">Gender</label>
+            <select id="gender" name="gender">
+              <option value="">— Not specified —</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Non-binary">Non-binary</option>
+              <option value="Prefer not to say">Prefer not to say</option>
+            </select>
+          </div>
+          <div>
+            <label for="sport">Sport</label>
+            <select id="sport" name="sport">{sport_options}</select>
+          </div>
+        </div>
+
+        <!-- Section 2: Programme & Group -->
+        <div class="form-section-label" style="margin-top:24px;">Programme &amp; Group</div>
+
         <label for="programme">Programme / notes</label>
-        <input type="text" id="programme" name="programme" placeholder="e.g. Athlete Adaptability Programme - Masterton 2026" />
-        <label for="group_id">Group (optional)</label>
+        <input type="text" id="programme" name="programme"
+               placeholder="e.g. Athlete Adaptability Programme - Masterton 2026" />
+
+        <label for="group_id">Group <span style="font-weight:400;color:var(--jag-muted);">(optional)</span></label>
         <select id="group_id" name="group_id">{group_opts}</select>
 
-        <div style="margin:20px 0 10px; padding-top:16px; border-top:1px solid var(--jag-border);">
-          <label style="display:flex; align-items:center; gap:10px; cursor:pointer; font-weight:600;">
-            <input type="checkbox" id="setup-login" name="setup_login" value="1"
-                   style="width:auto; margin:0;"
-                   onchange="document.getElementById('login-fields').style.display=this.checked?'block':'none';" />
-            Set up login account
-          </label>
-          <p class="muted" style="margin:4px 0 0; font-size:13px;">Check this to give the athlete access to their own dashboard.</p>
+        <!-- Section 3: Account Access -->
+        <div class="form-section-label" style="margin-top:24px;">Account Access</div>
+
+        <div class="login-toggle-card" id="login-toggle-card"
+             onclick="var cb=document.getElementById('setup-login');cb.checked=!cb.checked;
+                      this.classList.toggle('active',cb.checked);
+                      document.getElementById('login-fields').style.display=cb.checked?'block':'none';">
+          <div style="width:36px;height:36px;border-radius:10px;background:#2D323B;
+                      display:flex;align-items:center;justify-content:center;
+                      font-size:17px;flex-shrink:0;color:#F0A82E;">&#128273;</div>
+          <div style="flex:1;">
+            <div style="display:flex;align-items:center;gap:10px;">
+              <span style="font-weight:700;font-size:14px;color:var(--jag-navy);">Set up login account</span>
+              <input type="checkbox" id="setup-login" name="setup_login" value="1"
+                     style="width:16px;height:16px;margin:0;accent-color:#F0A82E;"
+                     onclick="event.stopPropagation();
+                              document.getElementById('login-toggle-card').classList.toggle('active',this.checked);
+                              document.getElementById('login-fields').style.display=this.checked?'block':'none';" />
+            </div>
+            <p style="margin:4px 0 0;font-size:13px;color:var(--jag-muted);line-height:1.5;">
+              Gives the athlete access to their own dashboard — XP progress, level tracking, and guided training steps.
+            </p>
+          </div>
         </div>
 
-        <div id="login-fields" style="display:none;">
-          <label for="email">Email (used to log in)</label>
-          <input type="email" id="email" name="email" />
-          <label for="password">Temporary password</label>
-          <input type="text" id="password" name="password" value="Athlete123!" />
+        <div id="login-fields" style="display:none;margin-top:16px;
+             padding:16px 18px;background:rgba(240,168,46,0.06);
+             border:1.5px solid rgba(240,168,46,0.25);border-radius:10px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+            <div>
+              <label for="email" style="margin-top:0;">Email <span style="font-weight:400;color:var(--jag-muted);">(used to log in)</span></label>
+              <input type="email" id="email" name="email" placeholder="athlete@example.com" />
+            </div>
+            <div>
+              <label for="password" style="margin-top:0;">Temporary password</label>
+              <input type="text" id="password" name="password" value="Athlete123!" />
+            </div>
+          </div>
+          <p style="margin:10px 0 0;font-size:12px;color:var(--jag-muted);">
+            &#9432;&nbsp; The athlete should change their password after first login.
+          </p>
         </div>
 
-        <button type="submit" class="btn btn-primary" style="margin-top:16px;">Add Participant</button>
+        <!-- Submit -->
+        <div style="margin-top:28px;padding-top:20px;border-top:1px solid var(--jag-border);
+                    display:flex;align-items:center;gap:12px;">
+          <button type="submit" class="btn btn-primary" style="padding:10px 28px;font-size:15px;">
+            &#43; Add Participant
+          </button>
+          <a href="/coach" class="btn btn-ghost" style="padding:10px 20px;">Cancel</a>
+        </div>
+
       </form>
     </div>
     """
