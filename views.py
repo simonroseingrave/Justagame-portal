@@ -10890,10 +10890,10 @@ def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_r
         nt = item["next_threshold"]
         direction = "or lower" if item["lower_is_better"] else "or more"
         if nt is not None:
-            test_tip = (f'<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:8px;'
-                        f'padding:10px 14px;margin-top:10px;">'
-                        f'<div style="font-size:11px;font-weight:700;color:#1E40AF;margin-bottom:4px;">🎯 Self-Test Challenge</div>'
-                        f'<div style="font-size:12px;color:#1E3A8A;line-height:1.6;">'
+            test_tip = (f'<div style="background:rgba(240,168,46,0.10);border:1px solid rgba(240,168,46,0.32);'
+                        f'border-radius:8px;padding:10px 14px;margin-top:10px;">'
+                        f'<div style="font-size:11px;font-weight:700;color:#C07C00;margin-bottom:4px;">&#127919; Self-Test Challenge</div>'
+                        f'<div style="font-size:12px;color:#2D323B;line-height:1.6;">'
                         f'Try the <strong>{esc(item["self_test"])}</strong> self-test. '
                         f'Level {item["next_level"]} target is <strong>{nt} {direction}</strong>. '
                         f'Do it once normally, then try to hit that number — see how close you are.'
