@@ -1807,15 +1807,40 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
                     onclick="return confirm('Tag all unlabelled sessions for this group?');">Apply</button>
           </form>
         </div>""" if is_admin else ""
-        admin_btns = f"""<a href="/coach/groups/{group['id']}/edit" class="btn btn-ghost btn-sm" style="font-size:12px;">Edit</a>
-            <button class="btn btn-ghost btn-sm" style="font-size:12px;"
-                    onclick="var el=document.getElementById('relabel-{gkey}');el.style.display=el.style.display==='none'?'block':'none';">
-              &#127991; Tag Sessions
-            </button>
-            <form method="post" action="/coach/groups/{group['id']}/delete" style="display:inline"
-              onsubmit="return confirm('Delete group \\'{esc(group['name'])}\\'? Participants move to ungrouped.');">
-              <button type="submit" class="btn btn-ghost btn-sm" style="font-size:12px;">Delete</button>
-            </form>""" if is_admin else ""
+        admin_btns = f"""
+            <div style="position:relative;display:inline-block;">
+              <button type="button" class="btn btn-ghost btn-sm" id="more-btn-{gkey}"
+                      onclick="var m=document.getElementById('more-menu-{gkey}');m.style.display=m.style.display==='none'?'block':'none';"
+                      style="font-size:12px;padding:4px 10px;">⋯ More</button>
+              <div id="more-menu-{gkey}" style="display:none;position:absolute;top:calc(100% + 4px);right:0;
+                   background:#fff;border:1px solid #E5E7EB;border-radius:10px;
+                   box-shadow:0 8px 24px rgba(0,0,0,.10);min-width:160px;z-index:100;padding:6px 0;">
+                <a href="/coach/groups/{group['id']}/edit"
+                   style="display:block;padding:9px 16px;font-size:13px;color:#2D323B;text-decoration:none;"
+                   onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background=''">✏️ Edit Group</a>
+                <button onclick="var el=document.getElementById('relabel-{gkey}');el.style.display=el.style.display==='none'?'block':'none';document.getElementById('more-menu-{gkey}').style.display='none';"
+                        style="display:block;width:100%;text-align:left;padding:9px 16px;font-size:13px;
+                               color:#2D323B;background:none;border:none;cursor:pointer;"
+                        onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background=''">🏷️ Tag Sessions</button>
+                <div style="border-top:1px solid #F3F4F6;margin:4px 0;"></div>
+                <form method="post" action="/coach/groups/{group['id']}/delete" style="margin:0;"
+                      onsubmit="return confirm('Delete group \\'{esc(group['name'])}\\'? Participants move to ungrouped.');">
+                  <button type="submit"
+                          style="display:block;width:100%;text-align:left;padding:9px 16px;font-size:13px;
+                                 color:#EF4444;background:none;border:none;cursor:pointer;"
+                          onmouseover="this.style.background='#FEF2F2'" onmouseout="this.style.background=''">🗑 Delete Group</button>
+                </form>
+              </div>
+            </div>
+            <script>
+              document.addEventListener('click', function(e) {{
+                var btn = document.getElementById('more-btn-{gkey}');
+                var menu = document.getElementById('more-menu-{gkey}');
+                if (menu && btn && !btn.contains(e.target) && !menu.contains(e.target)) {{
+                  menu.style.display = 'none';
+                }}
+              }});
+            </script>""" if is_admin else ""
         left_pad = "margin-left:20px;" if indent else ""
         return f"""
         <div class="group-section" data-group-id="{group['id']}" data-group-key="{gkey}" style="margin-bottom:20px;{left_pad}">
@@ -1942,11 +1967,11 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
             for s in all_sports
         )
         filter_bar = f"""
-        <div id="sport-filter" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:20px;">
-          <span style="font-size:13px;color:var(--jag-muted);font-weight:600;">Filter by sport:</span>
+        <div id="sport-filter" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+          <span style="font-size:12px;color:var(--jag-muted);font-weight:600;margin-right:2px;">Sport:</span>
           <button onclick="filterSport(this, '')" class="filter-active"
-            style="padding:5px 14px;border-radius:999px;border:1px solid var(--jag-green);
-                   background:var(--jag-green);color:var(--jag-navy);font-size:13px;cursor:pointer;font-weight:600;">All</button>
+            style="padding:4px 12px;border-radius:999px;border:1px solid var(--jag-green);
+                   background:var(--jag-green);color:var(--jag-navy);font-size:12px;cursor:pointer;font-weight:600;">All</button>
           {sport_btns}
         </div>"""
         filter_js = """
@@ -1990,14 +2015,49 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
       </form>
     </div>""" if is_admin else ""
 
+    admin_dropdown = """
+      <div style="position:relative;display:inline-block;">
+        <button type="button" class="btn btn-ghost" id="admin-menu-btn"
+                onclick="var m=document.getElementById('admin-menu');m.style.display=m.style.display==='none'?'block':'none';"
+                style="display:flex;align-items:center;gap:5px;">
+          ⚙ Admin <span style="font-size:10px;margin-top:1px;">▾</span>
+        </button>
+        <div id="admin-menu" style="display:none;position:absolute;top:calc(100% + 4px);right:0;
+             background:#fff;border:1px solid #E5E7EB;border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.10);
+             min-width:200px;z-index:200;padding:6px 0;">
+          <a href="/coach/participants/import" style="display:block;padding:9px 16px;font-size:13px;color:#2D323B;text-decoration:none;"
+             onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background=''">&#8679; Import Athletes</a>
+          <a href="/coach/participants/export.csv" style="display:block;padding:9px 16px;font-size:13px;color:#2D323B;text-decoration:none;"
+             onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background=''">&#8681; Export Athletes</a>
+          <a href="/coach/scores/import" style="display:block;padding:9px 16px;font-size:13px;color:#2D323B;text-decoration:none;"
+             onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background=''">&#8679; Import Scores</a>
+          <div style="border-top:1px solid #F3F4F6;margin:4px 0;"></div>
+          <a href="/coach/admin/game-thresholds" style="display:block;padding:9px 16px;font-size:13px;color:#2D323B;text-decoration:none;"
+             onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background=''">&#9881; AXP Thresholds</a>
+          <a href="/coach/admin/score-distribution" style="display:block;padding:9px 16px;font-size:13px;color:#2D323B;text-decoration:none;"
+             onmouseover="this.style.background='#F9FAFB'" onmouseout="this.style.background=''">&#128202; Score Distribution</a>
+        </div>
+      </div>
+      <script>
+        document.addEventListener('click', function(e) {
+          var btn = document.getElementById('admin-menu-btn');
+          var menu = document.getElementById('admin-menu');
+          if (menu && btn && !btn.contains(e.target) && !menu.contains(e.target)) {
+            menu.style.display = 'none';
+          }
+        });
+      </script>""" if is_admin else ""
+
     action_btns = f"""
-    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:12px;">
       <a class="btn btn-primary" href="/coach/participants/new">+ Add Participant</a>
       <button type="button" class="btn btn-primary" onclick="var p=document.getElementById('create-group-panel');p.style.display=p.style.display==='none'?'block':'none';">+ Create Group</button>
       <a class="btn btn-primary" href="/coach/session">Record Session</a>
-      {'<a class="btn btn-ghost" href="/coach/participants/import" title="Bulk-import athletes from CSV">&#8679; Import Athletes</a><a class="btn btn-ghost" href="/coach/participants/export.csv" title="Export all athletes with new temp passwords">&#8681; Export Athletes</a><a class="btn btn-ghost" href="/coach/scores/import" title="Bulk-import test scores from CSV">&#8679; Import Scores</a><a class="btn btn-ghost" href="/coach/admin/game-thresholds" title="Set XP level thresholds and run retroactive AXP pass">&#9881; AXP Thresholds</a><a class="btn btn-ghost" href="/coach/admin/score-distribution" title="View score percentile distributions to inform threshold setting">&#128202; Score Distribution</a>' if is_admin else ''}
+      {admin_dropdown}
+      {'<div style="flex:1;min-width:0;"></div>' + filter_bar if filter_bar else ''}
     </div>
-    {create_group_form}""" if is_admin else ""
+    {create_group_form}""" if is_admin else (f"""
+    <div style="margin-bottom:12px;">{filter_bar}</div>""" if filter_bar else "")
 
     sortable_js = """
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.2/Sortable.min.js"></script>
@@ -2112,7 +2172,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
         if phase_line2:
             phase_html += f'<div style="font-size:12px;color:var(--jag-muted);margin-top:2px;">{phase_line2}</div>'
         untested = stats.get("untested", 0)
-        untested_color = "color:#9b1c1c;" if untested > 0 else "color:var(--jag-navy);"
+        untested_color = "color:#92400E;" if untested > 0 else "color:var(--jag-navy);"
 
         # Avg sprint time
         avg_sprint = stats.get("avg_sprint")
@@ -2166,7 +2226,7 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
           </div>
           <div class="card stat-card">
             <div class="stat-number" style="{untested_color}">{untested}</div>
-            <div class="stat-label">Not Yet Tested</div>
+            <div class="stat-label">Pending Baseline</div>
           </div>
         </div>"""
     else:
@@ -2185,7 +2245,6 @@ def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None
     {action_btns}
     {message_html}
     <div style="margin-top:28px;">
-      {filter_bar}
       {content}
     </div>
     </div>
