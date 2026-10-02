@@ -3342,9 +3342,18 @@ def attendance_view(req, event_id):
         if not event:
             return flash_redirect("/coach/attendance", "Session not found.")
         attendees = db.get_attendance_for_event(conn, event_id)
+        # Which attendees have already submitted self-directed scores for this event?
+        submitted_ids = {
+            r["participant_id"]
+            for r in conn.execute(
+                "SELECT participant_id FROM measurement_sessions "
+                "WHERE attendance_event_id = ? AND session_type = 'self_directed'",
+                (event_id,),
+            ).fetchall()
+        }
     finally:
         conn.close()
-    return Response(views.attendance_view_page(coach, dict(event), attendees))
+    return Response(views.attendance_view_page(coach, dict(event), attendees, submitted_ids))
 
 
 @router.post("/coach/attendance/<int:event_id>/delete")
@@ -3473,7 +3482,42 @@ def self_directed_entry_post(req, event_id):
             pass
     finally:
         conn.close()
-    return flash_redirect("/athlete/self-directed", "Scores saved — XP awarded!")
+    return redirect(f"/athlete/self-directed/success/{session_id}")
+
+
+@router.get("/athlete/self-directed/success/<int:session_id>")
+def self_directed_success(req, session_id):
+    """Success screen after athlete submits self-directed scores."""
+    user = require_role(req, "participant")
+    if not user:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        # Verify this session belongs to this athlete
+        ms = conn.execute(
+            "SELECT ms.id, ms.attendance_event_id, ae.date, g.name AS group_name "
+            "FROM measurement_sessions ms "
+            "LEFT JOIN session_attendance_events ae ON ae.id = ms.attendance_event_id "
+            "LEFT JOIN groups g ON g.id = ae.group_id "
+            "WHERE ms.id = ? AND ms.participant_id = ? AND ms.session_type = 'self_directed'",
+            (session_id, user["id"]),
+        ).fetchone()
+        if not ms:
+            return flash_redirect("/athlete/self-directed", "Session not found.")
+        xp_events = conn.execute(
+            "SELECT xp_type, amount, notes FROM xp_events "
+            "WHERE participant_id = ? AND session_id = ? "
+            "ORDER BY id",
+            (user["id"], session_id),
+        ).fetchall()
+    finally:
+        conn.close()
+    return Response(views.self_directed_success_page(
+        user,
+        [dict(e) for e in xp_events],
+        ms["date"],
+        ms["group_name"],
+    ))
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -8662,17 +8662,33 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
         {_next_note}
       </div>"""
 
+    _back_href = f'/coach/participants/{esc(str(athlete.get("id","")))}' if coach else '/athlete/dashboard'
+    _back_label = "&larr; Back to Profile" if coach else "&larr; Dashboard"
+
     hero = f"""
-    <div style="background:{tier_colour};border-radius:16px;padding:28px 32px;margin-bottom:28px;color:#fff;">
-      <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
-        <div style="flex:1;min-width:200px;">
-          <div style="font-size:13px;opacity:0.8;text-transform:uppercase;letter-spacing:0.08em;">Rank</div>
-          <div style="font-size:36px;font-weight:800;line-height:1.1;">{esc(tier_label)}</div>
-          <div style="font-size:14px;opacity:0.85;margin-top:4px;">{name}</div>
+    <div style="background:{tier_colour};border-radius:16px;padding:24px 28px;margin-bottom:28px;color:#fff;">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:14px;">
+          <div style="width:52px;height:52px;border-radius:14px;background:rgba(255,255,255,0.18);
+                      border:1.5px solid rgba(255,255,255,0.30);display:flex;align-items:center;
+                      justify-content:center;font-size:22px;font-weight:800;flex-shrink:0;">&#9650;</div>
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;
+                        color:rgba(255,255,255,0.70);margin-bottom:2px;">AXP Profile</div>
+            <div style="font-size:22px;font-weight:800;line-height:1.1;">{name}</div>
+            <div style="font-size:13px;opacity:0.75;margin-top:2px;">{esc(tier_label)}</div>
+          </div>
         </div>
-        <div style="text-align:right;">
-          <div style="font-size:48px;font-weight:900;line-height:1;">{total:,}</div>
-          <div style="font-size:14px;opacity:0.8;">AXP total</div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+          <div style="font-size:42px;font-weight:900;line-height:1;">{total:,}</div>
+          <div style="font-size:12px;opacity:0.75;">AXP total</div>
+          <a href="{_back_href}"
+             style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.65);text-decoration:none;
+                    padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.25);
+                    background:rgba(255,255,255,0.10);white-space:nowrap;
+                    transition:background 0.15s;"
+             onmouseover="this.style.background='rgba(255,255,255,0.20)'"
+             onmouseout="this.style.background='rgba(255,255,255,0.10)'">{_back_label}</a>
         </div>
       </div>
       {_journey}
@@ -8694,7 +8710,10 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
 
     levels_section = f"""
     <div style="margin-bottom:32px;">
-      <h3 style="font-size:16px;font-weight:700;color:#2D323B;margin:0 0 14px;">Level Achievements</h3>
+      <div style="display:flex;align-items:center;gap:0;margin-bottom:14px;">
+        <div style="width:3px;height:16px;background:#F0A82E;border-radius:2px;margin-right:10px;"></div>
+        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:#2D323B;">Level Achievements</span>
+      </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">
         {level_chips}
       </div>
@@ -8707,14 +8726,17 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
 
     events_section = f"""
     <div style="margin-bottom:32px;">
-      <h3 style="font-size:16px;font-weight:700;color:#2D323B;margin:0 0 14px;">Recent AXP Events</h3>
+      <div style="display:flex;align-items:center;gap:0;margin-bottom:14px;">
+        <div style="width:3px;height:16px;background:#F0A82E;border-radius:2px;margin-right:10px;"></div>
+        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:#2D323B;">Recent AXP Events</span>
+      </div>
       <div style="border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">
         <table style="width:100%;border-collapse:collapse;">
           <thead>
-            <tr style="background:#2D323B;">
-              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;font-weight:600;">Event</th>
-              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;font-weight:600;">Date</th>
-              <th style="padding:10px 14px;text-align:right;font-size:12px;color:#fff;font-weight:600;">AXP</th>
+            <tr style="background:#2D323B;border-bottom:2px solid #F0A82E;">
+              <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.75);">Event</th>
+              <th style="padding:10px 14px;text-align:left;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.75);">Date</th>
+              <th style="padding:10px 14px;text-align:right;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.75);">AXP</th>
             </tr>
           </thead>
           <tbody>{rows}</tbody>
@@ -8722,16 +8744,15 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
       </div>
     </div>"""
 
-    back_link = ""
     if coach:
-        back_link = f'<a href="/coach/participants/{esc(str(athlete.get("id","")))}" class="btn btn-ghost btn-sm" style="margin-bottom:20px;">← Back to Profile</a>'
+        back_href = f'/coach/participants/{esc(str(athlete.get("id","")))}'
+        back_label = "&larr; Back to Profile"
+    else:
+        back_href = "/athlete/dashboard"
+        back_label = "&larr; Dashboard"
 
     body = f"""
-    <div class="container" style="max-width:860px;padding-top:32px;">
-      {back_link}
-      <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 24px;">
-        {"AAXP Profile — " + name if coach else "My AXP Profile"}
-      </h2>
+    <div class="container" style="max-width:860px;">
       {hero}
       {levels_section}
       {events_section}
@@ -9356,6 +9377,81 @@ def self_directed_entry_page(athlete, event):
       </form>
     </div>"""
     return layout("Self-Directed Entry", body, user=athlete, active_nav="self_directed")
+
+
+def self_directed_success_page(athlete, xp_events, session_date, group_name):
+    """Shown immediately after an athlete submits self-directed scores."""
+    total_earned = sum(e.get("amount", 0) for e in xp_events)
+    session_date_str = esc((session_date or "")[:10])
+    group_str = esc(group_name or "")
+
+    # XP type display names
+    _XP_LABELS = {
+        "session": "Session completed",
+        "self_directed": "Self-directed session",
+        "first_game": "First game recorded",
+        "level_up": "Level achieved",
+        "streak_3": "3-session streak",
+        "streak_5": "5-session streak",
+        "personal_best": "Personal best",
+        "welcome": "Welcome bonus",
+    }
+
+    # XP breakdown rows
+    breakdown_rows = ""
+    for e in xp_events:
+        xp = e.get("amount", 0)
+        xp_type = e.get("xp_type", "")
+        label = esc(e.get("notes") or _XP_LABELS.get(xp_type, xp_type))
+        breakdown_rows += f"""
+        <div style="display:flex;align-items:center;justify-content:space-between;
+                    padding:9px 0;border-bottom:1px solid rgba(255,255,255,0.10);">
+          <span style="font-size:13px;color:rgba(255,255,255,0.80);">{label}</span>
+          <span style="font-size:13px;font-weight:700;color:#F0A82E;">+{xp:,} AXP</span>
+        </div>"""
+    if not breakdown_rows:
+        breakdown_rows = ('<div style="font-size:13px;color:rgba(255,255,255,0.60);padding:8px 0;">'
+                          'No new XP events — you may have already scored this session.</div>')
+
+    body = f"""
+    <div class="container" style="max-width:520px;padding-top:40px;">
+      <!-- Success hero -->
+      <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                  padding:28px 28px 24px;margin-bottom:20px;text-align:center;">
+        <div style="font-size:44px;margin-bottom:10px;">&#9650;</div>
+        <div style="font-size:28px;font-weight:900;color:#F0A82E;line-height:1.1;">+{total_earned:,} AXP</div>
+        <div style="font-size:14px;color:rgba(255,255,255,0.70);margin-top:6px;">Scores saved — great work!</div>
+        {f'<div style="font-size:12px;color:rgba(255,255,255,0.45);margin-top:4px;">{session_date_str}{" · " + group_str if group_str else ""}</div>' if session_date_str else ""}
+
+        <!-- XP breakdown inside hero -->
+        <div style="margin-top:20px;background:rgba(255,255,255,0.06);border-radius:10px;
+                    padding:12px 16px;text-align:left;">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;
+                      color:rgba(240,168,46,0.80);margin-bottom:6px;">AXP earned</div>
+          {breakdown_rows}
+        </div>
+      </div>
+
+      <!-- Actions -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <a href="/athlete/self-directed"
+           style="flex:1;text-align:center;padding:12px 16px;background:#F0A82E;color:#2D323B;
+                  font-weight:700;font-size:14px;border-radius:10px;text-decoration:none;
+                  transition:opacity 0.15s;"
+           onmouseover="this.style.opacity='0.88'" onmouseout="this.style.opacity='1'">
+          &#8592; Self-Directed Home
+        </a>
+        <a href="/athlete/xp"
+           style="flex:1;text-align:center;padding:12px 16px;background:rgba(45,50,59,0.06);
+                  color:#2D323B;font-weight:600;font-size:14px;border-radius:10px;
+                  text-decoration:none;border:1px solid #E5E7EB;transition:background 0.15s;"
+           onmouseover="this.style.background='rgba(45,50,59,0.10)'"
+           onmouseout="this.style.background='rgba(45,50,59,0.06)'">
+          View AXP Profile &#8594;
+        </a>
+      </div>
+    </div>"""
+    return layout("Scores Saved", body, user=athlete, active_nav="self_directed")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
