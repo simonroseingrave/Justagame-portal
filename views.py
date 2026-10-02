@@ -312,15 +312,15 @@ def layout(title, body, user=None, flash=None, active_nav=None):
     .res-folder-toggle:hover .res-folder-name {{ text-decoration: underline; }}
     .return-home-btn {{
       display: inline-flex; align-items: center; gap: 6px;
-      font-size: 13px; font-weight: 600; color: #2D323B;
+      font-size: 13px; font-weight: 700; color: #7A5800;
       text-decoration: none; padding: 6px 14px; border-radius: 20px;
-      background: #F4F5F7; border: 1px solid #E5E7EB;
+      background: rgba(240,168,46,0.12); border: 1.5px solid #F0A82E;
       transition: background 0.15s, color 0.15s, border-color 0.15s;
     }}
     .return-home-btn:hover {{
-      background: #2D323B !important;
-      color: #F0A82E !important;
-      border-color: #2D323B !important;
+      background: #F0A82E !important;
+      color: #2D323B !important;
+      border-color: #F0A82E !important;
     }}
   </style>
 
@@ -10745,7 +10745,7 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
           <p style="font-size:13px;color:#6E737B;margin:0;">{athlete_meta}</p>
         </div>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <a href="/coach/athlete/{athlete['id']}" class="btn btn-ghost btn-sm">← Back to Profile</a>
+          <a href="/coach/participants/{athlete['id']}" class="btn btn-ghost btn-sm">← Back to Profile</a>
           <button onclick="window.print()" class="btn btn-primary btn-sm">🖨 Print Report</button>
         </div>
       </div>
