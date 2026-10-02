@@ -7264,6 +7264,148 @@ def admin_sessions_page(admin, groups, selected_group_id=None, athlete_sessions=
     return layout("Session Manager", body, user=admin, active_nav="progress")
 
 
+def session_success_page(coach, participant, session, results, xp_events, level_ups):
+    """Confirmation screen shown to a practitioner after saving a formal measurement session."""
+    from constants import GAME_DISPLAY_NAMES as _GDN
+    name = esc(participant.get("name", "Athlete"))
+    pid  = participant.get("id", "")
+    label = esc(session.get("session_label") or "")
+    date_str = esc((session.get("date") or "")[:10])
+    total_xp = sum(e.get("amount", 0) for e in xp_events)
+
+    _XP_LABELS = {
+        "session": "Session completed",
+        "self_directed": "Self-directed session",
+        "first_game": "First game recorded",
+        "level_up": "Level achieved",
+        "streak_3": "3-session streak",
+        "streak_5": "5-session streak",
+        "personal_best": "Personal best",
+        "welcome": "Welcome bonus",
+    }
+
+    # ── Scores recorded ──────────────────────────────────────────────────────
+    # Group by game
+    games_seen = {}
+    for (gk, fk, val) in results:
+        if gk not in games_seen:
+            games_seen[gk] = []
+        games_seen[gk].append((fk, val))
+
+    score_rows = ""
+    for gk, fields in games_seen.items():
+        game_label = esc(_GDN.get(gk, gk))
+        field_strs = ", ".join(f"{v:g}" for _, v in fields)
+        score_rows += f"""
+        <div style="display:flex;align-items:center;justify-content:space-between;
+                    padding:9px 14px;border-bottom:1px solid #F0F1F3;">
+          <span style="font-size:13px;color:#2D323B;font-weight:500;">{game_label}</span>
+          <span style="font-size:13px;font-weight:700;color:#2D323B;">{field_strs}</span>
+        </div>"""
+    if not score_rows:
+        score_rows = '<div style="padding:12px 14px;font-size:13px;color:#9CA3AF;">No scores recorded.</div>'
+
+    # ── Level-ups ─────────────────────────────────────────────────────────────
+    level_up_html = ""
+    if level_ups:
+        pills = ""
+        for lu in level_ups:
+            game_lbl = esc(_GDN.get(lu.get("game_key", ""), lu.get("game_key", "")))
+            lvl = lu.get("level", "")
+            pills += (f'<span style="font-size:12px;font-weight:700;padding:4px 14px;'
+                      f'background:#F0A82E;color:#2D323B;border-radius:999px;'
+                      f'white-space:nowrap;">&#9650; {game_lbl} → L{lvl}</span> ')
+        level_up_html = f"""
+        <div style="background:rgba(240,168,46,0.10);border:1px solid rgba(240,168,46,0.30);
+                    border-radius:10px;padding:12px 16px;margin-bottom:16px;">
+          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;
+                      color:#7A5800;margin-bottom:8px;">&#127881; Level-ups this session</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">{pills}</div>
+        </div>"""
+
+    # ── XP breakdown ─────────────────────────────────────────────────────────
+    xp_rows = ""
+    for e in xp_events:
+        xp_type = e.get("xp_type", "")
+        label_e = esc(e.get("notes") or _XP_LABELS.get(xp_type, xp_type))
+        xp_rows += f"""
+        <div style="display:flex;justify-content:space-between;padding:7px 0;
+                    border-bottom:1px solid rgba(255,255,255,0.10);">
+          <span style="font-size:12px;color:rgba(255,255,255,0.75);">{label_e}</span>
+          <span style="font-size:12px;font-weight:700;color:#F0A82E;">+{e.get('amount',0):,}</span>
+        </div>"""
+
+    xp_block = ""
+    if xp_events:
+        xp_block = f"""
+        <div style="margin-top:14px;background:rgba(255,255,255,0.07);border-radius:10px;padding:12px 16px;">
+          <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;
+                      color:rgba(240,168,46,0.80);margin-bottom:6px;">AXP awarded to {name}</div>
+          {xp_rows}
+          <div style="display:flex;justify-content:space-between;padding-top:8px;margin-top:4px;">
+            <span style="font-size:12px;font-weight:700;color:#fff;">Total</span>
+            <span style="font-size:14px;font-weight:900;color:#F0A82E;">+{total_xp:,} AXP</span>
+          </div>
+        </div>"""
+
+    session_meta = label if label else date_str
+
+    body = f"""
+    <div class="container" style="max-width:600px;">
+      <!-- Hero -->
+      <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                  padding:24px 28px;margin-bottom:20px;color:#fff;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div style="width:48px;height:48px;border-radius:13px;background:rgba(30,190,139,0.18);
+                        border:1.5px solid rgba(30,190,139,0.35);display:flex;align-items:center;
+                        justify-content:center;font-size:22px;flex-shrink:0;">&#10003;</div>
+            <div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;
+                          color:rgba(30,190,139,0.85);margin-bottom:2px;">Session Saved</div>
+              <div style="font-size:20px;font-weight:800;line-height:1.2;">{name}</div>
+              <div style="font-size:12px;color:rgba(255,255,255,0.50);margin-top:2px;">{session_meta}</div>
+            </div>
+          </div>
+          <a href="/coach/participants/{pid}"
+             style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.65);text-decoration:none;
+                    padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.20);
+                    background:rgba(255,255,255,0.08);white-space:nowrap;align-self:flex-start;"
+             onmouseover="this.style.background='rgba(255,255,255,0.15)'"
+             onmouseout="this.style.background='rgba(255,255,255,0.08)'">&larr; Athlete Profile</a>
+        </div>
+        {xp_block}
+      </div>
+
+      {level_up_html}
+
+      <!-- Scores recorded -->
+      <div style="display:flex;align-items:center;gap:0;margin-bottom:12px;">
+        <div style="width:3px;height:16px;background:#F0A82E;border-radius:2px;margin-right:10px;"></div>
+        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:#2D323B;">Scores Recorded</span>
+      </div>
+      <div style="border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;margin-bottom:24px;background:#fff;">
+        {score_rows}
+      </div>
+
+      <!-- Actions -->
+      <div style="display:flex;gap:10px;flex-wrap:wrap;">
+        <a href="/coach/participants/{pid}/report"
+           style="flex:1;text-align:center;padding:12px 16px;background:#F0A82E;color:#2D323B;
+                  font-weight:700;font-size:13px;border-radius:10px;text-decoration:none;">
+          View Progress Report &#8594;
+        </a>
+        <a href="/coach/participants/{pid}"
+           style="flex:1;text-align:center;padding:12px 16px;background:rgba(45,50,59,0.06);
+                  color:#2D323B;font-weight:600;font-size:13px;border-radius:10px;
+                  text-decoration:none;border:1px solid #E5E7EB;">
+          Athlete Profile
+        </a>
+      </div>
+    </div>"""
+    return layout("Session Saved", body, user=coach, active_nav="participants")
+
+
 def confirm_replace_session_page(coach, participant, results, session_label, session_month,
                                   label_display, existing_month):
     """Warn the practitioner that a session with this label already exists, offer to merge new results in."""

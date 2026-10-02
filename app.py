@@ -1744,12 +1744,57 @@ def log_measurement_session(req, participant_id):
                 pass  # XP failure never blocks session save
     finally:
         conn.close()
-    label_display = SESSION_LABEL_MAP.get(session_label, "") if session_label else ""
-    if label_display:
-        msg = f"{label_display} results merged in." if confirm_replace else f"{label_display} results saved."
-    else:
-        msg = "Measurement Games results saved."
-    return flash_redirect(f"/coach/participants/{participant_id}", msg)
+    return redirect(f"/coach/session/success/{saved_session_id}?participant={participant_id}")
+
+
+@router.get("/coach/session/success/<int:session_id>")
+def session_success(req, session_id):
+    """Confirmation page shown after a practitioner saves a formal session."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    participant_id = req.get_query("participant") or ""
+    try:
+        participant_id = int(participant_id)
+    except (ValueError, TypeError):
+        return flash_redirect("/coach/groups", "Session not found.")
+    conn = db.get_conn()
+    try:
+        participant = conn.execute(
+            "SELECT * FROM users WHERE id = ? AND role = 'participant'",
+            (participant_id,),
+        ).fetchone()
+        if not participant:
+            return flash_redirect("/coach/groups", "Participant not found.")
+        session = conn.execute(
+            "SELECT * FROM measurement_sessions WHERE id = ? AND participant_id = ?",
+            (session_id, participant_id),
+        ).fetchone()
+        if not session:
+            return flash_redirect(f"/coach/participants/{participant_id}", "Session not found.")
+        results_rows = conn.execute(
+            "SELECT game_key, field_key, value FROM measurement_results WHERE session_id = ?",
+            (session_id,),
+        ).fetchall()
+        xp_events = conn.execute(
+            "SELECT xp_type, amount, notes FROM xp_events WHERE session_id = ? ORDER BY id",
+            (session_id,),
+        ).fetchall()
+        level_ups = conn.execute(
+            "SELECT game_key, field_key, level FROM level_achievements "
+            "WHERE participant_id = ? AND session_id = ? ORDER BY game_key, level",
+            (participant_id, session_id),
+        ).fetchall()
+    finally:
+        conn.close()
+    return Response(views.session_success_page(
+        coach,
+        dict(participant),
+        dict(session),
+        [(r["game_key"], r["field_key"], r["value"]) for r in results_rows],
+        [dict(e) for e in xp_events],
+        [dict(lu) for lu in level_ups],
+    ))
 
 
 @router.post("/coach/participants/<int:participant_id>/reset-password")
