@@ -11387,7 +11387,10 @@ def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_r
 
     families_html = f"""
     <div style="margin-bottom:28px;">
-      <h2 style="font-size:14px;font-weight:700;color:#2D323B;margin:0 0 12px;">Your Movement Families</h2>
+      <div style="display:flex;align-items:center;gap:0;margin-bottom:12px;">
+        <div style="width:3px;height:16px;background:#F0A82E;border-radius:2px;margin-right:10px;"></div>
+        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:#2D323B;">Movement Families</span>
+      </div>
       <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:10px;">
         {family_cards}
       </div>
@@ -11429,7 +11432,10 @@ def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_r
             </div>"""
         strengths_html = f"""
         <div style="margin-bottom:28px;">
-          <h2 style="font-size:14px;font-weight:700;color:#2D323B;margin:0 0 12px;">&#9989; Tracking Well</h2>
+          <div style="display:flex;align-items:center;gap:0;margin-bottom:12px;">
+            <div style="width:3px;height:16px;background:#1EBE8B;border-radius:2px;margin-right:10px;"></div>
+            <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:#2D323B;">Tracking Well</span>
+          </div>
           {well_groups_html}
         </div>"""
     else:
@@ -11493,7 +11499,10 @@ def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_r
             </div>"""
         focus_html = f"""
         <div style="margin-bottom:28px;">
-          <h2 style="font-size:14px;font-weight:700;color:#2D323B;margin:0 0 16px;">&#127919; Your Development Areas</h2>
+          <div style="display:flex;align-items:center;gap:0;margin-bottom:14px;">
+            <div style="width:3px;height:16px;background:#F0A82E;border-radius:2px;margin-right:10px;"></div>
+            <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:#2D323B;">Development Areas</span>
+          </div>
           {focus_groups_html}
         </div>"""
     elif well:
@@ -11508,15 +11517,35 @@ def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_r
           <p style="color:#6B7280;margin:0;">No measurement results yet — once you've been tested your report will show here.</p>
         </div>"""
 
-    sport_line = f" · {esc(sport)}" if sport else ""
+    sport_line = f" &middot; {esc(sport)}" if sport else ""
     body = f"""
-    <div class="container" style="max-width:700px;padding-top:32px;padding-bottom:48px;">
+    <div class="container" style="max-width:700px;padding-bottom:48px;">
 
-      <div style="margin-bottom:20px;">
-        <a href="/athlete" class="btn btn-ghost btn-sm" style="margin-bottom:12px;">&larr; Back to Dashboard</a>
-        <h1 style="font-size:24px;font-weight:800;color:#2D323B;margin:0 0 4px;">Your Movement Report</h1>
-        <p style="font-size:13px;color:#6B7280;margin:0 0 12px;">{name}{sport_line}</p>
-        <p style="font-size:14px;color:#374151;line-height:1.7;margin:0;">{esc(synopsis)}</p>
+      <!-- Hero -->
+      <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                  padding:24px 28px;margin-bottom:24px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:16px;">
+            <div style="width:48px;height:48px;border-radius:13px;background:rgba(240,168,46,0.18);
+                        border:1.5px solid rgba(240,168,46,0.35);display:flex;align-items:center;
+                        justify-content:center;font-size:20px;color:#F0A82E;flex-shrink:0;font-weight:700;">&#9654;</div>
+            <div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;
+                          color:rgba(240,168,46,0.80);margin-bottom:2px;">Movement Report</div>
+              <div style="font-size:20px;font-weight:800;color:#FFFFFF;line-height:1.2;">{name}</div>
+              <div style="font-size:12px;color:rgba(255,255,255,0.50);margin-top:2px;">Athlete Adaptability Programme{sport_line}</div>
+            </div>
+          </div>
+          <a href="/athlete"
+             style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.65);text-decoration:none;
+                    padding:5px 12px;border-radius:20px;border:1px solid rgba(255,255,255,0.20);
+                    background:rgba(255,255,255,0.08);white-space:nowrap;align-self:flex-start;"
+             onmouseover="this.style.background='rgba(255,255,255,0.15)'"
+             onmouseout="this.style.background='rgba(255,255,255,0.08)'">&larr; Dashboard</a>
+        </div>
+        <!-- Synopsis -->
+        <div style="margin-top:16px;padding-top:16px;border-top:1px solid rgba(255,255,255,0.10);
+                    font-size:13px;color:rgba(255,255,255,0.80);line-height:1.7;">{esc(synopsis)}</div>
       </div>
 
       {pa_callout}
