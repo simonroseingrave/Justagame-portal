@@ -10570,12 +10570,14 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
         "Dynamic Locomotor",
         "Perceptual-Motor Speed",
     ]
-    FAMILY_COL = {
-        "Balance & Postural Control": "#2563EB",
-        "Explosive & Landing":        "#F97316",
-        "Dynamic Locomotor":          "#1EBE8B",
-        "Perceptual-Motor Speed":     "#A855F7",
+    # Canonical brand colours — must match FAMILY_META in athlete_movement_report_page
+    FAMILY_META = {
+        "Balance & Postural Control": {"col": "#3B6BC4", "icon": "&#9651;"},  # △ blue
+        "Explosive & Landing":        {"col": "#F0A82E", "icon": "&#9650;"},  # ▲ gold
+        "Dynamic Locomotor":          {"col": "#1EBE8B", "icon": "&#9654;"},  # ▶ green
+        "Perceptual-Motor Speed":     {"col": "#D4622F", "icon": "&#9673;"},  # ⊙ terracotta
     }
+    FAMILY_COL = {k: v["col"] for k, v in FAMILY_META.items()}
 
     gap_areas   = []  # areas below threshold (or all if no thresholds)
     score_rows  = []  # for the summary table
@@ -10655,8 +10657,11 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
 
     trs = ""
     for r in score_rows:
-        row_bg  = "#FFF7ED" if r["is_gap"] else "#fff"
-        gap_ind = '<span style="color:#F97316;font-weight:700;">▲ Gap</span>' if r["is_gap"] else '<span style="color:#1EBE8B;">✓</span>'
+        row_bg  = "rgba(240,168,46,0.06)" if r["is_gap"] else "#fff"
+        gap_ind = ('<span style="font-size:11px;font-weight:700;color:#7A5800;'
+                   'background:rgba(240,168,46,0.15);border:1px solid rgba(240,168,46,0.30);'
+                   'border-radius:999px;padding:2px 10px;">&#9650; Gap</span>'
+                   ) if r["is_gap"] else '<span style="font-size:13px;color:#1EBE8B;font-weight:700;">&#10003;</span>'
         lower_note = " ↓" if r["lower"] else ""
         trs += f"""
         <tr style="background:{row_bg};border-bottom:1px solid #F3F4F5;">
@@ -10676,12 +10681,17 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
     <div style="border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;margin-bottom:28px;">
       <table style="width:100%;border-collapse:collapse;">
         <thead>
-          <tr style="background:#2D323B;">
-            <th style="padding:9px 12px;text-align:left;font-size:12px;color:#fff;">Test Area</th>
-            <th style="padding:9px 12px;font-size:12px;color:#fff;text-align:center;">Latest Score</th>
-            <th style="padding:9px 12px;font-size:12px;color:#fff;text-align:center;">Current Level</th>
-            <th style="padding:9px 12px;font-size:12px;color:#fff;text-align:center;">Next Threshold</th>
-            <th style="padding:9px 12px;font-size:12px;color:#fff;text-align:center;">Status</th>
+          <tr style="background:#2D323B;border-bottom:2px solid #F0A82E;">
+            <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;
+                        text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.75);">Test Area</th>
+            <th style="padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;
+                        letter-spacing:0.05em;color:rgba(255,255,255,0.75);text-align:center;">Latest Score</th>
+            <th style="padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;
+                        letter-spacing:0.05em;color:rgba(255,255,255,0.75);text-align:center;">Current Level</th>
+            <th style="padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;
+                        letter-spacing:0.05em;color:rgba(255,255,255,0.75);text-align:center;">Next Threshold</th>
+            <th style="padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;
+                        letter-spacing:0.05em;color:rgba(255,255,255,0.75);text-align:center;">Status</th>
           </tr>
         </thead>
         <tbody>{trs}</tbody>
@@ -10690,7 +10700,9 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
 
     # ── Gap analysis section ──────────────────────────────────────────────────
     if not gap_areas:
-        gap_html = '<div style="background:#ECFDF5;border-left:4px solid #1EBE8B;border-radius:6px;padding:12px 16px;font-size:13px;color:#065F46;margin-bottom:28px;"><strong>No gaps identified.</strong> This athlete is meeting all current thresholds.</div>'
+        gap_html = ('<div style="background:rgba(30,190,139,0.08);border-left:4px solid #1EBE8B;'
+                    'border-radius:8px;padding:14px 18px;font-size:13px;color:#065F46;margin-bottom:28px;">'
+                    '<strong>No gaps identified.</strong> This athlete is meeting all current thresholds.</div>')
     else:
         # Group by family
         by_family = {}
@@ -10701,29 +10713,47 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
         for family in FAMILY_ORDER:
             if family not in by_family:
                 continue
-            col = FAMILY_COL.get(family, "#2D323B")
+            fm  = FAMILY_META.get(family, {"col": "#2D323B", "icon": "&#9632;"})
+            col = fm["col"]
+            icon = fm["icon"]
             items = by_family[family]
             area_cards = ""
             for g in items:
                 d2_chips = "".join(
-                    f'<span style="font-size:11px;background:#F3F4F5;border:1px solid #E5E7EB;border-radius:999px;padding:2px 8px;color:#2D323B;">{esc(q)}</span>'
+                    f'<span style="font-size:11px;background:rgba(45,50,59,0.06);border:1px solid #E5E7EB;'
+                    f'border-radius:999px;padding:2px 10px;color:#2D323B;font-weight:500;">{esc(q)}</span>'
                     for q in g["d2_focus"]
                 )
-                gap_lbl_html = f'<div style="font-size:11px;color:#F97316;font-weight:600;margin-bottom:6px;">{esc(g["gap_label"])}</div>' if g["gap_label"] else ""
+                gap_lbl_html = (
+                    f'<div style="font-size:11px;font-weight:700;color:#7A5800;'
+                    f'background:rgba(240,168,46,0.12);border:1px solid rgba(240,168,46,0.28);'
+                    f'border-radius:6px;padding:3px 10px;display:inline-block;margin-bottom:8px;">'
+                    f'{esc(g["gap_label"])}</div>'
+                ) if g["gap_label"] else ""
                 area_cards += f"""
-                <div style="border:1px solid #E5E7EB;border-radius:8px;padding:14px 16px;margin-bottom:12px;background:#fff;">
+                <div style="border:1px solid #E5E7EB;border-left:3px solid {col};border-radius:8px;
+                            padding:14px 16px;margin-bottom:12px;background:#fff;">
                   <div style="font-size:13px;font-weight:700;color:#2D323B;margin-bottom:4px;">{esc(g['display'])}</div>
                   {gap_lbl_html}
-                  <div style="font-size:12px;color:#4B5563;margin-bottom:8px;line-height:1.5;"><strong>S&amp;C gap:</strong> {esc(g['sc_gap'])}</div>
+                  <div style="font-size:12px;color:#4B5563;margin-bottom:8px;line-height:1.6;">
+                    <strong style="color:#2D323B;">S&amp;C gap:</strong> {esc(g['sc_gap'])}
+                  </div>
                   {f'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">{d2_chips}</div>' if d2_chips else ''}
-                  {('<div style="background:#F9FAFB;border-left:3px solid ' + col + ';border-radius:0 6px 6px 0;padding:10px 12px;font-size:12px;color:#374151;line-height:1.6;"><strong>If undertaking an S&amp;C programme:</strong> ' + esc(g['sc_programme']) + '</div>') if sc_programme and g['sc_programme'] else ""}
+                  {('<div style="background:rgba(45,50,59,0.04);border-left:3px solid #2D323B;'
+                    'border-radius:0 6px 6px 0;padding:10px 12px;font-size:12px;color:#2D323B;line-height:1.6;">'
+                    '<strong>If undertaking an S&amp;C programme:</strong> ' + esc(g['sc_programme']) + '</div>'
+                   ) if sc_programme and g['sc_programme'] else ""}
                 </div>"""
 
+            # Family section header with icon box
             gap_cards += f"""
-            <div style="margin-bottom:20px;">
-              <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
-                <span style="display:inline-block;width:12px;height:12px;border-radius:50%;background:{col};"></span>
-                <span style="font-size:13px;font-weight:700;color:#2D323B;">{esc(family)}</span>
+            <div style="margin-bottom:24px;">
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;
+                          padding-bottom:8px;border-bottom:1px solid rgba(0,0,0,0.06);">
+                <div style="width:28px;height:28px;border-radius:7px;flex-shrink:0;display:flex;
+                            align-items:center;justify-content:center;font-size:13px;font-weight:700;
+                            color:{col};background:{col}1A;border:1px solid {col}44;">{icon}</div>
+                <span style="font-size:14px;font-weight:800;color:#2D323B;">{esc(family)}</span>
               </div>
               {area_cards}
             </div>"""
@@ -10736,33 +10766,60 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
     athlete_meta += f"Latest session: {esc(latest_date)}" if latest_date else "No sessions recorded"
 
     body = f"""
-    <div class="container" style="max-width:860px;padding-top:32px;">
+    <div class="container" style="max-width:860px;">
 
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px;flex-wrap:wrap;gap:12px;">
-        <div>
-          <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#F0A82E;margin-bottom:4px;">Adaptability Progress Report</div>
-          <h1 style="font-size:24px;font-weight:800;color:#2D323B;margin:0 0 4px;">{name}</h1>
-          <p style="font-size:13px;color:#6E737B;margin:0;">{athlete_meta}</p>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;">
-          <a href="/coach/participants/{athlete['id']}" class="btn btn-ghost btn-sm">← Back to Profile</a>
-          <button onclick="window.print()" class="btn btn-primary btn-sm">🖨 Print Report</button>
+      <!-- Hero banner -->
+      <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                  padding:24px 28px;margin-bottom:28px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:16px;">
+            <div style="width:48px;height:48px;border-radius:13px;background:rgba(240,168,46,0.18);
+                        border:1.5px solid rgba(240,168,46,0.35);display:flex;align-items:center;
+                        justify-content:center;font-size:20px;color:#F0A82E;flex-shrink:0;font-weight:700;">&#9650;</div>
+            <div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+                          color:rgba(240,168,46,0.80);margin-bottom:3px;">Adaptability Progress Report</div>
+              <div style="font-size:22px;font-weight:800;color:#FFFFFF;line-height:1.2;">{name}</div>
+              <div style="font-size:12px;color:rgba(255,255,255,0.50);margin-top:4px;">{athlete_meta}</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <a href="/coach/participants/{athlete['id']}"
+               style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.70);text-decoration:none;
+                      padding:6px 14px;border:1px solid rgba(255,255,255,0.20);border-radius:20px;
+                      transition:all 0.15s;"
+               onmouseover="this.style.background='rgba(255,255,255,0.1)'"
+               onmouseout="this.style.background=''">&larr; Back to Profile</a>
+            <button onclick="window.print()"
+                    style="font-size:12px;font-weight:700;color:#2D323B;background:#F0A82E;
+                           border:none;border-radius:20px;padding:6px 16px;cursor:pointer;">
+              &#9113; Print Report</button>
+          </div>
         </div>
       </div>
 
-      <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#9CA3AF;margin-bottom:12px;">Latest Scores</h2>
+      <!-- Latest Scores section -->
+      <div style="display:flex;align-items:center;gap:0;margin-bottom:14px;">
+        <div style="width:3px;height:18px;background:#F0A82E;border-radius:2px;margin-right:10px;"></div>
+        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:#2D323B;">Latest Scores</span>
+      </div>
       {score_table}
 
-      <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#9CA3AF;margin-bottom:12px;">
-        Gap Analysis{"" if has_thresholds else " (all areas — no thresholds set)"}
-      </h2>
-      <p style="font-size:13px;color:#6E737B;margin-bottom:16px;line-height:1.5;">
+      <!-- Gap Analysis section -->
+      <div style="display:flex;align-items:center;gap:0;margin-bottom:6px;">
+        <div style="width:3px;height:18px;background:#F0A82E;border-radius:2px;margin-right:10px;"></div>
+        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:#2D323B;">
+          Gap Analysis{"" if has_thresholds else " — no thresholds set"}
+        </span>
+      </div>
+      <p style="font-size:13px;color:#6E737B;margin:0 0 16px;line-height:1.5;">
         {"Areas where this athlete is below their next level threshold — use these to guide programme game selection and development focus." if has_thresholds else "Once thresholds are set, only areas below threshold will appear here."}
       </p>
       {gap_html}
 
-      <div style="border-top:1px solid #E5E7EB;margin-top:32px;padding-top:12px;font-size:11px;color:#9CA3AF;text-align:center;">
-        JAG Athlete Adaptability Programme · {esc(name)} · Generated {today}
+      <div style="border-top:1px solid #E5E7EB;margin-top:32px;padding-top:12px;
+                  font-size:11px;color:#9CA3AF;text-align:center;">
+        JAG Athlete Adaptability Programme &nbsp;&middot;&nbsp; {esc(name)} &nbsp;&middot;&nbsp; Generated {today}
       </div>
     </div>
 
