@@ -10795,25 +10795,25 @@ def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_r
 
     FAMILY_META = {
         "Balance & Postural Control": {
-            "icon": "⚖️", "colour": "#6366F1",
+            "icon": "&#9651;", "colour": "#3B6BC4",
             "plain": "Balance and Postural Control",
             "tag":   "staying steady under pressure",
             "desc": "How steady you are — especially when something else is happening at the same time.",
         },
         "Explosive & Landing": {
-            "icon": "🚀", "colour": "#F59E0B",
+            "icon": "&#9650;", "colour": "#F0A82E",
             "plain": "Explosive & Landing",
             "tag":   "power, force and safe landing",
             "desc": "Your ability to project force — jumping, leaping — and land safely.",
         },
         "Dynamic Locomotor": {
-            "icon": "⚡", "colour": "#10B981",
+            "icon": "&#9654;", "colour": "#1EBE8B",
             "plain": "Dynamic Locomotor",
             "tag":   "speed and efficient movement",
             "desc": "How fast and efficiently you move — straight lines, changing direction, with or without a ball.",
         },
         "Perceptual-Motor Speed": {
-            "icon": "👁️", "colour": "#EF4444",
+            "icon": "&#9673;", "colour": "#D4622F",
             "plain": "Perceptual-Motor Speed",
             "tag":   "reading the game and reacting",
             "desc": "Your ability to pick up movement cues and respond — before your brain has time to think.",
@@ -10921,17 +10921,19 @@ def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_r
         if fw == 0 and ff == 0:
             continue
         if ff == 0:
-            tag = f'<span style="font-size:11px;font-weight:700;color:#065F46;background:#D1FAE5;border-radius:999px;padding:2px 10px;">Strength</span>'
+            tag = f'<span style="font-size:11px;font-weight:700;color:#065F46;background:rgba(30,190,139,0.12);border:1px solid rgba(30,190,139,0.28);border-radius:999px;padding:2px 10px;">Strength</span>'
         elif fw == 0:
-            tag = f'<span style="font-size:11px;font-weight:700;color:#991B1B;background:#FEF2F2;border-radius:999px;padding:2px 10px;">Focus area</span>'
+            tag = f'<span style="font-size:11px;font-weight:700;color:#fff;background:#2D323B;border-radius:999px;padding:2px 10px;">Focus area</span>'
         else:
-            tag = f'<span style="font-size:11px;font-weight:700;color:#92400E;background:#FEF3C7;border-radius:999px;padding:2px 10px;">Mixed</span>'
+            tag = f'<span style="font-size:11px;font-weight:700;color:#7A5800;background:rgba(240,168,46,0.14);border:1px solid rgba(240,168,46,0.32);border-radius:999px;padding:2px 10px;">Mixed</span>'
 
         family_cards += f"""
         <div style="border:1px solid #E5E7EB;border-left:4px solid {meta['colour']};border-radius:0 10px 10px 0;
                     padding:14px 16px;background:#fff;">
           <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;flex-wrap:wrap;">
-            <span style="font-size:18px;">{meta['icon']}</span>
+            <div style="width:30px;height:30px;border-radius:8px;flex-shrink:0;display:flex;
+                        align-items:center;justify-content:center;font-size:14px;font-weight:700;
+                        color:{meta['colour']};background:{meta['colour']}1A;border:1px solid {meta['colour']}44;">{meta['icon']}</div>
             <div>
               <div style="font-size:13px;font-weight:700;color:#2D323B;">{esc(meta['plain'])}</div>
               <div style="font-size:11px;color:{meta['colour']};font-style:italic;">{esc(meta['tag'])}</div>
@@ -11211,11 +11213,11 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
         if a["modal_level"] == 0 and not thresholds:
             tag = '<span style="font-size:10px;color:#9CA3AF;">No thresholds set</span>'
         elif pct >= 50:
-            tag = '<span style="font-size:10px;font-weight:700;color:#EF4444;background:#FEF2F2;border-radius:999px;padding:1px 8px;">Focus area</span>'
+            tag = '<span style="font-size:10px;font-weight:700;color:#fff;background:#2D323B;border-radius:999px;padding:1px 8px;">Focus area</span>'
         elif pct < 30:
-            tag = '<span style="font-size:10px;font-weight:700;color:#065F46;background:#D1FAE5;border-radius:999px;padding:1px 8px;">Strength</span>'
+            tag = '<span style="font-size:10px;font-weight:700;color:#065F46;background:rgba(30,190,139,0.12);border:1px solid rgba(30,190,139,0.28);border-radius:999px;padding:1px 8px;">Strength</span>'
         else:
-            tag = '<span style="font-size:10px;font-weight:700;color:#92400E;background:#FEF3C7;border-radius:999px;padding:1px 8px;">Mixed</span>'
+            tag = '<span style="font-size:10px;font-weight:700;color:#7A5800;background:rgba(240,168,46,0.14);border:1px solid rgba(240,168,46,0.32);border-radius:999px;padding:1px 8px;">Mixed</span>'
 
         lvl_chips = "".join(
             f'<span title="{esc(nm)}" style="font-size:10px;background:#F3F4F6;border-radius:999px;padding:1px 7px;color:#374151;">L{lvl}</span>'
@@ -11423,16 +11425,16 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
 
     # ── Family summary cards ──────────────────────────────────────────────────
     FAMILY_META = {
-        "Balance & Postural Control": {"icon": "⚖️", "colour": "#6366F1",
+        "Balance & Postural Control": {"icon": "&#9651;", "colour": "#3B6BC4",
                                        "plain": "Balance and Postural Control",
                                        "tag": "staying steady under pressure"},
-        "Explosive & Landing":        {"icon": "🚀", "colour": "#F59E0B",
+        "Explosive & Landing":        {"icon": "&#9650;", "colour": "#F0A82E",
                                        "plain": "Explosive & Landing",
                                        "tag": "power, force and safe landing"},
-        "Dynamic Locomotor":          {"icon": "⚡", "colour": "#10B981",
+        "Dynamic Locomotor":          {"icon": "&#9654;", "colour": "#1EBE8B",
                                        "plain": "Dynamic Locomotor",
                                        "tag": "speed and efficient movement"},
-        "Perceptual-Motor Speed":     {"icon": "👁️", "colour": "#EF4444",
+        "Perceptual-Motor Speed":     {"icon": "&#9673;", "colour": "#D4622F",
                                        "plain": "Perceptual-Motor Speed",
                                        "tag": "reading the game and reacting"},
     }
@@ -11456,14 +11458,14 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
         if not gaps and not strengths and not mixed:
             continue
         if gaps and not strengths:
-            status_tag = ('<span style="font-size:11px;font-weight:700;color:#991B1B;'
-                          'background:rgba(239,68,68,0.10);border-radius:999px;padding:2px 10px;">Focus area</span>')
+            status_tag = ('<span style="font-size:11px;font-weight:700;color:#fff;'
+                          'background:#2D323B;border-radius:999px;padding:2px 10px;">Focus area</span>')
         elif strengths and not gaps:
             status_tag = ('<span style="font-size:11px;font-weight:700;color:#065F46;'
-                          'background:rgba(30,190,139,0.12);border-radius:999px;padding:2px 10px;">Strength</span>')
+                          'background:rgba(30,190,139,0.12);border:1px solid rgba(30,190,139,0.28);border-radius:999px;padding:2px 10px;">Strength</span>')
         else:
-            status_tag = ('<span style="font-size:11px;font-weight:700;color:#92400E;'
-                          'background:rgba(240,168,46,0.15);border-radius:999px;padding:2px 10px;">Mixed</span>')
+            status_tag = ('<span style="font-size:11px;font-weight:700;color:#7A5800;'
+                          'background:rgba(240,168,46,0.14);border:1px solid rgba(240,168,46,0.32);border-radius:999px;padding:2px 10px;">Mixed</span>')
 
         detail_parts = []
         if gaps:
