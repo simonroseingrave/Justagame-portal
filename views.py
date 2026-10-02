@@ -2351,7 +2351,7 @@ def new_participant_form(user, error=None, groups=None):
         <label for="name">Full name</label>
         <input type="text" id="name" name="name" required placeholder="e.g. Alex Johnson" />
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:16px;">
           <div>
             <label for="gender">Gender</label>
             <select id="gender" name="gender">
@@ -4691,7 +4691,7 @@ def session_sheet_page(coach, groups, session_types):
       </div>
     </div>
     <form method="post" action="/coach/session-sheet/pdf">
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;max-width:820px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px;max-width:820px;">
         <div class="card">
           <h3 style="margin-top:0;">Session Details</h3>
           <label>Test Phase
@@ -5254,7 +5254,7 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
     <div style="margin-top:8px;">
 
       <!-- ── How it works strip ─────────────────────────────────────── -->
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px;margin-bottom:24px;">
 
         <div style="background:#fff;border:1.5px solid #E5E7EB;border-radius:14px;
                     padding:20px 18px;display:flex;gap:14px;align-items:flex-start;">
@@ -6448,7 +6448,7 @@ def group_session_page(coach, participants, groups=None, session_types=None):
                    padding:5px 16px;font-size:13px;font-weight:800;">0 saved</span>
     </div>
 
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;max-width:900px;align-items:start;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;max-width:900px;align-items:start;">
 
       <!-- LEFT: Setup card -->
       <div class="card" style="padding:0;overflow:hidden;">
@@ -7643,10 +7643,10 @@ def organisations_page(user, orgs_data, message=None):
     {message_html}
 
     <!-- Two-column layout: table + form -->
-    <div style="display:grid;grid-template-columns:1fr auto;gap:24px;align-items:start;flex-wrap:wrap;">
+    <div style="display:flex;flex-wrap:wrap;gap:24px;align-items:start;">
 
       <!-- Left: org table -->
-      <div class="card" style="min-width:0;">
+      <div class="card" style="flex:1;min-width:0;overflow-x:auto;">
         <table class="table">
           <thead><tr><th>Name</th><th style="text-align:center;">Groups</th><th style="text-align:center;">Practitioners</th><th></th></tr></thead>
           <tbody>{rows_html}</tbody>
@@ -7654,7 +7654,7 @@ def organisations_page(user, orgs_data, message=None):
       </div>
 
       <!-- Right: add form -->
-      <div class="card form-card" style="width:320px;flex-shrink:0;">
+      <div class="card form-card" style="width:320px;min-width:280px;flex-shrink:0;flex-grow:1;max-width:380px;">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;
                     color:var(--jag-muted);margin-bottom:16px;display:flex;align-items:center;gap:8px;">
           Add Organisation
@@ -8408,7 +8408,7 @@ def scores_import_form(user, groups=None, orgs=None, error=None):
     </div>
     {template_section}
     {error_html}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:32px;max-width:1100px;align-items:start;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:24px;max-width:1100px;align-items:start;">
       <div>
         <form method="post" action="/coach/scores/import" enctype="multipart/form-data">
           <div class="form-group">
