@@ -6758,7 +6758,7 @@ def help_page(user):
 
     # ── Section content ────────────────────────────────────────────────────────
 
-    s_login = section("&#128274;", "Logging In", (
+    s_login = section("&#9654;", "Logging In", (
         steps([
             "Open the portal in your browser (or from your phone's home screen).",
             "Enter your <strong>email address</strong> and <strong>password</strong>.",
@@ -6768,7 +6768,7 @@ def help_page(user):
         + tip("Save the portal to your phone's home screen for one-tap access — see <em>Using the Portal on Your Phone</em> below.")
     ), open_by_default=True)
 
-    s_password = section("&#128273;", "Changing Your Password", (
+    s_password = section("&#10033;", "Changing Your Password", (
         steps([
             "Click <strong>My Account</strong> in the top-right corner.",
             "Scroll to the <em>Change Password</em> section.",
@@ -6778,7 +6778,7 @@ def help_page(user):
         + tip("Choose a password that is at least 8 characters and easy for you to remember.")
     ))
 
-    s_phone = section("&#128241;", "Using the Portal on Your Phone", (
+    s_phone = section("&#9990;", "Using the Portal on Your Phone", (
         "<p>The portal works as a web app — you can add it to your home screen for quick access without opening a browser each time.</p>"
         + "<p><strong>iPhone / iPad (Safari only):</strong></p>"
         + steps([
@@ -6797,7 +6797,7 @@ def help_page(user):
         + tip("A full setup guide PDF is available from your practitioner if you need one.")
     ))
 
-    s_dashboard = section("&#128200;", "Your Dashboard", (
+    s_dashboard = section("&#9650;", "Your Dashboard", (
         "<p>Your dashboard shows your most recent results, level progress, and personal bests across all measurement games.</p>"
         "<ul class='help-list'>"
         "<li><strong>Level badge</strong> — your current adaptability level, based on your improvement across games.</li>"
@@ -6810,7 +6810,7 @@ def help_page(user):
     sections_html = s_login + s_password + s_phone + s_dashboard
 
     if is_staff:
-        s_add_athlete = section("&#128101;", "Adding an Athlete", (
+        s_add_athlete = section("&#43;", "Adding an Athlete", (
             steps([
                 "Click <strong>Add Participant</strong> in the navigation bar.",
                 "Fill in the athlete's name and (optionally) email, sport, and group.",
@@ -6820,7 +6820,7 @@ def help_page(user):
             + tip("Athlete numbers are assigned automatically — you can change them on the athlete's profile page.")
         ))
 
-        s_record = section("&#127942;", "Recording a Session", (
+        s_record = section("&#9679;", "Recording a Session", (
             "<p>Use <strong>Record Session</strong> in the nav to record a one-off session for a single athlete.</p>"
             + steps([
                 "Select the athlete from the dropdown.",
@@ -6831,7 +6831,7 @@ def help_page(user):
             + tip("The system will warn you if a session already exists for that athlete in that month — you can choose to merge or replace.")
         ))
 
-        s_group_hub = section("&#128203;", "Group Hub", (
+        s_group_hub = section("&#9632;", "Group Hub", (
             "<p>The <strong>Group Hub</strong> is your central workspace for group-based data entry and reporting. "
             "Select a group from the dropdown, then use the three panels:</p>"
             "<ul class='help-list'>"
@@ -6845,7 +6845,7 @@ def help_page(user):
             + tip("Use the Completion Matrix to spot gaps — grey cells mean no data yet for that athlete/game combination.")
         ))
 
-        s_resources = section("&#128218;", "Resources", (
+        s_resources = section("&#9636;", "Resources", (
             "<p>The <strong>Resources</strong> section holds shared files, links, and guides for your organisation.</p>"
             "<ul class='help-list'>"
             "<li>Resources are organised into folders.</li>"
@@ -6855,7 +6855,7 @@ def help_page(user):
             + note("Only practitioners and admins can add or edit resources. Contact your System Admin if you need something added.")
         ))
 
-        s_reports = section("&#128202;", "Statistics &amp; Reports", (
+        s_reports = section("&#9650;", "Statistics &amp; Reports", (
             "<p>Access detailed analytics from <strong>Statistics &amp; Reports</strong> in the nav.</p>"
             "<ul class='help-list'>"
             "<li><strong>Group Progress</strong> — improvement trends for every athlete in a group, by game.</li>"
@@ -6869,7 +6869,7 @@ def help_page(user):
         sections_html += s_add_athlete + s_record + s_group_hub + s_resources + s_reports
 
     if is_org_admin:
-        s_practitioners = section("&#128101;", "Managing Practitioners", (
+        s_practitioners = section("&#9651;", "Managing Practitioners", (
             "<p>As an Organisation Admin, you can view and manage practitioners in your organisation.</p>"
             + steps([
                 "Go to <strong>Practitioners</strong> in the navigation.",
@@ -6880,7 +6880,7 @@ def help_page(user):
             + tip("When you create a practitioner account with an email address, they will receive a welcome email automatically.")
         ))
 
-        s_org_admin = section("&#127970;", "Your Organisation", (
+        s_org_admin = section("&#9670;", "Your Organisation", (
             "<p>Your Organisation Admin access lets you view all groups and athletes within your organisation, "
             "download reports, and review completion data across all practitioners you manage.</p>"
             "<ul class='help-list'>"
@@ -6893,7 +6893,7 @@ def help_page(user):
         sections_html += s_practitioners + s_org_admin
 
     if is_sys_admin:
-        s_orgs = section("&#127968;", "Managing Organisations", (
+        s_orgs = section("&#9670;", "Managing Organisations", (
             "<p>As System Admin, you can create and manage organisations.</p>"
             + steps([
                 "Go to <strong>Organisations</strong> in the navigation.",
@@ -6959,13 +6959,14 @@ def help_page(user):
         background: rgba(240,168,46,0.14);
         border: 1px solid rgba(240,168,46,0.30);
         display: flex; align-items: center; justify-content: center;
-        font-size: 17px;
+        font-size: 16px; font-weight: 700; color: #F0A82E;
         flex-shrink: 0;
         transition: background 0.15s, border-color 0.15s;
       }}
       .help-section[open] .help-icon-box {{
         background: rgba(240,168,46,0.22);
         border-color: rgba(240,168,46,0.50);
+        color: #F0A82E;
       }}
       .help-title {{
         font-weight: 700;
@@ -7049,7 +7050,8 @@ def help_page(user):
       <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
         <div style="width:46px;height:46px;border-radius:13px;flex-shrink:0;
                     background:rgba(240,168,46,0.18);border:1px solid rgba(240,168,46,0.38);
-                    display:flex;align-items:center;justify-content:center;font-size:22px;">&#10067;</div>
+                    display:flex;align-items:center;justify-content:center;
+                    font-size:26px;font-weight:900;color:#F0A82E;">?</div>
         <div style="flex:1;min-width:0;">
           <h1 style="margin:0 0 2px;font-size:22px;font-weight:800;color:#fff;line-height:1.2;">Help &amp; Guide</h1>
           <div style="font-size:13px;color:rgba(255,255,255,0.55);">
