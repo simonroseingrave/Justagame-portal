@@ -2652,48 +2652,46 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
     <!-- Athlete hero banner -->
     <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
                 padding:24px 28px;margin-bottom:24px;">
-      <div style="display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap;">
-        <!-- Avatar -->
-        <div style="width:64px;height:64px;border-radius:50%;background:rgba(240,168,46,0.18);
+      <!-- Row 1: avatar + name -->
+      <div style="display:flex;align-items:flex-start;gap:14px;">
+        <div style="width:60px;height:60px;border-radius:50%;background:rgba(240,168,46,0.18);
                     border:2px solid rgba(240,168,46,0.40);display:flex;align-items:center;
-                    justify-content:center;font-weight:800;font-size:22px;color:#F0A82E;
+                    justify-content:center;font-weight:800;font-size:20px;color:#F0A82E;
                     flex-shrink:0;">{inits}</div>
-        <!-- Name + pills -->
         <div style="flex:1;min-width:0;">
-          <h1 style="margin:0 0 8px;font-size:24px;font-weight:800;color:#FFFFFF;">
+          <h1 style="margin:0 0 6px;font-size:22px;font-weight:800;color:#FFFFFF;line-height:1.2;">
             {esc(participant['name'])}
           </h1>
           <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
             {number_pill}{sport_pill}{gender_pill}{group_pill}
-            {f'<span style="font-size:12px;color:rgba(255,255,255,0.40);">{esc(participant["email"] or "")}</span>' if participant.get("email") else ""}
           </div>
-          {f'<p style="margin:6px 0 0;font-size:12px;color:rgba(255,255,255,0.45);">{esc(participant["programme"])}</p>' if participant.get("programme") else ""}
+          {f'<p style="margin:4px 0 0;font-size:12px;color:rgba(255,255,255,0.40);word-break:break-all;">{esc(participant["email"] or "")}</p>' if participant.get("email") else ""}
+          {f'<p style="margin:4px 0 0;font-size:12px;color:rgba(255,255,255,0.45);">{esc(participant["programme"])}</p>' if participant.get("programme") else ""}
         </div>
-        <!-- Primary CTA -->
-        <div style="display:flex;flex-direction:column;gap:8px;align-items:flex-end;flex-shrink:0;">
-          <a class="btn btn-primary"
-             href="/coach/participants/{participant['id']}/progress"
-             style="white-space:nowrap;">&#128200; Achievement Statistics</a>
-          <div style="display:flex;gap:10px;flex-wrap:wrap;justify-content:flex-end;">
-            <a href="/coach/participants/{participant['id']}/report" target="_blank"
-               style="font-size:12px;color:rgba(255,255,255,0.55);text-decoration:none;font-weight:600;"
-               onmouseover="this.style.color='#F0A82E';" onmouseout="this.style.color='rgba(255,255,255,0.55)';">
-              &#128196; Progress Report</a>
-            <a href="/coach/participants/{participant['id']}/quickstart.pdf" target="_blank"
-               style="font-size:12px;color:rgba(255,255,255,0.55);text-decoration:none;font-weight:600;"
-               onmouseover="this.style.color='#F0A82E';" onmouseout="this.style.color='rgba(255,255,255,0.55)';">
-              &#127760; Quick-Start</a>
-            <a href="/coach/participants/{participant['id']}/view-as"
-               style="font-size:12px;color:rgba(255,255,255,0.55);text-decoration:none;font-weight:600;"
-               onmouseover="this.style.color='#F0A82E';" onmouseout="this.style.color='rgba(255,255,255,0.55)';">
-              &#128065; View as Athlete</a>
-            {(f'<span style="color:rgba(255,255,255,0.20);">|</span>' + reset_btn.replace('class="btn btn-ghost btn-sm"','style="font-size:12px;color:rgba(255,255,255,0.55);background:none;border:none;cursor:pointer;font-weight:600;padding:0;"')) if reset_btn else ""}
-          </div>
-          <a href="/coach"
-             style="font-size:12px;color:rgba(255,255,255,0.35);text-decoration:none;"
-             onmouseover="this.style.color='rgba(255,255,255,0.70)';" onmouseout="this.style.color='rgba(255,255,255,0.35)';">
-            &larr; Back to Dashboard</a>
-        </div>
+      </div>
+      <!-- Row 2: actions (wraps naturally on mobile) -->
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;
+                  margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.09);">
+        <a class="btn btn-primary"
+           href="/coach/participants/{participant['id']}/progress"
+           style="font-size:13px;padding:7px 16px;">&#128200; Achievement Statistics</a>
+        <a href="/coach/participants/{participant['id']}/report" target="_blank"
+           style="font-size:12px;color:rgba(255,255,255,0.55);text-decoration:none;font-weight:600;padding:4px 0;"
+           onmouseover="this.style.color='#F0A82E';" onmouseout="this.style.color='rgba(255,255,255,0.55)';">
+          &#128196; Progress Report</a>
+        <a href="/coach/participants/{participant['id']}/quickstart.pdf" target="_blank"
+           style="font-size:12px;color:rgba(255,255,255,0.55);text-decoration:none;font-weight:600;padding:4px 0;"
+           onmouseover="this.style.color='#F0A82E';" onmouseout="this.style.color='rgba(255,255,255,0.55)';">
+          &#127760; Quick-Start</a>
+        <a href="/coach/participants/{participant['id']}/view-as"
+           style="font-size:12px;color:rgba(255,255,255,0.55);text-decoration:none;font-weight:600;padding:4px 0;"
+           onmouseover="this.style.color='#F0A82E';" onmouseout="this.style.color='rgba(255,255,255,0.55)';">
+          &#128065; View as Athlete</a>
+        {(reset_btn.replace('class="btn btn-ghost btn-sm"', 'style="font-size:12px;color:rgba(255,255,255,0.55);background:none;border:none;cursor:pointer;font-weight:600;padding:4px 0;"')) if reset_btn else ""}
+        <a href="/coach"
+           style="margin-left:auto;font-size:12px;color:rgba(255,255,255,0.35);text-decoration:none;"
+           onmouseover="this.style.color='rgba(255,255,255,0.70)';" onmouseout="this.style.color='rgba(255,255,255,0.35)';">
+          &larr; Back</a>
       </div>
       {group_assign_inline}
     </div>
