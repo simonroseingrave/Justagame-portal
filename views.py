@@ -8902,43 +8902,64 @@ def game_thresholds_page(coach, thresholds, scoring_areas, xp_game_config, thres
 
 def attendance_list_page(coach, events):
     rows = ""
-    for i, e in enumerate(events):
-        shade = "#F3F4F5" if i % 2 == 0 else "#fff"
+    for e in events:
         date_str = e.get("date", "")[:10]
         group = esc(e.get("group_name") or "—")
         count = e.get("attendee_count", 0)
         notes = esc(e.get("notes") or "")
         rows += f"""
-        <tr style="background:{shade};">
-          <td style="padding:10px 14px;font-size:14px;color:#2D323B;">{esc(date_str)}</td>
-          <td style="padding:10px 14px;font-size:14px;color:#2D323B;">{group}</td>
-          <td style="padding:10px 14px;font-size:14px;color:#2D323B;text-align:center;">
-            <span style="background:#1EBE8B;color:#fff;border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700;">{count}</span>
+        <tr style="border-bottom:1px solid #F3F4F5;">
+          <td style="padding:12px 16px;font-size:14px;font-weight:600;color:#2D323B;">{esc(date_str)}</td>
+          <td style="padding:12px 16px;font-size:13px;color:#6E737B;">{group}</td>
+          <td style="padding:12px 16px;text-align:center;">
+            <span style="background:#1EBE8B;color:#fff;border-radius:999px;padding:2px 10px;
+                         font-size:12px;font-weight:700;">{count}</span>
           </td>
-          <td style="padding:10px 14px;font-size:13px;color:#6E737B;">{notes}</td>
-          <td style="padding:10px 14px;white-space:nowrap;">
-            <a href="/coach/attendance/{e['id']}/roll-call" class="btn btn-ghost btn-sm">Roll-Call</a>
-            <a href="/coach/attendance/{e['id']}" class="btn btn-ghost btn-sm">View</a>
+          <td style="padding:12px 16px;font-size:13px;color:#6E737B;">{notes}</td>
+          <td style="padding:12px 16px;white-space:nowrap;text-align:right;">
+            <a href="/coach/attendance/{e['id']}/roll-call"
+               style="font-size:12px;font-weight:600;color:#2D323B;text-decoration:none;
+                      padding:4px 12px;border:1px solid #DDE0E3;border-radius:6px;margin-right:6px;">Roll-Call</a>
+            <a href="/coach/attendance/{e['id']}"
+               style="font-size:12px;font-weight:600;color:#F0A82E;text-decoration:none;
+                      padding:4px 12px;border:1px solid #F0A82E;border-radius:6px;">View</a>
           </td>
         </tr>"""
     if not rows:
-        rows = '<tr><td colspan="5" style="padding:24px;text-align:center;color:#9CA3AF;font-size:13px;">No sessions yet — create one to get started.</td></tr>'
+        rows = '<tr><td colspan="5" style="padding:28px;text-align:center;color:#9CA3AF;font-size:13px;">No sessions yet — create one to get started.</td></tr>'
 
     body = f"""
-    <div class="container" style="max-width:900px;padding-top:32px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px;flex-wrap:wrap;gap:12px;">
-        <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0;">Session Attendance</h2>
+    <div class="container" style="max-width:900px;">
+      <!-- Hero -->
+      <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                  padding:24px 28px;margin-bottom:28px;display:flex;align-items:center;
+                  justify-content:space-between;gap:16px;flex-wrap:wrap;">
+        <div style="display:flex;align-items:center;gap:16px;">
+          <div style="width:48px;height:48px;border-radius:13px;background:rgba(240,168,46,0.18);
+                      border:1.5px solid rgba(240,168,46,0.35);display:flex;align-items:center;
+                      justify-content:center;font-size:22px;color:#F0A82E;flex-shrink:0;font-weight:700;">&#9632;</div>
+          <div>
+            <div style="font-size:20px;font-weight:800;color:#FFFFFF;line-height:1.2;">Session Attendance</div>
+            <div style="font-size:13px;color:rgba(255,255,255,0.50);margin-top:3px;">
+              Create sessions, take roll-call, and track self-directed completion.
+            </div>
+          </div>
+        </div>
         <a href="/coach/attendance/new" class="btn btn-primary">+ New Session</a>
       </div>
-      <div style="border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">
+      <div style="border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;background:#fff;">
         <table style="width:100%;border-collapse:collapse;">
           <thead>
-            <tr style="background:#2D323B;">
-              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Date</th>
-              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Group</th>
-              <th style="padding:10px 14px;text-align:center;font-size:12px;color:#fff;">Present</th>
-              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Notes</th>
-              <th style="padding:10px 14px;font-size:12px;color:#fff;"></th>
+            <tr style="background:#2D323B;border-bottom:2px solid #F0A82E;">
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;
+                          text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.75);">Date</th>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;
+                          text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.75);">Group</th>
+              <th style="padding:10px 16px;text-align:center;font-size:11px;font-weight:700;
+                          text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.75);">Present</th>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;
+                          text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.75);">Notes</th>
+              <th style="padding:10px 16px;"></th>
             </tr>
           </thead>
           <tbody>{rows}</tbody>
@@ -8956,30 +8977,45 @@ def attendance_new_page(coach, groups):
         for g in groups
     )
     body = f"""
-    <div class="container" style="max-width:560px;padding-top:32px;">
-      <a href="/coach/attendance" class="btn btn-ghost btn-sm" style="margin-bottom:20px;">← Attendance</a>
-      <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 24px;">New Session</h2>
-      <form method="post" action="/coach/attendance/new">
-        <div style="margin-bottom:16px;">
-          <label style="display:block;font-weight:600;font-size:13px;margin-bottom:6px;">Group</label>
-          <select name="group_id" style="width:100%;">
-            <option value="">— All athletes —</option>
-            {group_opts}
-          </select>
+    <div class="container" style="max-width:580px;">
+      <!-- Hero -->
+      <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                  padding:24px 28px;margin-bottom:28px;">
+        <div style="display:flex;align-items:center;gap:16px;">
+          <div style="width:44px;height:44px;border-radius:12px;background:rgba(240,168,46,0.18);
+                      border:1.5px solid rgba(240,168,46,0.35);display:flex;align-items:center;
+                      justify-content:center;font-size:20px;color:#F0A82E;flex-shrink:0;font-weight:700;">+</div>
+          <div>
+            <div style="font-size:18px;font-weight:800;color:#FFFFFF;line-height:1.2;">New Session</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.50);margin-top:3px;">
+              Create a session then take roll-call to mark attendance.
+            </div>
+          </div>
         </div>
-        <div style="margin-bottom:16px;">
-          <label style="display:block;font-weight:600;font-size:13px;margin-bottom:6px;">Date</label>
-          <input type="date" name="date" value="{today}" required style="width:100%;box-sizing:border-box;" />
-        </div>
-        <div style="margin-bottom:24px;">
-          <label style="display:block;font-weight:600;font-size:13px;margin-bottom:6px;">Notes (optional)</label>
-          <input type="text" name="notes" placeholder="e.g. Wet weather session" style="width:100%;box-sizing:border-box;" />
-        </div>
-        <div style="display:flex;gap:10px;">
-          <button type="submit" class="btn btn-primary">Create & Take Roll-Call →</button>
-          <a href="/coach/attendance" class="btn btn-ghost">Cancel</a>
-        </div>
-      </form>
+      </div>
+      <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:24px 28px;">
+        <form method="post" action="/coach/attendance/new">
+          <div style="margin-bottom:16px;">
+            <label style="display:block;font-weight:600;font-size:13px;margin-bottom:6px;">Group</label>
+            <select name="group_id" style="width:100%;">
+              <option value="">— All athletes —</option>
+              {group_opts}
+            </select>
+          </div>
+          <div style="margin-bottom:16px;">
+            <label style="display:block;font-weight:600;font-size:13px;margin-bottom:6px;">Date</label>
+            <input type="date" name="date" value="{today}" required style="width:100%;box-sizing:border-box;" />
+          </div>
+          <div style="margin-bottom:24px;">
+            <label style="display:block;font-weight:600;font-size:13px;margin-bottom:6px;">Notes (optional)</label>
+            <input type="text" name="notes" placeholder="e.g. Wet weather session" style="width:100%;box-sizing:border-box;" />
+          </div>
+          <div style="display:flex;gap:10px;">
+            <button type="submit" class="btn btn-primary">Create &amp; Take Roll-Call →</button>
+            <a href="/coach/attendance" class="btn btn-ghost">Cancel</a>
+          </div>
+        </form>
+      </div>
     </div>"""
     return layout("New Session", body, user=coach, active_nav="attendance")
 
@@ -8996,37 +9032,47 @@ def roll_call_page(coach, event, athletes, already_marked):
         name = esc(a.get("name", ""))
         num = esc(a.get("athlete_number") or "")
         athlete_checks += f"""
-        <label style="display:flex;align-items:center;gap:12px;padding:11px 16px;
-          cursor:pointer;border-radius:8px;transition:background 0.15s;"
-          onmouseover="this.style.background='#F3F4F5'" onmouseout="this.style.background=''">
+        <label style="display:flex;align-items:center;gap:12px;padding:12px 16px;
+                       cursor:pointer;border-bottom:1px solid #F3F4F5;transition:background 0.12s;"
+               onmouseover="this.style.background='rgba(240,168,46,0.04)'"
+               onmouseout="this.style.background=''">
           <input type="checkbox" name="athlete_ids" value="{pid}" {checked}
-            style="width:18px;height:18px;accent-color:#2D323B;cursor:pointer;" />
+                 style="width:18px;height:18px;accent-color:#F0A82E;cursor:pointer;flex-shrink:0;" />
           <span style="flex:1;font-size:14px;color:#2D323B;font-weight:500;">{name}</span>
-          {f'<span style="font-size:12px;color:#6E737B;">#{num}</span>' if num else ''}
+          {f'<span style="font-size:11px;color:#9CA3AF;background:#F3F4F5;border-radius:999px;padding:1px 8px;">#{num}</span>' if num else ''}
         </label>"""
 
     if not athlete_checks:
-        athlete_checks = '<p style="color:#9CA3AF;font-size:13px;padding:16px;">No athletes in this group.</p>'
+        athlete_checks = '<p style="color:#9CA3AF;font-size:13px;padding:20px 16px;">No athletes in this group.</p>'
 
     body = f"""
-    <div class="container" style="max-width:600px;padding-top:32px;">
-      <a href="/coach/attendance" class="btn btn-ghost btn-sm" style="margin-bottom:20px;">← Attendance</a>
-      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;">
-        <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0;">Roll-Call</h2>
-        <span style="font-size:13px;color:#6E737B;">{group_name}</span>
-      </div>
-      <div style="font-size:15px;color:#2D323B;margin-bottom:24px;">
-        <strong>{esc(date_str)}</strong>
-        {f' — {esc(event.get("notes",""))}' if event.get("notes") else ""}
+    <div class="container" style="max-width:600px;">
+      <!-- Hero -->
+      <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                  padding:24px 28px;margin-bottom:28px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+                        color:rgba(240,168,46,0.80);margin-bottom:3px;">Roll-Call</div>
+            <div style="font-size:20px;font-weight:800;color:#FFFFFF;line-height:1.2;">{esc(date_str)}</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.50);margin-top:4px;">
+              {group_name}{f" &nbsp;·&nbsp; {esc(event.get('notes',''))}" if event.get('notes') else ""}
+            </div>
+          </div>
+          <a href="/coach/attendance" style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.70);
+             text-decoration:none;padding:6px 14px;border:1px solid rgba(255,255,255,0.20);border-radius:20px;">
+            &larr; Attendance</a>
+        </div>
       </div>
       <form method="post" action="/coach/attendance/{event_id}/roll-call">
-        <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;
-          overflow:hidden;margin-bottom:20px;">
+        <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;margin-bottom:20px;">
           <div style="display:flex;justify-content:space-between;align-items:center;
-            padding:10px 16px;background:#F3F4F5;border-bottom:1px solid #E5E7EB;">
-            <span style="font-size:12px;font-weight:600;color:#6E737B;text-transform:uppercase;letter-spacing:0.06em;">Athletes</span>
+                      padding:10px 16px;background:#F8F9FA;border-bottom:1px solid #E5E7EB;">
+            <span style="font-size:11px;font-weight:700;color:#6E737B;text-transform:uppercase;letter-spacing:0.06em;">
+              Athletes — {len(athletes)} total
+            </span>
             <button type="button" onclick="toggleAll(this)"
-              style="font-size:12px;color:#2D323B;background:none;border:none;cursor:pointer;font-weight:600;">
+                    style="font-size:12px;color:#2D323B;background:none;border:none;cursor:pointer;font-weight:700;">
               Select all
             </button>
           </div>
@@ -9049,54 +9095,101 @@ def roll_call_page(coach, event, athletes, already_marked):
     return layout("Roll-Call", body, user=coach, active_nav="attendance")
 
 
-def attendance_view_page(coach, event, attendees):
+def attendance_view_page(coach, event, attendees, submitted_ids=None):
     date_str = event.get("date", "")[:10]
     group_name = esc(event.get("group_name") or "All athletes")
     event_id = event["id"]
-    rows = "".join(
-        f'<tr style="background:{"#F3F4F5" if i%2==0 else "#fff"};">'
-        f'<td style="padding:9px 14px;font-size:14px;color:#2D323B;">{esc(a.get("name",""))}</td>'
-        f'<td style="padding:9px 14px;font-size:13px;color:#6E737B;">#{esc(a.get("athlete_number") or "")}</td>'
-        f'<td style="padding:9px 14px;font-size:13px;color:#6E737B;">{esc((a.get("marked_at") or "")[:10])}</td>'
-        f'</tr>'
-        for i, a in enumerate(attendees)
-    ) or '<tr><td colspan="3" style="padding:20px;text-align:center;color:#9CA3AF;font-size:13px;">No athletes marked present.</td></tr>'
+    submitted_ids = submitted_ids or set()
+    submitted_count = sum(1 for a in attendees if a["id"] in submitted_ids)
+
+    rows = ""
+    for a in attendees:
+        pid = a["id"]
+        done = pid in submitted_ids
+        sd_cell = (
+            '<span style="font-size:11px;font-weight:700;color:#065F46;background:rgba(30,190,139,0.12);'
+            'border:1px solid rgba(30,190,139,0.28);border-radius:999px;padding:2px 10px;">&#10003; Done</span>'
+            if done else
+            '<span style="font-size:11px;font-weight:600;color:#7A5800;background:rgba(240,168,46,0.10);'
+            'border:1px solid rgba(240,168,46,0.28);border-radius:999px;padding:2px 10px;">Pending</span>'
+        )
+        rows += (
+            f'<tr style="border-bottom:1px solid #F3F4F5;">'
+            f'<td style="padding:10px 16px;font-size:14px;font-weight:500;color:#2D323B;">{esc(a.get("name",""))}</td>'
+            f'<td style="padding:10px 16px;font-size:12px;color:#9CA3AF;">'
+            f'{"#" + esc(a.get("athlete_number") or "") if a.get("athlete_number") else "—"}</td>'
+            f'<td style="padding:10px 16px;font-size:12px;color:#6E737B;">{esc((a.get("marked_at") or "")[:10])}</td>'
+            f'<td style="padding:10px 16px;">{sd_cell}</td>'
+            f'</tr>'
+        )
+    if not rows:
+        rows = '<tr><td colspan="4" style="padding:28px;text-align:center;color:#9CA3AF;font-size:13px;">No athletes marked present.</td></tr>'
+
+    # Summary stats
+    n = len(attendees)
+    pending_count = n - submitted_count
+    stats_html = f"""
+    <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:20px;">
+      <div style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;padding:12px 20px;text-align:center;min-width:100px;">
+        <div style="font-size:22px;font-weight:800;color:#2D323B;">{n}</div>
+        <div style="font-size:11px;color:#6E737B;margin-top:2px;">Present</div>
+      </div>
+      <div style="background:#fff;border:1px solid rgba(30,190,139,0.30);border-radius:10px;padding:12px 20px;text-align:center;min-width:100px;">
+        <div style="font-size:22px;font-weight:800;color:#1EBE8B;">{submitted_count}</div>
+        <div style="font-size:11px;color:#6E737B;margin-top:2px;">Self-directed done</div>
+      </div>
+      <div style="background:#fff;border:1px solid rgba(240,168,46,0.30);border-radius:10px;padding:12px 20px;text-align:center;min-width:100px;">
+        <div style="font-size:22px;font-weight:800;color:#F0A82E;">{pending_count}</div>
+        <div style="font-size:11px;color:#6E737B;margin-top:2px;">Still pending</div>
+      </div>
+    </div>"""
 
     body = f"""
-    <div class="container" style="max-width:700px;padding-top:32px;">
-      <a href="/coach/attendance" class="btn btn-ghost btn-sm" style="margin-bottom:20px;">← Attendance</a>
-      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px;">
-        <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0;">
-          Session — {esc(date_str)}
-        </h2>
-        <span style="font-size:13px;color:#6E737B;">{group_name}</span>
+    <div class="container" style="max-width:760px;">
+      <!-- Hero -->
+      <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                  padding:24px 28px;margin-bottom:28px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <div>
+            <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;
+                        color:rgba(240,168,46,0.80);margin-bottom:3px;">Session</div>
+            <div style="font-size:20px;font-weight:800;color:#FFFFFF;line-height:1.2;">{group_name} &nbsp;·&nbsp; {esc(date_str)}</div>
+            {f'<div style="font-size:12px;color:rgba(255,255,255,0.50);margin-top:4px;">{esc(event.get("notes",""))}</div>' if event.get("notes") else ""}
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <a href="/coach/attendance/{event_id}/roll-call"
+               style="font-size:12px;font-weight:700;color:#2D323B;background:#F0A82E;
+                      text-decoration:none;padding:6px 16px;border-radius:20px;">Edit Roll-Call</a>
+            <a href="/coach/attendance"
+               style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.70);text-decoration:none;
+                      padding:6px 14px;border:1px solid rgba(255,255,255,0.20);border-radius:20px;">
+              &larr; Attendance</a>
+          </div>
+        </div>
       </div>
-      {f'<p style="font-size:13px;color:#6E737B;margin:0 0 20px;">{esc(event.get("notes",""))}</p>' if event.get("notes") else '<div style="margin-bottom:20px;"></div>'}
-      <div style="display:flex;gap:10px;margin-bottom:24px;">
-        <a href="/coach/attendance/{event_id}/roll-call" class="btn btn-primary btn-sm">Edit Roll-Call</a>
-      </div>
-      <div style="border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">
+      {stats_html}
+      <div style="border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;background:#fff;">
         <table style="width:100%;border-collapse:collapse;">
           <thead>
-            <tr style="background:#2D323B;">
-              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Athlete</th>
-              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">#</th>
-              <th style="padding:10px 14px;text-align:left;font-size:12px;color:#fff;">Marked</th>
+            <tr style="background:#2D323B;border-bottom:2px solid #F0A82E;">
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;
+                          text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.75);">Athlete</th>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;
+                          text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.75);">#</th>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;
+                          text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.75);">Marked</th>
+              <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;
+                          text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.75);">Self-Directed</th>
             </tr>
           </thead>
           <tbody>{rows}</tbody>
         </table>
       </div>
-      <p style="font-size:12px;color:#9CA3AF;margin-top:12px;text-align:right;">
-        {len(attendees)} athlete{'s' if len(attendees) != 1 else ''} present
-      </p>
     </div>"""
     return layout("Session Attendance", body, user=coach, active_nav="attendance")
 
 
 def self_directed_home_page(athlete, pending_events, completed_sessions):
-    name = esc(athlete.get("name", ""))
-
     pending_html = ""
     if pending_events:
         for e in pending_events:
@@ -9104,20 +9197,24 @@ def self_directed_home_page(athlete, pending_events, completed_sessions):
             group = esc(e.get("group_name") or "")
             pending_html += f"""
             <a href="/athlete/self-directed/{e['id']}"
-               style="display:flex;align-items:center;justify-content:space-between;
-                 padding:14px 18px;background:#fff;border:1px solid #E5E7EB;
-                 border-radius:10px;text-decoration:none;margin-bottom:10px;
-                 transition:box-shadow 0.15s;"
+               style="display:flex;align-items:center;justify-content:space-between;gap:12px;
+                      padding:14px 18px;background:#fff;border:1px solid #E5E7EB;
+                      border-left:3px solid #F0A82E;border-radius:10px;text-decoration:none;
+                      margin-bottom:10px;transition:box-shadow 0.15s,border-color 0.15s;"
                onmouseover="this.style.boxShadow='0 2px 12px rgba(0,0,0,0.08)'"
                onmouseout="this.style.boxShadow=''">
               <div>
-                <div style="font-size:15px;font-weight:600;color:#2D323B;">{date_str}</div>
+                <div style="font-size:14px;font-weight:700;color:#2D323B;">{date_str}</div>
                 {f'<div style="font-size:12px;color:#6E737B;margin-top:2px;">{group}</div>' if group else ''}
               </div>
-              <span style="font-size:13px;color:#F0A82E;font-weight:600;">Record scores →</span>
+              <span style="font-size:12px;font-weight:700;color:#7A5800;background:rgba(240,168,46,0.12);
+                           border:1px solid rgba(240,168,46,0.30);border-radius:999px;
+                           padding:4px 14px;white-space:nowrap;flex-shrink:0;">Record scores →</span>
             </a>"""
     else:
-        pending_html = '<p style="font-size:14px;color:#9CA3AF;padding:16px 0;">No sessions waiting to be scored.</p>'
+        pending_html = ('<div style="background:rgba(30,190,139,0.06);border-left:3px solid #1EBE8B;'
+                        'border-radius:8px;padding:14px 18px;font-size:13px;color:#065F46;">'
+                        '&#10003; You\'re all caught up — no sessions waiting to be scored.</div>')
 
     completed_html = ""
     if completed_sessions:
@@ -9126,28 +9223,50 @@ def self_directed_home_page(athlete, pending_events, completed_sessions):
             game_count = len({k[0] for k in s.get("results", {}).keys()})
             completed_html += f"""
             <div style="display:flex;align-items:center;justify-content:space-between;
-              padding:10px 16px;background:#F3F4F5;border-radius:8px;margin-bottom:8px;">
-              <span style="font-size:14px;color:#2D323B;">{date_str}</span>
+                        padding:10px 16px;background:#F8F9FA;border-radius:8px;margin-bottom:8px;
+                        border:1px solid #F0F1F3;">
+              <span style="font-size:13px;font-weight:500;color:#2D323B;">{date_str}</span>
               <span style="font-size:12px;color:#6E737B;">{game_count} game{'s' if game_count != 1 else ''} scored</span>
             </div>"""
     else:
-        completed_html = '<p style="font-size:13px;color:#9CA3AF;">No self-directed scores recorded yet.</p>'
+        completed_html = '<p style="font-size:13px;color:#9CA3AF;margin:0;">No self-directed scores recorded yet.</p>'
+
+    pending_badge = (f'<span style="font-size:11px;font-weight:700;background:#F0A82E;color:#2D323B;'
+                     f'border-radius:999px;padding:1px 8px;margin-left:8px;">{len(pending_events)}</span>'
+                     if pending_events else '')
 
     body = f"""
-    <div class="container" style="max-width:680px;padding-top:32px;">
-      <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 6px;">Self-Directed Sessions</h2>
-      <p style="font-size:14px;color:#6E737B;margin:0 0 28px;">
-        After attending a training session, record your own scores here to earn AXP.
-        Only sessions you were marked present for are available.
-      </p>
+    <div class="container" style="max-width:680px;">
+      <!-- Hero -->
+      <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                  padding:24px 28px;margin-bottom:28px;">
+        <div style="display:flex;align-items:center;gap:16px;">
+          <div style="width:48px;height:48px;border-radius:13px;background:rgba(240,168,46,0.18);
+                      border:1.5px solid rgba(240,168,46,0.35);display:flex;align-items:center;
+                      justify-content:center;font-size:20px;color:#F0A82E;flex-shrink:0;font-weight:700;">&#9654;</div>
+          <div>
+            <div style="font-size:20px;font-weight:800;color:#FFFFFF;line-height:1.2;">Self-Directed Sessions</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.50);margin-top:3px;">
+              Record your own scores after training to earn AXP.
+            </div>
+          </div>
+        </div>
+      </div>
 
-      <h3 style="font-size:15px;font-weight:700;color:#2D323B;margin:0 0 12px;">
-        Ready to score
-        {f'<span style="font-size:12px;background:#F0A82E;color:#2D323B;border-radius:999px;padding:2px 8px;margin-left:8px;">{len(pending_events)}</span>' if pending_events else ''}
-      </h3>
+      <div style="display:flex;align-items:center;gap:0;margin-bottom:12px;">
+        <div style="width:3px;height:16px;background:#F0A82E;border-radius:2px;margin-right:10px;"></div>
+        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:#2D323B;">
+          Ready to score{pending_badge}
+        </span>
+      </div>
       {pending_html}
 
-      <h3 style="font-size:15px;font-weight:700;color:#2D323B;margin:24px 0 12px;">Recent self-directed scores</h3>
+      <div style="display:flex;align-items:center;gap:0;margin:24px 0 12px;">
+        <div style="width:3px;height:16px;background:#F0A82E;border-radius:2px;margin-right:10px;"></div>
+        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:#2D323B;">
+          Recent scores
+        </span>
+      </div>
       {completed_html}
 
       <div style="margin-top:28px;">
@@ -9184,26 +9303,54 @@ def self_directed_entry_page(athlete, event):
                     style="width:120px;font-size:14px;" placeholder="—" />
                 </div>"""
             game_cards += f"""
-            <div style="background:#fff;border:1px solid #E5E7EB;border-radius:10px;
-              padding:16px 20px;margin-bottom:14px;">
-              <div style="font-size:14px;font-weight:700;color:#2D323B;margin-bottom:12px;">
+            <div style="background:#fff;border:1px solid #E5E7EB;border-left:3px solid #2D323B;
+                        border-radius:10px;padding:16px 20px;margin-bottom:12px;">
+              <div style="font-size:13px;font-weight:800;color:#2D323B;margin-bottom:12px;
+                          text-transform:uppercase;letter-spacing:0.04em;">
                 {esc(GAME_DISPLAY_NAMES.get(game['key'], game['name']))}
               </div>
               {fields_html}
             </div>"""
 
     body = f"""
-    <div class="container" style="max-width:640px;padding-top:32px;">
-      <a href="/athlete/self-directed" class="btn btn-ghost btn-sm" style="margin-bottom:20px;">← Self-Directed</a>
-      <h2 style="font-size:20px;font-weight:700;color:#2D323B;margin:0 0 4px;">Record Your Scores</h2>
-      <p style="font-size:14px;color:#6E737B;margin:0 0 24px;">
-        Session: <strong>{date_str}</strong>{f" · {group}" if group else ""}
-        &nbsp;·&nbsp; Only fill in the games you actually played.
-      </p>
+    <div class="container" style="max-width:640px;">
+      <!-- Hero -->
+      <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                  padding:24px 28px;margin-bottom:28px;">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:16px;">
+            <div style="width:48px;height:48px;border-radius:13px;background:rgba(240,168,46,0.18);
+                        border:1.5px solid rgba(240,168,46,0.35);display:flex;align-items:center;
+                        justify-content:center;font-size:20px;color:#F0A82E;flex-shrink:0;font-weight:700;">&#9654;</div>
+            <div>
+              <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;
+                          color:rgba(240,168,46,0.80);margin-bottom:2px;">Self-Directed Session</div>
+              <div style="font-size:20px;font-weight:800;color:#FFFFFF;line-height:1.2;">Record Your Scores</div>
+              <div style="font-size:12px;color:rgba(255,255,255,0.50);margin-top:3px;">
+                {date_str}{f" &middot; {group}" if group else ""}
+              </div>
+            </div>
+          </div>
+          <a href="/athlete/self-directed"
+             style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.65);text-decoration:none;
+                    padding:6px 14px;border-radius:20px;border:1px solid rgba(255,255,255,0.20);
+                    background:rgba(255,255,255,0.08);white-space:nowrap;align-self:flex-start;
+                    transition:background 0.15s;"
+             onmouseover="this.style.background='rgba(255,255,255,0.15)'"
+             onmouseout="this.style.background='rgba(255,255,255,0.08)'">&larr; Self-Directed</a>
+        </div>
+      </div>
+
+      <div style="display:flex;align-items:center;gap:0;margin-bottom:16px;">
+        <div style="width:3px;height:16px;background:#F0A82E;border-radius:2px;margin-right:10px;"></div>
+        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:#2D323B;">Games</span>
+        <span style="font-size:12px;color:#6E737B;margin-left:8px;font-weight:400;">— only fill in games you played</span>
+      </div>
+
       <form method="post" action="/athlete/self-directed/{event_id}">
         {game_cards}
-        <div style="display:flex;gap:10px;margin-top:8px;">
-          <button type="submit" class="btn btn-primary">Save & Earn AXP</button>
+        <div style="display:flex;gap:10px;margin-top:20px;">
+          <button type="submit" class="btn btn-primary">Save &amp; Earn AXP</button>
           <a href="/athlete/self-directed" class="btn btn-ghost">Cancel</a>
         </div>
       </form>
