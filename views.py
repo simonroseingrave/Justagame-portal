@@ -9393,10 +9393,10 @@ def group_leaderboard_page(coach, groups, selected_group_id=None, ranked_athlete
         if not top3:
             return ""
         podium_order = [1, 0, 2]
-        bar_h     = {0: "80px",  1: "110px", 2: "60px"}
-        av_size   = {0: "52px",  1: "68px",  2: "44px"}
-        av_font   = {0: "18px",  1: "24px",  2: "15px"}
-        label_txt = {0: "2nd",   1: "1st",   2: "3rd"}
+        bar_h     = {0: "110px", 1: "80px",  2: "60px"}
+        av_size   = {0: "68px",  1: "52px",  2: "44px"}
+        av_font   = {0: "24px",  1: "18px",  2: "15px"}
+        label_txt = {0: "1st",   1: "2nd",   2: "3rd"}
         cols = ""
         for rank_idx in podium_order:
             if rank_idx >= len(top3):
