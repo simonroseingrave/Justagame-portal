@@ -1219,36 +1219,57 @@ def participant_dashboard(user, measurement_sessions,
     if active_window:
         wid = active_window["id"]
         label_txt = esc(active_window.get("session_label") or "")
-        label_part = f' — <strong>{label_txt}</strong>' if label_txt else ''
+        label_line = f'<div style="font-size:13px;font-weight:700;color:#F0A82E;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:4px;">{label_txt}</div>' if label_txt else ''
         if already_submitted:
             window_banner = f"""
-    <div style="background:#065F46;border-radius:14px;padding:16px 20px;margin-bottom:20px;
-                display:flex;align-items:center;gap:14px;">
-      <span style="font-size:24px;">✅</span>
-      <div>
-        <div style="font-weight:700;color:#fff;font-size:15px;">Scores submitted{label_part}</div>
-        <div style="color:#A7F3D0;font-size:13px;margin-top:2px;">
-          Your scores have been recorded. AAXP will be awarded when your practitioner closes the session.
+    <div style="background:linear-gradient(135deg,#064E3B 0%,#065F46 100%);border-radius:16px;
+                padding:20px 24px;margin-bottom:20px;
+                border:1.5px solid rgba(30,190,139,0.40);">
+      <div style="display:flex;align-items:center;gap:14px;">
+        <div style="width:44px;height:44px;border-radius:12px;background:rgba(30,190,139,0.20);
+                    display:flex;align-items:center;justify-content:center;font-size:22px;
+                    flex-shrink:0;color:#1EBE8B;">&#10003;</div>
+        <div>
+          {label_line}
+          <div style="font-weight:800;color:#FFFFFF;font-size:16px;">Scores submitted!</div>
+          <div style="color:rgba(255,255,255,0.60);font-size:13px;margin-top:2px;">
+            AXP will be awarded when your practitioner closes the session.
+          </div>
         </div>
       </div>
     </div>"""
         else:
             window_banner = f"""
-    <div style="background:#92400E;border-radius:14px;padding:16px 20px;margin-bottom:20px;
-                display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-      <span style="font-size:24px;">📋</span>
-      <div style="flex:1;min-width:180px;">
-        <div style="font-weight:700;color:#fff;font-size:15px;">Measurement session open{label_part}</div>
-        <div style="color:#FDE68A;font-size:13px;margin-top:2px;">
-          Your practitioner has opened a testing session. Enter your scores now.
-        </div>
+    <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
+                padding:22px 24px;margin-bottom:20px;
+                border:2px solid #F0A82E;
+                box-shadow:0 0 0 4px rgba(240,168,46,0.12);">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
+        <div style="width:8px;height:8px;border-radius:50%;background:#F0A82E;
+                    animation:pulse 1.5s infinite;"></div>
+        <span style="font-size:11px;font-weight:700;text-transform:uppercase;
+                     letter-spacing:0.08em;color:#F0A82E;">Live Session</span>
+      </div>
+      {label_line}
+      <div style="font-size:20px;font-weight:800;color:#FFFFFF;margin-bottom:4px;">
+        Testing session is open &#8212; enter your scores!
+      </div>
+      <div style="font-size:13px;color:rgba(255,255,255,0.55);margin-bottom:18px;">
+        Your practitioner is waiting. Submit your results to earn AXP.
       </div>
       <a href="/athlete/window/{wid}"
-         style="background:#F0A82E;color:#2D323B;font-weight:700;font-size:14px;
-                border-radius:10px;padding:10px 20px;text-decoration:none;white-space:nowrap;">
-        Enter My Scores →
+         style="display:block;text-align:center;background:#F0A82E;color:#2D323B;
+                font-weight:800;font-size:16px;border-radius:12px;padding:14px 24px;
+                text-decoration:none;letter-spacing:0.02em;">
+        Enter My Scores &#8250;
       </a>
-    </div>"""
+    </div>
+    <style>
+      @keyframes pulse {{
+        0%,100% {{ opacity:1; transform:scale(1); }}
+        50% {{ opacity:0.4; transform:scale(1.4); }}
+      }}
+    </style>"""
 
     # ── Hero card ─────────────────────────────────────────────────────────────
     hero = f"""
