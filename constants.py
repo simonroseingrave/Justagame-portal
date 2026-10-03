@@ -674,16 +674,22 @@ SC_GAP_LANGUAGE = {
     ("balance_ball_catching", "large_ball_wall_bounce"): {
         "display": "Balance Catching — Two Feet",
         "family": "Balance & Postural Control",
+        "cla_constraint": (
+            "The key constraint here is a dual-task balance demand — the athlete must maintain "
+            "a stable postural base while simultaneously processing and responding to an "
+            "incoming stimulus. Game environments that pair a balance requirement with "
+            "a perceptual demand (catching, tracking, reacting) will directly challenge this."
+        ),
+        "resource_tag": "balance",
         "sc_gap": (
             "Bilateral balance deficit — the proprioceptive system is not adequately "
             "managing postural stability under a dual-task demand (balance + catch). "
             "The stable base required to support a secondary perceptual demand is not yet established."
         ),
         "sc_programme": (
-            "Prioritise bilateral proprioceptive loading: single-plane balance holds progressing "
-            "to unstable surfaces. Include wall-supported catching as a controlled dual-task. "
-            "Avoid premature loading on unstable surfaces — build a stable base first. "
-            "Calf and ankle stability work underpins the postural hold."
+            "Bilateral proprioceptive loading: single-plane balance holds progressing to unstable "
+            "surfaces. Wall-supported catching as a controlled dual-task. Calf and ankle stability "
+            "work underpins the postural hold."
         ),
         "d2_focus": ["Bilateral balance", "Proprioception", "Perceptual-action coupling"],
         "athlete_what": "Staying balanced while catching is something to develop — when your base is solid, everything else gets easier.",
@@ -694,16 +700,23 @@ SC_GAP_LANGUAGE = {
     ("balance_ball_catching", "one_foot_balance_catch"): {
         "display": "Balance Catching — One Foot",
         "family": "Balance & Postural Control",
+        "cla_constraint": (
+            "The constraint here is unilateral balance under perceptual load — managing a "
+            "single-leg base while tracking and intercepting a moving object. Game environments "
+            "that require single-leg stability alongside a perceptual or manipulation task "
+            "will expose and develop this coupling."
+        ),
+        "resource_tag": "balance",
         "sc_gap": (
             "Unilateral balance deficit — single-leg proprioceptive control is insufficient "
             "to support a secondary perceptual demand. The athlete cannot yet stabilise on "
             "one foot while simultaneously tracking and catching a ball."
         ),
         "sc_programme": (
-            "Build unilateral proprioceptive control progressively: single-leg holds → "
-            "single-leg with arm reach → single-leg catch. Only introduce unstable surfaces "
-            "once stable ground control is consistent. Hip abductor and ankle stability "
-            "work (single-leg deadlifts, lateral band walks) directly supports this area."
+            "Unilateral proprioceptive control progressively: single-leg holds → single-leg "
+            "with arm reach → single-leg catch. Only introduce unstable surfaces once stable "
+            "ground control is consistent. Hip abductor and ankle stability work (single-leg "
+            "deadlifts, lateral band walks) directly supports this area."
         ),
         "d2_focus": ["Unilateral balance", "Proprioception", "Perceptual-action coupling"],
         "athlete_what": "Balancing on one leg while tracking a ball is a real skill — and it's very trainable.",
@@ -714,17 +727,22 @@ SC_GAP_LANGUAGE = {
     ("lob_scotch", "squares_scored"): {
         "display": "Lob Scotch",
         "family": "Explosive & Landing",
+        "cla_constraint": (
+            "The constraint here is projective movement with temporal and spatial precision "
+            "— the athlete must hop, land in a defined zone, and rebalance within a rhythmic "
+            "structure. Game environments with target-based landing, hop-and-recover patterns, "
+            "or scoring zones that reward landing accuracy will develop this."
+        ),
+        "resource_tag": "explosive",
         "sc_gap": (
             "Dynamic landing mechanics deficit — inadequate bilateral landing control "
             "following a unilateral projective movement. Landing absorption and re-stabilisation "
             "from the hop-to-land transition is underdeveloped."
         ),
         "sc_programme": (
-            "Focus on progressive landing mechanics: drop landings → box step-offs → "
-            "unilateral hops to bilateral landing. Cue knee-over-toe alignment and full "
-            "ankle dorsiflexion on contact. Avoid max-effort hops until controlled, "
-            "quiet landing is consistent. Eccentric quad and glute strength underpins "
-            "the absorption capacity."
+            "Progressive landing mechanics: drop landings → box step-offs → unilateral hops "
+            "to bilateral landing. Cue knee-over-toe alignment and full ankle dorsiflexion "
+            "on contact. Eccentric quad and glute strength underpins the absorption capacity."
         ),
         "d2_focus": ["Landing mechanics", "Plyometric power", "Rhythmic coordination"],
         "athlete_what": "Your jumping rhythm and landing control is something to work on — you're building the foundation for real explosive movement.",
@@ -735,6 +753,13 @@ SC_GAP_LANGUAGE = {
     ("leap_catching_throwing", "points"): {
         "display": "Grid Leap",
         "family": "Explosive & Landing",
+        "cla_constraint": (
+            "The constraint here is horizontal projection with concurrent ball interception "
+            "— the athlete must couple explosive force output with visual tracking and spatial "
+            "targeting simultaneously. Look for games that require leaping to intercept, "
+            "or that score for both distance and accuracy in the same action."
+        ),
+        "resource_tag": "explosive",
         "sc_gap": (
             "Horizontal power and spatial targeting deficit — inadequate projective force "
             "production and/or landing accuracy under a concurrent perceptual demand. "
@@ -742,10 +767,9 @@ SC_GAP_LANGUAGE = {
             "tracking and spatial target awareness."
         ),
         "sc_programme": (
-            "Develop horizontal power with landing accuracy together: broad jumps to a "
-            "target zone, medicine ball horizontal throws for force production. Progress "
-            "to reactive catch-and-jump sequences. Include spatial target work alongside "
-            "power development — accuracy and distance should develop in parallel, not in series."
+            "Horizontal power with landing accuracy together: broad jumps to a target zone, "
+            "medicine ball horizontal throws for force production. Reactive catch-and-jump "
+            "sequences. Accuracy and distance should develop in parallel, not in series."
         ),
         "d2_focus": ["Horizontal power", "Landing mechanics", "Perceptual-action coupling"],
         "athlete_what": "Combining a big leap with a catch and throw is tough — this is an exciting area to develop because the gains are very visible.",
@@ -756,70 +780,95 @@ SC_GAP_LANGUAGE = {
     ("step_up", "step_bench"): {
         "display": "Step Up",
         "family": "Explosive & Landing",
+        "cla_constraint": (
+            "The constraint here is rhythmic locomotion under a dual-task demand — the athlete "
+            "must sustain a movement rhythm while simultaneously tracking and intercepting an "
+            "object. Games that impose a locomotor rhythm alongside a perceptual task (catching, "
+            "receiving, scanning) will create the right environment for this to develop."
+        ),
+        "resource_tag": "explosive",
         "sc_gap": (
             "Vertical force production with concurrent hand-eye coordination deficit — "
             "step-up rhythm and catch timing are decoupled. The athlete cannot yet maintain "
             "the full perception-action loop through the complete vertical movement cycle."
         ),
         "sc_programme": (
-            "Build step-up rhythm before adding the ball: metronome-paced step-ups, "
-            "focusing on full hip extension at the top position. Once rhythm is consistent, "
-            "introduce the self-feed wall catch. Vertical power foundation work (box step-ups, "
-            "loaded step-ups, calf raises) supports the locomotor demand and reduces "
-            "cognitive load on the movement pattern."
+            "Build step-up rhythm before adding the ball: metronome-paced step-ups focusing "
+            "on full hip extension at the top. Once rhythm is consistent, introduce the "
+            "self-feed wall catch. Vertical power foundation work (box step-ups, loaded "
+            "step-ups, calf raises) reduces cognitive load on the movement pattern."
         ),
         "d2_focus": ["Vertical power", "Rhythmic coordination", "Perceptual-action coupling"],
         "athlete_what": "Keeping your rhythm while doing two things at once — stepping and catching — is a great skill to build.",
         "athlete_why": "Athletes who can keep moving consistently while tracking a ball have a real edge. This tests whether your body can run on autopilot so your mind can focus on the game.",
         "athlete_games": ["Step Up (self-test)", "Skipping Rope Sprint", "Diamond Gates"],
-        "athlete_sc": "Box step-ups are a simple gym exercise that directly helps here — focus on driving all the way up to a full hip extension at the top.",
+        "athlete_sc": "Box step-ups directly support this — focus on driving all the way up to a full hip extension at the top.",
     },
     ("skipping_rope_sprint", "average"): {
         "display": "Skipping Rope Sprints",
         "family": "Dynamic Locomotor",
+        "cla_constraint": (
+            "The constraint here is linear speed under a self-imposed coordination demand "
+            "— the rope adds a rhythmic, continuous constraint that the athlete must synchronise "
+            "with their locomotion. Games with continuous movement rhythms, repetitive patterns, "
+            "or constraints that require coordination to be maintained at speed will develop this."
+        ),
+        "resource_tag": "locomotion",
         "sc_gap": (
             "Linear speed with rhythmic coordination deficit — the athlete cannot yet "
             "synchronise locomotion with rope rotation at sufficient pace. Sprint mechanics "
-            "and rope timing are not coupled, with the rope constraint reducing the efficiency "
-            "of the locomotor pattern."
+            "and rope timing are not coupled, reducing the efficiency of the locomotor pattern."
         ),
         "sc_programme": (
-            "Address sprint mechanics and rope coordination as separate qualities before "
-            "combining them. For the S&C component: acceleration work (wall drives, A-skips, "
-            "resisted sprint starts) builds the speed foundation. Progress to combined "
-            "rope-sprint sets once each element is consistent in isolation. "
-            "Note: this is an inverse metric — lower time is better."
+            "Acceleration work (wall drives, A-skips, resisted sprint starts) builds the "
+            "speed foundation. Progress to combined rope-sprint sets once each element is "
+            "consistent in isolation. Note: lower time is better for this metric."
         ),
         "d2_focus": ["Linear speed", "Rhythmic coordination"],
         "athlete_what": "Your running speed and coordination under a constraint is something to develop — and it responds really well to practice.",
         "athlete_why": "Pure speed is one of the most valuable things in sport. Getting faster over short distances — and staying coordinated while you do it — is a game-changer.",
         "athlete_games": ["Skipping Rope Sprint (self-test)", "Diamond Gates", "Diamond Dribble"],
-        "athlete_sc": "Acceleration drills are the best gym support here — wall drive holds, A-skips, short sprint starts from standing. Focus on the first 5 metres.",
+        "athlete_sc": "Acceleration drills: wall drive holds, A-skips, short sprint starts from standing. Focus on the first 5 metres.",
     },
     ("diamond_gates", "small_group"): {
         "display": "Diamond Gates",
         "family": "Dynamic Locomotor",
+        "cla_constraint": (
+            "The constraint here is multi-directional movement under spatial and time pressure "
+            "— the gates define the path but the athlete must self-organise their route, "
+            "deceleration, and re-acceleration within a group context. Games with defined "
+            "movement zones, gate structures, or scoring that rewards agility and efficiency "
+            "will challenge this directly."
+        ),
+        "resource_tag": "agility",
         "sc_gap": (
             "Change of direction speed deficit — the athlete is not efficiently navigating "
             "the spatial structure of the diamond under the group time constraint. "
             "Deceleration mechanics, re-acceleration, and turning efficiency need development."
         ),
         "sc_programme": (
-            "COD speed development: deceleration mechanics first (hip-sink, foot-strike "
-            "positioning), then 5-10-5 shuttle progressions, lateral shuffle to sprint "
-            "transitions. Strength base directly supports deceleration capacity — include "
-            "rear-foot-elevated split squats and lateral band work for hip abductor control "
+            "COD speed: deceleration mechanics first (hip-sink, foot-strike positioning), "
+            "then 5-10-5 shuttle progressions, lateral shuffle to sprint transitions. "
+            "Rear-foot-elevated split squats and lateral band work for hip abductor control "
             "in the change-of-direction moment."
         ),
         "d2_focus": ["Change of direction speed", "Reactive agility"],
         "athlete_what": "Changing direction quickly and efficiently is something to keep working on — this is one of the most impactful areas in field and court sports.",
         "athlete_why": "The ability to stop, change direction and accelerate again quickly is at the heart of getting to the right place before anyone else.",
         "athlete_games": ["Diamond Gates (self-test & programme)", "Diamond Dribble", "Split Step"],
-        "athlete_sc": "Shuttle runs are your friend — short, sharp, and frequent. Focus on the deceleration (the slow-down before you turn) as much as the sprint.",
+        "athlete_sc": "Shuttle runs — short, sharp, and frequent. Focus on the deceleration (the slow-down before you turn) as much as the sprint.",
     },
     ("diamond_dribble", "small_group"): {
         "display": "Diamond Dribble",
         "family": "Dynamic Locomotor",
+        "cla_constraint": (
+            "The constraint here is ball-locomotor coupling under spatial and time pressure "
+            "— the dribble adds a concurrent manipulation demand that competes for attentional "
+            "resources with movement quality. Games that require moving with an object through "
+            "defined space, or that reward fluid ball movement alongside agility, will develop "
+            "this coupling."
+        ),
+        "resource_tag": "agility",
         "sc_gap": (
             "Change of direction speed with concurrent ball manipulation deficit — "
             "the dribble constraint is absorbing perceptual and motor resources, "
@@ -827,11 +876,10 @@ SC_GAP_LANGUAGE = {
             "ball control) is underdeveloped."
         ),
         "sc_programme": (
-            "From an S&C perspective, address movement quality as the priority: COD "
-            "mechanics, deceleration control, and unilateral leg strength (split squats, "
-            "lateral lunges). Ball manipulation is a skill quality developed separately. "
-            "Combine only once the movement pattern is sufficiently automatic that it "
-            "no longer competes for attentional resources."
+            "Address movement quality as the priority: COD mechanics, deceleration control, "
+            "and unilateral leg strength (split squats, lateral lunges). Ball manipulation "
+            "develops separately — combine only once the movement pattern is sufficiently "
+            "automatic that it no longer competes for attentional resources."
         ),
         "d2_focus": ["Change of direction speed", "Ball manipulation", "Ball-foot perceptual coupling"],
         "athlete_what": "Moving quickly with the ball while changing direction is something to develop — your movement and ball control will start to click together.",
@@ -842,22 +890,29 @@ SC_GAP_LANGUAGE = {
     ("split_step", "catches"): {
         "display": "Split Step",
         "family": "Perceptual-Motor Speed",
+        "cla_constraint": (
+            "The constraint here is reactive interception under temporal uncertainty — the "
+            "athlete must respond to an unpredictable stimulus with minimal preparation time. "
+            "Ensure this athlete gets exposure to games with genuine unpredictability: partner "
+            "reaction tasks, chaotic environments, or games where they cannot anticipate the "
+            "next stimulus. Choreographed patterns will not develop this."
+        ),
+        "resource_tag": "reaction",
         "sc_gap": (
             "Reactive agility deficit — the athlete is not intercepting the reflex ball "
             "within the available temporal window at sufficient rate. Reactive speed and "
             "the coupling between visual stimulus and motor response are limiting performance."
         ),
         "sc_programme": (
-            "Reactive agility training: visual stimulus to movement response drills, "
-            "1v1 mirroring, partner signal COD. Plyometric base supports reactive speed — "
-            "include drop-catch drills and rapid ground contact (pogo) work to reduce "
-            "ground contact time. Critically: avoid choreographed agility patterns. "
-            "The S&C adaptation must occur under genuine unpredictability to transfer."
+            "Reactive agility: visual stimulus to movement response drills, 1v1 mirroring, "
+            "partner signal COD. Drop-catch drills and rapid ground contact (pogo) work reduce "
+            "ground contact time. Critically: S&C adaptation must occur under genuine "
+            "unpredictability to transfer — avoid choreographed agility patterns."
         ),
         "d2_focus": ["Reactive agility", "Perceptual-action coupling"],
         "athlete_what": "Reacting quickly to a ball that you can't predict is something to sharpen — this is one of the most sport-specific skills there is.",
         "athlete_why": "The best athletes read play early and move before anyone else. This test measures exactly that — your ability to pick up cues and react instantly.",
         "athlete_games": ["Split Step (self-test)", "Split Decision", "Diamond Gates"],
-        "athlete_sc": "Play reaction games with a partner — they point a direction, you move. Or drop-catch drills: hold a ball at shoulder height, drop it, catch before it bounces twice.",
+        "athlete_sc": "Reaction games with a partner — they point, you move. Or drop-catch drills: hold a ball at shoulder height, drop it, catch before it bounces twice.",
     },
 }

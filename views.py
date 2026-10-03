@@ -11011,8 +11011,9 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
     }
     FAMILY_COL = {k: v["col"] for k, v in FAMILY_META.items()}
 
-    gap_areas   = []  # areas below threshold (or all if no thresholds)
-    score_rows  = []  # for the summary table
+    gap_areas     = []  # areas below threshold (or all if no thresholds)
+    tracking_well = []  # areas above threshold that have a recorded score
+    score_rows    = []  # for the summary table
 
     for area in SCORING_AREAS:
         gk       = area["game_key"]
@@ -11069,13 +11070,32 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
 
         if is_gap:
             sc_info = SC_GAP_LANGUAGE.get((gk, stored)) or SC_GAP_LANGUAGE.get((gk, ach_fk))
+            # Is this athlete close to levelling up? (within 15% of threshold)
+            close_to_next = False
+            if score is not None and next_thresh:
+                tv = next_thresh["threshold_value"]
+                if lower:
+                    close_to_next = float(score) <= tv * 1.15
+                else:
+                    close_to_next = float(score) >= tv * 0.85
             gap_areas.append({
-                "display":      disp,
-                "family":       sc_info["family"] if sc_info else "—",
-                "sc_gap":       sc_info["sc_gap"] if sc_info else "",
-                "sc_programme": sc_info["sc_programme"] if sc_info else "",
-                "d2_focus":     sc_info["d2_focus"] if sc_info else [],
-                "gap_label":    gap_label,
+                "display":        disp,
+                "family":         sc_info["family"] if sc_info else "—",
+                "cla_constraint": sc_info.get("cla_constraint", "") if sc_info else "",
+                "resource_tag":   sc_info.get("resource_tag", "") if sc_info else "",
+                "athlete_games":  sc_info.get("athlete_games", []) if sc_info else [],
+                "sc_gap":         sc_info["sc_gap"] if sc_info else "",
+                "sc_programme":   sc_info["sc_programme"] if sc_info else "",
+                "d2_focus":       sc_info["d2_focus"] if sc_info else [],
+                "gap_label":      gap_label,
+                "close_to_next":  close_to_next,
+            })
+        elif score is not None:
+            tracking_well.append({
+                "display": disp,
+                "score":   f"{score:g}",
+                "level":   cur_level,
+                "lower":   lower,
             })
 
     # ── Summary table ────────────────────────────────────────────────────────
@@ -11130,13 +11150,12 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
       </table>
     </div>"""
 
-    # ── Gap analysis section ──────────────────────────────────────────────────
+    # ── Gap analysis section (CLA-framed) ────────────────────────────────────
     if not gap_areas:
         gap_html = ('<div style="background:rgba(30,190,139,0.08);border-left:4px solid #1EBE8B;'
                     'border-radius:8px;padding:14px 18px;font-size:13px;color:#065F46;margin-bottom:28px;">'
                     '<strong>No gaps identified.</strong> This athlete is meeting all current thresholds.</div>')
     else:
-        # Group by family
         by_family = {}
         for g in gap_areas:
             by_family.setdefault(g["family"], []).append(g)
@@ -11145,39 +11164,79 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
         for family in FAMILY_ORDER:
             if family not in by_family:
                 continue
-            fm  = FAMILY_META.get(family, {"col": "#2D323B", "icon": "&#9632;"})
-            col = fm["col"]
+            fm   = FAMILY_META.get(family, {"col": "#2D323B", "icon": "&#9632;"})
+            col  = fm["col"]
             icon = fm["icon"]
             items = by_family[family]
             area_cards = ""
             for g in items:
                 d2_chips = "".join(
-                    f'<span style="font-size:11px;background:rgba(45,50,59,0.06);border:1px solid #E5E7EB;'
-                    f'border-radius:999px;padding:2px 10px;color:#2D323B;font-weight:500;">{esc(q)}</span>'
+                    f'<span style="font-size:11px;background:{col}14;border:1px solid {col}30;'
+                    f'border-radius:999px;padding:2px 10px;color:{col};font-weight:600;">{esc(q)}</span>'
                     for q in g["d2_focus"]
                 )
                 gap_lbl_html = (
-                    f'<div style="font-size:11px;font-weight:700;color:#7A5800;'
+                    f'<span style="font-size:11px;font-weight:700;color:#7A5800;'
                     f'background:rgba(240,168,46,0.12);border:1px solid rgba(240,168,46,0.28);'
-                    f'border-radius:6px;padding:3px 10px;display:inline-block;margin-bottom:8px;">'
-                    f'{esc(g["gap_label"])}</div>'
+                    f'border-radius:999px;padding:2px 10px;">'
+                    f'{esc(g["gap_label"])}</span>'
                 ) if g["gap_label"] else ""
+
+                # Close-to-levelling nudge
+                close_nudge = ""
+                if g.get("close_to_next"):
+                    close_nudge = (
+                        '<div style="background:rgba(30,190,139,0.08);border-left:3px solid #1EBE8B;'
+                        'border-radius:0 8px 8px 0;padding:10px 12px;margin:10px 0;font-size:12px;color:#065F46;line-height:1.5;">'
+                        '<strong>&#9650; Close to levelling up</strong> — this athlete is within striking distance of the next threshold. '
+                        'Consider offering a self-test attempt at the next level as motivation.'
+                        '</div>'
+                    )
+
+                # Game suggestions
+                games_list = g.get("athlete_games", [])
+                if games_list:
+                    game_tags = "".join(
+                        f'<span style="font-size:11px;font-weight:600;background:#2D323B;color:#F0A82E;'
+                        f'border-radius:6px;padding:3px 10px;white-space:nowrap;">{esc(gm)}</span>'
+                        for gm in games_list
+                    )
+                    games_html = (
+                        f'<div style="margin-top:10px;">'
+                        f'<div style="font-size:11px;font-weight:700;text-transform:uppercase;'
+                        f'letter-spacing:0.06em;color:#6E737B;margin-bottom:6px;">Self-test opportunities</div>'
+                        f'<div style="display:flex;gap:6px;flex-wrap:wrap;">{game_tags}</div>'
+                        f'</div>'
+                    )
+                else:
+                    games_html = ""
+
+                # Resource filter suggestion
+                tag = g.get("resource_tag", "")
+                resource_html = (
+                    f'<div style="font-size:12px;color:#6E737B;margin-top:8px;">'
+                    f'&#128269; Filter the game library by <strong>&ldquo;{esc(tag)}&rdquo;</strong> '
+                    f'to find game options that target this area.'
+                    f'</div>'
+                ) if tag else ""
+
                 area_cards += f"""
                 <div style="border:1px solid #E5E7EB;border-left:3px solid {col};border-radius:8px;
                             padding:14px 16px;margin-bottom:12px;background:#fff;">
-                  <div style="font-size:13px;font-weight:700;color:#2D323B;margin-bottom:4px;">{esc(g['display'])}</div>
-                  {gap_lbl_html}
-                  <div style="font-size:12px;color:#4B5563;margin-bottom:8px;line-height:1.6;">
-                    <strong style="color:#2D323B;">S&amp;C gap:</strong> {esc(g['sc_gap'])}
+                  <div style="display:flex;align-items:flex-start;justify-content:space-between;
+                              gap:8px;flex-wrap:wrap;margin-bottom:8px;">
+                    <div style="font-size:13px;font-weight:700;color:#2D323B;">{esc(g['display'])}</div>
+                    {gap_lbl_html}
                   </div>
-                  {f'<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;">{d2_chips}</div>' if d2_chips else ''}
-                  {('<div style="background:rgba(45,50,59,0.04);border-left:3px solid #2D323B;'
-                    'border-radius:0 6px 6px 0;padding:10px 12px;font-size:12px;color:#2D323B;line-height:1.6;">'
-                    '<strong>If undertaking an S&amp;C programme:</strong> ' + esc(g['sc_programme']) + '</div>'
-                   ) if sc_programme and g['sc_programme'] else ""}
+                  {f'<div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;">{d2_chips}</div>' if d2_chips else ''}
+                  <div style="font-size:12px;color:#374151;line-height:1.65;margin-bottom:4px;">
+                    {esc(g['cla_constraint'])}
+                  </div>
+                  {close_nudge}
+                  {games_html}
+                  {resource_html}
                 </div>"""
 
-            # Family section header with icon box
             gap_cards += f"""
             <div style="margin-bottom:24px;">
               <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;
@@ -11191,6 +11250,59 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
             </div>"""
 
         gap_html = gap_cards
+
+    # ── Tracking well section ─────────────────────────────────────────────────
+    if tracking_well:
+        tw_items = "".join(
+            f'<div style="display:flex;align-items:center;gap:10px;padding:7px 0;'
+            f'border-bottom:1px solid rgba(0,0,0,0.04);">'
+            f'<span style="font-size:15px;color:#1EBE8B;">&#10003;</span>'
+            f'<span style="font-size:13px;font-weight:600;color:#2D323B;flex:1;">{esc(t["display"])}</span>'
+            f'<span style="font-size:12px;color:#6E737B;">{t["score"]}{"↓" if t["lower"] else ""}</span>'
+            f'</div>'
+            for t in tracking_well
+        )
+        tracking_well_html = f"""
+        <div style="display:flex;align-items:center;gap:0;margin-bottom:10px;">
+          <div style="width:3px;height:18px;background:#1EBE8B;border-radius:2px;margin-right:10px;"></div>
+          <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:#2D323B;">Tracking Well</span>
+        </div>
+        <div style="background:rgba(30,190,139,0.06);border:1px solid rgba(30,190,139,0.20);
+                    border-radius:10px;padding:12px 16px;margin-bottom:28px;">
+          {tw_items}
+        </div>"""
+    else:
+        tracking_well_html = ""
+
+    # ── S&C footnote (consolidated, at bottom) ────────────────────────────────
+    sc_footnote_html = ""
+    if sc_programme and gap_areas and any(g["sc_gap"] for g in gap_areas):
+        sc_items = ""
+        for g in gap_areas:
+            if not g["sc_gap"]:
+                continue
+            sc_items += f"""
+            <div style="margin-bottom:14px;padding-bottom:14px;border-bottom:1px solid rgba(0,0,0,0.06);">
+              <div style="font-size:12px;font-weight:700;color:#2D323B;margin-bottom:4px;">{esc(g['display'])}</div>
+              <div style="font-size:11px;color:#4B5563;line-height:1.6;margin-bottom:4px;">{esc(g['sc_gap'])}</div>
+              {('<div style="font-size:11px;color:#6E737B;line-height:1.6;font-style:italic;">' + esc(g['sc_programme']) + '</div>') if g['sc_programme'] else ''}
+            </div>"""
+        sc_footnote_html = f"""
+        <div style="margin-top:32px;">
+          <div style="display:flex;align-items:center;gap:0;margin-bottom:10px;">
+            <div style="width:3px;height:18px;background:#6E737B;border-radius:2px;margin-right:10px;"></div>
+            <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:#6E737B;">S&amp;C Reference — if running a supplementary programme</span>
+          </div>
+          <div style="background:rgba(110,115,123,0.05);border:1px solid rgba(110,115,123,0.15);
+                      border-radius:10px;padding:14px 16px;">
+            <p style="font-size:12px;color:#6E737B;margin:0 0 12px;line-height:1.6;">
+              The areas below represent movement qualities where physical conditioning can support
+              game-based development. These are a supplementary reference — the primary recommendation
+              is to create the right game environment first.
+            </p>
+            {sc_items}
+          </div>
+        </div>"""
 
     # ── Page layout ───────────────────────────────────────────────────────────
     athlete_meta = f"#{num} · " if num else ""
@@ -11218,8 +11330,7 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
             <a href="/coach/participants/{athlete['id']}"
                style="font-size:12px;font-weight:700;color:rgba(255,255,255,0.70);text-decoration:none;
-                      padding:6px 14px;border:1px solid rgba(255,255,255,0.20);border-radius:20px;
-                      transition:all 0.15s;"
+                      padding:6px 14px;border:1px solid rgba(255,255,255,0.20);border-radius:20px;"
                onmouseover="this.style.background='rgba(255,255,255,0.1)'"
                onmouseout="this.style.background=''">&larr; Back to Profile</a>
             <button onclick="window.print()"
@@ -11230,24 +11341,28 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
         </div>
       </div>
 
-      <!-- Latest Scores section -->
+      <!-- Latest Scores -->
       <div style="display:flex;align-items:center;gap:0;margin-bottom:14px;">
         <div style="width:3px;height:18px;background:#F0A82E;border-radius:2px;margin-right:10px;"></div>
         <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:#2D323B;">Latest Scores</span>
       </div>
       {score_table}
 
-      <!-- Gap Analysis section -->
+      <!-- Development Focus -->
       <div style="display:flex;align-items:center;gap:0;margin-bottom:6px;">
         <div style="width:3px;height:18px;background:#F0A82E;border-radius:2px;margin-right:10px;"></div>
         <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:#2D323B;">
-          Gap Analysis{"" if has_thresholds else " — no thresholds set"}
+          Development Focus{"" if has_thresholds else " — no thresholds set"}
         </span>
       </div>
       <p style="font-size:13px;color:#6E737B;margin:0 0 16px;line-height:1.5;">
-        {"Areas where this athlete is below their next level threshold — use these to guide programme game selection and development focus." if has_thresholds else "Once thresholds are set, only areas below threshold will appear here."}
+        {"Areas below the next level threshold — game environment and self-test suggestions to guide development." if has_thresholds else "Once thresholds are set, only areas below threshold will appear here."}
       </p>
       {gap_html}
+
+      {tracking_well_html}
+
+      {sc_footnote_html}
 
       <div style="border-top:1px solid #E5E7EB;margin-top:32px;padding-top:12px;
                   font-size:11px;color:#9CA3AF;text-align:center;">
