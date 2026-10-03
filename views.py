@@ -6723,6 +6723,132 @@ def help_page(user):
 
     sections_html = s_login + s_password + s_phone + s_dashboard
 
+    # ── System Map (staff only) ────────────────────────────────────────────────
+    if is_staff:
+        def _map_area(accent, icon, title, links):
+            """One area card: coloured left bar, title, bullet link list."""
+            link_rows = "".join(
+                f'<a href="{href}" style="display:block;font-size:12px;font-weight:600;'
+                f'color:#2D323B;text-decoration:none;padding:5px 8px;border-radius:6px;'
+                f'margin-bottom:2px;background:#F4F5F7;"'
+                f' onmouseover="this.style.background=\'#EEF0F2\';this.style.color=\'{accent}\';"'
+                f' onmouseout="this.style.background=\'#F4F5F7\';this.style.color=\'#2D323B\';">'
+                f'{label}</a>'
+                for href, label in links
+            )
+            return (
+                f'<div style="background:#fff;border-radius:10px;border:1px solid #E5E7EB;'
+                f'border-left:4px solid {accent};padding:14px 16px;">'
+                f'<div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">'
+                f'<span style="font-size:16px;">{icon}</span>'
+                f'<span style="font-size:13px;font-weight:800;color:#2D323B;">{title}</span>'
+                f'</div>'
+                f'{link_rows}'
+                f'</div>'
+            )
+
+        def _flow_label(txt):
+            return (f'<div style="font-size:10px;font-weight:700;text-transform:uppercase;'
+                    f'letter-spacing:0.08em;color:#9CA3AF;margin:18px 0 8px;">{txt}</div>')
+
+        prac_map = (
+            _flow_label("Daily workflows") +
+            f'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;">' +
+            _map_area("#F0A82E", "&#9654;", "Practitioner Hub", [
+                ("/coach", "Home — all nav cards"),
+            ]) +
+            _map_area("#F0A82E", "&#128101;", "Groups &amp; Athletes", [
+                ("/coach/groups",           "Groups list &amp; athlete tiles"),
+                ("/coach/participants/new", "Add new athlete"),
+            ]) +
+            _map_area("#F0A82E", "&#9651;", "Athlete Profile", [
+                ("/coach/participants/{id}",          "Profile &amp; recording form"),
+                ("/coach/participants/{id}/progress", "Achievement statistics"),
+                ("/coach/participants/{id}/report",   "Movement report"),
+                ("/coach/participants/{id}/xp",       "AXP profile"),
+                ("/coach/participants/{id}/quickstart.pdf", "Quick-start card (PDF)"),
+                ("/coach/participants/{id}/view-as",  "View as athlete"),
+            ]) +
+            '</div>' +
+
+            _flow_label("Official testing") +
+            f'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;">' +
+            _map_area("#1EBE8B", "&#9632;", "Group Hub", [
+                ("/coach/group-hub",       "Open measurement window"),
+                ("/coach/window/{id}",     "Live window status &amp; close"),
+                ("/coach/session-sheet",   "Session sheet PDF"),
+                ("/coach/group-testing",   "Group score entry table"),
+            ]) +
+            _map_area("#1EBE8B", "&#9679;", "Attendance", [
+                ("/coach/attendance",          "Attendance history"),
+                ("/coach/attendance/new",      "New attendance event"),
+                ("/coach/attendance/{id}/roll-call", "Roll call (unlocks self-directed)"),
+            ]) +
+            _map_area("#1EBE8B", "&#9733;", "Post-Session", [
+                ("/coach/session/success/{id}", "Session success &amp; AXP summary"),
+                ("/coach/session",              "Record single session"),
+            ]) +
+            '</div>' +
+
+            _flow_label("Reports &amp; analytics") +
+            f'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;">' +
+            _map_area("#6366F1", "&#9650;", "Reports", [
+                ("/coach/reports",                           "Reports landing"),
+                ("/coach/progress",                          "All-groups progress"),
+                ("/coach/reports/baseline",                  "Baseline report"),
+                ("/coach/reports/progress",                  "Progress report"),
+                ("/coach/reports/completion",                "Completion report"),
+                ("/coach/groups/{id}/achievement-summary",   "Group achievement summary"),
+                ("/coach/groups/{id}/next-steps",            "Group next steps"),
+                ("/coach/groups/{id}/scores",                "Group scores table"),
+            ]) +
+            _map_area("#6366F1", "&#9670;", "Leaderboard &amp; Resources", [
+                ("/coach/leaderboard",   "Group AXP leaderboard"),
+                ("/coach/resources",     "Resource library (manage)"),
+                ("/athlete/resources",   "Resource library (athlete view)"),
+            ]) +
+            _map_area("#6366F1", "&#9636;", "Data Tools", [
+                ("/coach/participants/import", "Import athletes (CSV)"),
+                ("/coach/participants/export.csv", "Export athletes (CSV)"),
+                ("/coach/scores/import",       "Import scores (CSV)"),
+            ]) +
+            '</div>'
+        )
+
+        admin_map = ""
+        if is_org_admin:
+            admin_map = (
+                _flow_label("Admin-only areas") +
+                f'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:10px;">' +
+                _map_area("#8B5CF6", "&#9881;", "Admin Hub", [
+                    ("/coach/admin/hub", "All admin tools in one place"),
+                ]) +
+                _map_area("#8B5CF6", "&#9651;", "People", [
+                    ("/coach/coaches",           "Manage practitioners"),
+                    ("/coach/coaches/new",       "Add practitioner"),
+                    ("/coach/organisations",     "Manage organisations"),
+                ]) +
+                _map_area("#8B5CF6", "&#9670;", "Game Config", [
+                    ("/coach/admin/score-distribution", "Score distribution report"),
+                    ("/coach/admin/game-thresholds",    "Set level thresholds"),
+                ]) +
+                _map_area("#8B5CF6", "&#9632;", "Data &amp; Sessions", [
+                    ("/coach/admin/sessions",            "Session browser &amp; merge"),
+                    ("/coach/completion-tracker",        "Completion tracker"),
+                    ("/coach/admin/game-thresholds#retroactive", "Retroactive AXP pass"),
+                ]) +
+                '</div>'
+            )
+
+        s_system_map = section(
+            "&#9670;", "System Map — All Pages &amp; Features",
+            f'<p style="margin-bottom:16px;font-size:14px;color:#6E737B;">'
+            f'Every page in the portal you can access, organised by workflow. Click any link to go there.</p>'
+            f'{prac_map}{admin_map}',
+            open_by_default=True
+        )
+        sections_html = s_system_map + sections_html
+
     if is_staff:
         s_add_athlete = section("&#43;", "Adding an Athlete", (
             steps([
@@ -10182,6 +10308,12 @@ def system_admin_hub_page(user):
               "≡", "#6E737B", "#fff", "#4a5057")
     )
 
+    system_map = _section("System Map &amp; Help", "?",
+        _card("/help", "Portal System Map",
+              "Full map of every page and feature in the portal, with direct links. Role-aware — shows practitioner and admin areas.",
+              "◈", "#6366F1", "#fff", "#3730a3")
+    )
+
     body = f"""
     <!-- Hero banner -->
     <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
@@ -10202,6 +10334,7 @@ def system_admin_hub_page(user):
       {xp_tools}
       {people}
       {reports}
+      {system_map}
     </div>"""
 
     return layout("Admin Hub", body, user=user, active_nav="admin_hub")
