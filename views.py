@@ -2432,52 +2432,18 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
     else:
         _cnote = '<div style="font-size:10px;color:#1EBE8B;margin-top:2px;font-weight:700;">Max rank!</div>'
 
-    xp_card = f"""
-    <div style="background:#2D323B;border-radius:14px;padding:18px 20px;margin-bottom:20px;">
-      <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:flex-start;">
-        <div style="flex:0 0 auto;text-align:center;padding-right:20px;
-                    border-right:1px solid rgba(255,255,255,0.1);">
-          <div style="font-size:28px;font-weight:800;color:#F0A82E;line-height:1;">{total_xp:,}</div>
-          <div style="font-size:10px;color:#9CA3AF;letter-spacing:0.06em;margin-bottom:8px;">TOTAL AXP</div>
-          <span style="font-size:11px;font-weight:700;background:{tier_colour};color:#fff;
-                       border-radius:999px;padding:2px 10px;">{tier_label}</span>
-          <div style="font-size:11px;color:#9CA3AF;margin-top:8px;">{att_count} sessions attended</div>
-          {_cnote}
-        </div>
-        <div style="flex:1;min-width:240px;">
-          <div style="font-size:10px;font-weight:700;color:#9CA3AF;letter-spacing:0.06em;
-                      margin-bottom:8px;text-transform:uppercase;">
-            Game Levels &nbsp;
-            <span style="background:rgba(255,255,255,0.1);color:#fff;border-radius:999px;
-                         padding:1px 7px;">{games_with_level}/8</span>
-          </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
-            {level_badges}
-          </div>
-        </div>
-        <div style="flex:0 0 auto;align-self:flex-end;">
-          <a href="/coach/participants/{participant['id']}/xp"
-             style="font-size:12px;color:#F0A82E;text-decoration:none;font-weight:600;">
-            Full AXP history →
-          </a>
-        </div>
+    # compact level grid used in body below
+    level_grid_html = f"""
+    <div style="margin-bottom:24px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+        <div style="width:3px;height:16px;background:#F0A82E;border-radius:2px;"></div>
+        <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;
+                     color:#2D323B;">Game Levels</span>
+        <span style="font-size:12px;font-weight:700;background:#2D323B;color:#F0A82E;
+                     border-radius:999px;padding:1px 9px;">{games_with_level}/8</span>
       </div>
-      <!-- AXP journey line — highlighted -->
-      <div style="margin-top:16px;background:rgba(240,168,46,0.08);
-                  border:1.5px solid rgba(240,168,46,0.22);border-radius:14px;
-                  padding:14px 16px 4px;">
-        <div style="font-size:11px;font-weight:700;text-transform:uppercase;
-                    letter-spacing:0.07em;color:#F0A82E;margin-bottom:10px;">AXP Journey</div>
-        <div style="position:relative;padding-bottom:34px;">
-          <div style="position:relative;height:5px;background:rgba(255,255,255,0.1);border-radius:999px;">
-            <div style="width:{_cj_fill:.1f}%;height:100%;background:#fff;border-radius:999px;
-                        position:absolute;top:0;left:0;transition:width 0.8s ease;"></div>
-            {_cj_dots}
-          </div>
-          <div style="position:relative;height:30px;margin-top:7px;">
-            {_cj_lbls}
-          </div>
-        </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
+        {level_badges}
       </div>
     </div>"""
 
@@ -2521,16 +2487,64 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
           </form>
         </div>"""
 
+    pid = participant['id']
+
+    def _pnav(href, icon, title, subtitle, new_tab=False):
+        target = ' target="_blank"' if new_tab else ''
+        return f"""<a href="{href}"{target}
+          style="display:flex;align-items:center;gap:16px;background:#2D323B;border-radius:16px;
+                 padding:18px 20px;text-decoration:none;border-left:4px solid #F0A82E;
+                 margin-bottom:10px;transition:opacity 0.15s;"
+          onmouseover="this.style.opacity='0.88';" onmouseout="this.style.opacity='1';">
+          <div style="width:48px;height:48px;border-radius:12px;background:rgba(240,168,46,0.15);
+                      display:flex;align-items:center;justify-content:center;font-size:22px;
+                      flex-shrink:0;">{icon}</div>
+          <div style="flex:1;">
+            <div style="font-size:15px;font-weight:800;color:#FFFFFF;margin-bottom:2px;">{title}</div>
+            <div style="font-size:12px;color:rgba(255,255,255,0.50);">{subtitle}</div>
+          </div>
+          <div style="font-size:20px;color:#F0A82E;font-weight:300;">&#8250;</div>
+        </a>"""
+
+    nav_cards = (
+        _pnav(f"/coach/participants/{pid}/progress",   "&#128200;", "Achievement Statistics",
+              "Game-by-game progress, personal bests and improvements") +
+        _pnav(f"/coach/participants/{pid}/report",     "&#128196;", "Movement Report",
+              "Full printable athlete progress report", new_tab=True) +
+        _pnav(f"/coach/participants/{pid}/xp",         "&#11088;",  "AXP Profile",
+              "XP history, level achievements and rank journey") +
+        _pnav(f"/coach/participants/{pid}/quickstart.pdf", "&#127760;", "Quick-Start Card",
+              "Printable game guide personalised for this athlete", new_tab=True) +
+        _pnav(f"/coach/participants/{pid}/view-as",    "&#128065;", "View as Athlete",
+              "See the athlete dashboard through their eyes")
+    )
+
+    reset_inline = ""
+    if reset_btn:
+        reset_inline = f"""
+        <form method="post" action="/coach/participants/{pid}/reset-password"
+              onsubmit="return confirm('Reset {esc(participant['name'])}&#39;s password?');"
+              style="margin-top:8px;">
+          <button type="submit"
+                  style="font-size:12px;color:rgba(255,255,255,0.40);background:none;border:none;
+                         cursor:pointer;font-weight:600;padding:0;text-decoration:underline;">
+            Reset Password
+          </button>
+        </form>"""
+
     body = f"""
-    <!-- Athlete hero banner -->
+    <div style="max-width:560px;margin:0 auto;padding-bottom:48px;">
+
+    <!-- Athlete hero -->
     <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
-                padding:24px 28px;margin-bottom:24px;">
-      <!-- Row 1: avatar + name -->
+                padding:24px 28px;margin-bottom:20px;">
       <div style="display:flex;align-items:flex-start;gap:14px;">
+        <!-- Avatar -->
         <div style="width:60px;height:60px;border-radius:50%;background:rgba(240,168,46,0.18);
                     border:2px solid rgba(240,168,46,0.40);display:flex;align-items:center;
                     justify-content:center;font-weight:800;font-size:20px;color:#F0A82E;
                     flex-shrink:0;">{inits}</div>
+        <!-- Identity -->
         <div style="flex:1;min-width:0;">
           <h1 style="margin:0 0 6px;font-size:22px;font-weight:800;color:#FFFFFF;line-height:1.2;">
             {esc(participant['name'])}
@@ -2541,54 +2555,52 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
           {f'<p style="margin:4px 0 0;font-size:12px;color:rgba(255,255,255,0.40);word-break:break-all;">{esc(participant["email"] or "")}</p>' if participant.get("email") else ""}
           {f'<p style="margin:4px 0 0;font-size:12px;color:rgba(255,255,255,0.45);">{esc(participant["programme"])}</p>' if participant.get("programme") else ""}
         </div>
+        <!-- AXP snapshot -->
+        <div style="text-align:right;flex-shrink:0;">
+          <div style="font-size:32px;font-weight:800;color:#F0A82E;line-height:1;">{total_xp:,}</div>
+          <div style="font-size:10px;color:rgba(255,255,255,0.40);letter-spacing:0.06em;margin-bottom:4px;">AXP</div>
+          <span style="font-size:11px;font-weight:700;background:{tier_colour};color:#fff;
+                       border-radius:999px;padding:2px 10px;">{tier_label}</span>
+        </div>
       </div>
-      <!-- Row 2: actions (wraps naturally on mobile) -->
-      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;
-                  margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.09);">
-        <a class="btn btn-primary"
-           href="/coach/participants/{participant['id']}/progress"
-           style="font-size:13px;padding:7px 16px;">&#128200; Achievement Statistics</a>
-        <a href="/coach/participants/{participant['id']}/report" target="_blank"
-           style="font-size:12px;color:rgba(255,255,255,0.55);text-decoration:none;font-weight:600;padding:4px 0;"
-           onmouseover="this.style.color='#F0A82E';" onmouseout="this.style.color='rgba(255,255,255,0.55)';">
-          &#128196; Progress Report</a>
-        <a href="/coach/participants/{participant['id']}/quickstart.pdf" target="_blank"
-           style="font-size:12px;color:rgba(255,255,255,0.55);text-decoration:none;font-weight:600;padding:4px 0;"
-           onmouseover="this.style.color='#F0A82E';" onmouseout="this.style.color='rgba(255,255,255,0.55)';">
-          &#127760; Quick-Start</a>
-        <a href="/coach/participants/{participant['id']}/view-as"
-           style="font-size:12px;color:rgba(255,255,255,0.55);text-decoration:none;font-weight:600;padding:4px 0;"
-           onmouseover="this.style.color='#F0A82E';" onmouseout="this.style.color='rgba(255,255,255,0.55)';">
-          &#128065; View as Athlete</a>
-        {(reset_btn.replace('class="btn btn-ghost btn-sm"', 'style="font-size:12px;color:rgba(255,255,255,0.55);background:none;border:none;cursor:pointer;font-weight:600;padding:4px 0;"')) if reset_btn else ""}
-        <a href="/coach"
-           style="margin-left:auto;font-size:12px;color:rgba(255,255,255,0.35);text-decoration:none;"
-           onmouseover="this.style.color='rgba(255,255,255,0.70)';" onmouseout="this.style.color='rgba(255,255,255,0.35)';">
-          &larr; Back</a>
+      <!-- Stats row -->
+      <div style="display:flex;gap:20px;margin-top:14px;padding-top:12px;
+                  border-top:1px solid rgba(255,255,255,0.09);">
+        <div style="font-size:12px;color:rgba(255,255,255,0.50);">
+          <span style="font-weight:700;color:#FFFFFF;">{session_count}</span> test sessions
+        </div>
+        <div style="font-size:12px;color:rgba(255,255,255,0.50);">
+          <span style="font-weight:700;color:#FFFFFF;">{att_count}</span> sessions attended
+        </div>
+        <a href="/coach" style="margin-left:auto;font-size:12px;color:rgba(255,255,255,0.35);
+                                text-decoration:none;align-self:center;"
+           onmouseover="this.style.color='rgba(255,255,255,0.70)';"
+           onmouseout="this.style.color='rgba(255,255,255,0.35)';">&larr; Back</a>
       </div>
+      {reset_inline}
       {group_assign_inline}
     </div>
 
     {message_html}
     {transfer_notice}
-    {xp_card}
 
-    <section class="stat-row" style="margin-bottom:20px;">
-      <div class="card stat-card">
-        <div class="stat-number">{session_count}</div>
-        <div class="stat-label">Test Sessions (all groups)</div>
-      </div>
-      <div class="card stat-card">
-        <div class="stat-number">{att_count}</div>
-        <div class="stat-label">Sessions Attended</div>
-      </div>
-    </section>
+    <!-- Nav cards -->
+    <div style="margin-bottom:24px;">
+      {nav_cards}
+    </div>
 
-    {measurement_games_form(participant['id'], athlete_levels=levels)}
+    {level_grid_html}
 
-    <h2 class="section-title">Measurement Games History</h2>
-    {measurement_games_history(measurement_sessions, show_delete=True, participant_id=participant['id'])}
-    """
+    {measurement_games_form(pid, athlete_levels=levels)}
+
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
+      <div style="width:3px;height:16px;background:#F0A82E;border-radius:2px;"></div>
+      <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;
+                   color:#2D323B;">Measurement Games History</span>
+    </div>
+    {measurement_games_history(measurement_sessions, show_delete=True, participant_id=pid)}
+
+    </div>"""
     return layout(participant["name"], body, user=coach, active_nav="dashboard")
 
 
