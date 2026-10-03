@@ -2498,7 +2498,7 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
           onmouseover="this.style.opacity='0.88';" onmouseout="this.style.opacity='1';">
           <div style="width:48px;height:48px;border-radius:12px;background:rgba(240,168,46,0.15);
                       display:flex;align-items:center;justify-content:center;font-size:22px;
-                      flex-shrink:0;">{icon}</div>
+                      color:#F0A82E;flex-shrink:0;">{icon}</div>
           <div style="flex:1;">
             <div style="font-size:15px;font-weight:800;color:#FFFFFF;margin-bottom:2px;">{title}</div>
             <div style="font-size:12px;color:rgba(255,255,255,0.50);">{subtitle}</div>
@@ -2507,15 +2507,15 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
         </a>"""
 
     nav_cards = (
-        _pnav(f"/coach/participants/{pid}/progress",   "&#128200;", "Achievement Statistics",
+        _pnav(f"/coach/participants/{pid}/progress",   "&#9650;",  "Achievement Statistics",
               "Game-by-game progress, personal bests and improvements") +
-        _pnav(f"/coach/participants/{pid}/report",     "&#128196;", "Movement Report",
+        _pnav(f"/coach/participants/{pid}/report",     "&#9654;",  "Movement Report",
               "Full printable athlete progress report", new_tab=True) +
-        _pnav(f"/coach/participants/{pid}/xp",         "&#11088;",  "AXP Profile",
+        _pnav(f"/coach/participants/{pid}/xp",         "&#9733;",  "AXP Profile",
               "XP history, level achievements and rank journey") +
-        _pnav(f"/coach/participants/{pid}/quickstart.pdf", "&#127760;", "Quick-Start Card",
+        _pnav(f"/coach/participants/{pid}/quickstart.pdf", "&#9670;", "Quick-Start Card",
               "Printable game guide personalised for this athlete", new_tab=True) +
-        _pnav(f"/coach/participants/{pid}/view-as",    "&#128065;", "View as Athlete",
+        _pnav(f"/coach/participants/{pid}/view-as",    "&#9673;",  "View as Athlete",
               "See the athlete dashboard through their eyes")
     )
 
