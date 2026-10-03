@@ -1251,234 +1251,107 @@ def participant_dashboard(user, measurement_sessions,
     </div>"""
 
     # ── Hero card ─────────────────────────────────────────────────────────────
-    sport_pill = (f'<span style="font-size:12px;font-weight:600;'
-                  f'background:rgba(240,168,46,0.15);color:#F0A82E;'
-                  f'border-radius:999px;padding:2px 10px;">{sport}</span>') if sport else ''
     hero = f"""
-    <div style="background:#2D323B;border-radius:20px;padding:28px;margin-bottom:24px;
+    <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);
+                border-radius:20px;padding:28px 24px 20px;margin-bottom:16px;
                 position:relative;overflow:hidden;">
-      <div style="position:absolute;top:-30px;right:-30px;width:180px;height:180px;
-                  border-radius:50%;background:rgba(240,168,46,0.08);pointer-events:none;"></div>
-      <div style="display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap;">
-        <!-- Avatar -->
-        <div style="width:72px;height:72px;border-radius:50%;background:#F0A82E;
+      <!-- Decorative circle -->
+      <div style="position:absolute;top:-40px;right:-40px;width:200px;height:200px;
+                  border-radius:50%;background:rgba(240,168,46,0.06);pointer-events:none;"></div>
+      <!-- Top row: avatar + name -->
+      <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+        <div style="width:64px;height:64px;border-radius:50%;background:#F0A82E;
                     display:flex;align-items:center;justify-content:center;
-                    font-weight:800;font-size:26px;color:#2D323B;flex-shrink:0;
-                    box-shadow:0 4px 20px rgba(240,168,46,0.4);">{inits}</div>
-        <!-- Name + rank -->
-        <div style="flex:1;min-width:200px;">
-          <div style="font-size:13px;color:#9CA3AF;margin-bottom:2px;">Welcome back</div>
-          <h1 style="margin:0 0 8px;font-size:26px;color:#fff;font-weight:800;">{first_name}!</h1>
-          <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;">
-            <span style="font-size:12px;font-weight:700;background:{tier_colour};color:#fff;
-                         border-radius:999px;padding:3px 12px;letter-spacing:0.04em;">{tier_label}</span>
-            {sport_pill}
-          </div>
-        </div>
-        <!-- XP block -->
-        <div style="text-align:right;flex-shrink:0;">
-          <div style="font-size:32px;font-weight:800;color:#F0A82E;line-height:1;">{total_xp:,}</div>
-          <div style="font-size:11px;color:#9CA3AF;margin-bottom:8px;letter-spacing:0.05em;">TOTAL AXP</div>
-          {xp_next_label}
-          <a href="/athlete/axp-info"
-             style="display:inline-block;margin-top:10px;font-size:11px;font-weight:700;
-                    color:#2D323B;background:#F0A82E;border-radius:20px;
-                    padding:4px 12px;text-decoration:none;letter-spacing:0.02em;">
-            ❓ What is AXP?
-          </a>
+                    font-weight:800;font-size:24px;color:#2D323B;flex-shrink:0;
+                    box-shadow:0 4px 20px rgba(240,168,46,0.40);">{inits}</div>
+        <div>
+          <div style="font-size:13px;color:rgba(255,255,255,0.50);margin-bottom:1px;">Welcome back</div>
+          <div style="font-size:28px;font-weight:900;color:#FFFFFF;line-height:1.1;">{first_name}!</div>
+          <span style="font-size:12px;font-weight:700;background:{tier_colour};color:#fff;
+                       border-radius:999px;padding:3px 12px;display:inline-block;margin-top:5px;">{tier_label}</span>
         </div>
       </div>
-      <!-- AXP journey line — highlighted -->
-      <div style="margin-top:20px;background:rgba(16,185,129,0.12);
-                  border:1.5px solid rgba(16,185,129,0.45);
-                  border-radius:14px;padding:14px 16px 4px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;
-                    margin-bottom:10px;">
-          <span style="font-size:11px;font-weight:700;text-transform:uppercase;
-                       letter-spacing:0.07em;color:#6EE7B7;">Your AXP Journey</span>
-          <span style="font-size:11px;color:rgba(255,255,255,0.5);">{total_xp:,} AXP earned</span>
+      <!-- Big AXP number -->
+      <div style="text-align:center;margin-bottom:16px;">
+        <div style="font-size:64px;font-weight:900;color:#F0A82E;line-height:1;
+                    letter-spacing:-2px;">{total_xp:,}</div>
+        <div style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.50);
+                    text-transform:uppercase;letter-spacing:0.10em;margin-top:4px;">Total AXP</div>
+        <div style="margin-top:6px;">{xp_next_label}</div>
+      </div>
+      <!-- AXP journey line -->
+      <div style="background:rgba(255,255,255,0.07);border-radius:12px;padding:12px 14px 2px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-size:10px;font-weight:700;text-transform:uppercase;
+                       letter-spacing:0.08em;color:#F0A82E;">AXP Journey</span>
+          <a href="/athlete/axp-info"
+             style="font-size:11px;color:rgba(255,255,255,0.45);text-decoration:none;">
+            What is AXP? ›
+          </a>
         </div>
         {_journey_line}
       </div>
     </div>"""
 
-    # ── Pending self-directed nudge ───────────────────────────────────────────
-    nudge_html = ""
-    if pending_self_directed:
-        count = len(pending_self_directed)
-        nudge_html = f"""
-        <a href="/athlete/self-directed" style="text-decoration:none;display:block;
-           background:rgba(240,168,46,0.1);border:1.5px solid #F0A82E;border-radius:12px;
-           padding:14px 18px;margin-bottom:20px;">
-          <div style="display:flex;align-items:center;gap:12px;">
-            <div style="font-size:24px;">🏃</div>
-            <div style="flex:1;">
-              <div style="font-size:14px;font-weight:700;color:#2D323B;">
-                {count} self-directed session{'s' if count > 1 else ''} ready to score
-              </div>
-              <div style="font-size:12px;color:#6E737B;margin-top:2px;">
-                Tap to record your scores and earn AXP →
-              </div>
+    # ── Pending self-directed count (used in nav card badge) ─────────────────
+    levels = levels or {}
+
+    # ── Big action nav cards ──────────────────────────────────────────────────
+    def _nav_card(href, icon, title, subtitle, badge=None):
+        badge_html = (f'<span style="font-size:11px;font-weight:700;background:#F0A82E;color:#2D323B;'
+                      f'border-radius:999px;padding:2px 9px;margin-left:8px;">{badge}</span>') if badge else ''
+        return f"""
+        <a href="{href}" style="display:flex;align-items:center;gap:16px;
+                  background:#2D323B;border-radius:16px;padding:20px 20px;
+                  text-decoration:none;border-left:4px solid #F0A82E;
+                  transition:background 0.15s,transform 0.1s;margin-bottom:12px;"
+           onmouseover="this.style.background='#383E49';this.style.transform='translateX(2px)'"
+           onmouseout="this.style.background='#2D323B';this.style.transform=''">
+          <div style="width:52px;height:52px;border-radius:14px;background:rgba(240,168,46,0.15);
+                      border:1.5px solid rgba(240,168,46,0.30);display:flex;align-items:center;
+                      justify-content:center;font-size:24px;flex-shrink:0;">{icon}</div>
+          <div style="flex:1;">
+            <div style="font-size:16px;font-weight:800;color:#FFFFFF;margin-bottom:3px;">
+              {title}{badge_html}
             </div>
+            <div style="font-size:13px;color:rgba(255,255,255,0.55);line-height:1.4;">{subtitle}</div>
           </div>
+          <div style="font-size:20px;color:#F0A82E;font-weight:700;flex-shrink:0;">›</div>
         </a>"""
 
-    # ── Quick stats ───────────────────────────────────────────────────────────
-    levels = levels or {}
-    games_with_level = sum(1 for g in CORE_AAP_GAMES if levels.get(g, 0) >= 1)
-    imp_pct = _calc_improvement_pct(measurement_sessions)
-    imp_stat = f'{imp_pct:+.1f}%' if imp_pct is not None else '—'
-    stats_html = f"""
-    <section class="stat-row" style="margin-bottom:24px;">
-      <div class="card stat-card">
-        <div class="stat-number">{att_count}</div>
-        <div class="stat-label">Sessions Attended</div>
-      </div>
-      <div class="card stat-card">
-        <div class="stat-number">{session_count}</div>
-        <div class="stat-label">Test Sessions</div>
-      </div>
-      <div class="card stat-card">
-        <div class="stat-number">{games_with_level}<span style="font-size:16px;color:#6E737B;">/8</span></div>
-        <div class="stat-label">Games Level 1+</div>
-      </div>
-      <div class="card stat-card">
-        <div class="stat-number">{imp_stat}</div>
-        <div class="stat-label">Avg Improvement</div>
-      </div>
-    </section>"""
+    pending_count = len(pending_self_directed) if pending_self_directed else 0
+    sd_badge = str(pending_count) if pending_count else None
 
-    # ── Level colours ─────────────────────────────────────────────────────────
-    LEVEL_COLOURS = {
-        0: ("#6E737B", "#fff"),
-        1: ("#1EBE8B", "#fff"),
-        2: ("#F0A82E", "#2D323B"),
-        3: ("#2D323B", "#fff"),
-        4: ("#F97316", "#fff"),
-        5: ("#8B5CF6", "#fff"),
-    }
-
-    # ── Game level grid + guided steps ───────────────────────────────────────
-    thresholds = thresholds or {}
-    levels_by_area = levels_by_area or {}
-    game_cards = ""
-    for area in SCORING_AREAS:
-        game_key = area["game_key"]
-        area_field_key = area["field_key"]  # None = pooled
-        achievement_fk = area_field_key or ""
-        stored_fk = threshold_field_key(area)
-
-        game_def = find_measurement_game(game_key)
-        area_name = esc(area["display_name"])
-
-        # Look up level by (game_key, field_key) for per-area resolution
-        current_level = levels_by_area.get((game_key, achievement_fk), 0)
-        next_level = current_level + 1
-        bg_col, txt_col = LEVEL_COLOURS.get(current_level, ("#6E737B", "#fff"))
-        level_label = f"L{current_level}" if current_level > 0 else "—"
-
-        # Guided step: what's needed for next level (keyed by game_key|field_key|level)
-        cfg = XP_GAME_CONFIG.get(game_key, {})
-        guide_html = ""
-        if current_level >= 5:
-            guide_html = '<div style="font-size:11px;color:#8B5CF6;font-weight:700;margin-top:6px;">Max level reached!</div>'
-        elif next_level <= 5:
-            threshold_key = f"{game_key}|{stored_fk}|{next_level}"
-            threshold_val = thresholds.get(threshold_key)
-            if threshold_val is not None:
-                lower_better = area["lower_is_better"]
-                direction = "or lower" if lower_better else "or more"
-                # Find field label for the display field
-                display_field = achievement_fk or stored_fk
-                field_label = display_field.replace("_", " ").title()
-                if game_def:
-                    for f in game_def.get("fields", []) + game_def.get("computed", []):
-                        if f["key"] == display_field:
-                            field_label = f["label"]
-                            break
-                guide_html = (
-                    f'<div style="font-size:11px;color:#6E737B;margin-top:6px;line-height:1.4;">'
-                    f'Next level: <strong style="color:#2D323B;">{threshold_val} {direction}</strong>'
-                    f'<br><span style="color:#9CA3AF;">{esc(field_label)}</span>'
-                    f'</div>'
-                )
-            else:
-                guide_html = '<div style="font-size:11px;color:#9CA3AF;margin-top:6px;">Thresholds not yet set</div>'
-
-        game_cards += f"""
-        <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;
-                    padding:14px 16px;display:flex;flex-direction:column;gap:4px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
-            <div style="font-size:13px;font-weight:600;color:#2D323B;line-height:1.3;">{area_name}</div>
-            <div style="font-size:13px;font-weight:800;background:{bg_col};color:{txt_col};
-                        border-radius:999px;padding:2px 10px;white-space:nowrap;flex-shrink:0;">{level_label}</div>
-          </div>
-          {guide_html}
-        </div>"""
-
-    level_grid = f"""
-    <h2 class="section-title" style="margin-bottom:12px;">Game Levels & Next Steps</h2>
-    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin-bottom:28px;">
-      {game_cards}
-    </div>"""
-
-    # ── Resource quick links ──────────────────────────────────────────────────
-    resource_links_html = ""
-    if resources:
-        tiles = ""
-        for r in resources[:6]:
-            r_name = esc(r.get("name", ""))
-            r_url = r.get("url", "")
-            tiles += f"""
-            <a href="{esc(r_url)}" target="_blank" rel="noopener"
-               style="display:block;background:#fff;border:1px solid #E5E7EB;border-radius:10px;
-                      padding:12px 14px;text-decoration:none;
-                      transition:box-shadow 0.15s,border-color 0.15s;"
-               onmouseover="this.style.boxShadow='0 2px 12px rgba(0,0,0,0.08)';this.style.borderColor='#F0A82E'"
-               onmouseout="this.style.boxShadow='';this.style.borderColor='#E5E7EB'">
-              <div style="font-size:13px;font-weight:600;color:#2D323B;">{r_name}</div>
-            </a>"""
-        more_link = (f'<a href="/athlete/resources" style="font-size:13px;color:#2D323B;'
-                     f'font-weight:600;">View all resources →</a>'
-                     if len(resources) > 6 else '')
-        resource_links_html = f"""
-        <h2 class="section-title" style="margin-bottom:12px;">Resources</h2>
-        <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px;margin-bottom:8px;">
-          {tiles}
-        </div>
-        <div style="margin-bottom:28px;">{more_link}</div>"""
+    nav_cards = (
+        _nav_card("/athlete/report", "&#9654;", "My Movement Report",
+                  "See what you&rsquo;re tracking well and where to focus next") +
+        _nav_card("/athlete/self-directed", "&#9650;", "Self-Directed Sessions",
+                  "Record your own scores and earn AXP",
+                  badge=sd_badge) +
+        _nav_card("/athlete/xp", "&#9733;", "My Levels &amp; AXP",
+                  "Track your progress across all 8 games") +
+        (_nav_card("/athlete/leaderboard", "&#9670;", "Group Leaderboard",
+                  "See how you rank in your group")
+         if user.get("show_leaderboard") else "")
+    )
 
     # ── Recent results summary ────────────────────────────────────────────────
     history_html = ""
     if measurement_sessions:
         history_html = f"""
-        <h2 class="section-title" style="margin-bottom:12px;">Recent Test Results</h2>
-        {measurement_games_history(measurement_sessions)}"""
-
-    report_cta = """
-    <a href="/athlete/report" style="text-decoration:none;display:block;
-       background:linear-gradient(135deg,#2D323B 0%,#3D434F 100%);
-       border-radius:12px;padding:16px 20px;margin-bottom:20px;">
-      <div style="display:flex;align-items:center;gap:14px;">
-        <div style="font-size:28px;flex-shrink:0;">📋</div>
-        <div style="flex:1;">
-          <div style="font-size:14px;font-weight:800;color:#fff;margin-bottom:2px;">My Movement Report</div>
-          <div style="font-size:12px;color:rgba(255,255,255,0.65);">
-            See what you're tracking well and where to focus next →
+        <div style="margin-top:8px;">
+          <div style="display:flex;align-items:center;gap:0;margin-bottom:12px;">
+            <div style="width:3px;height:16px;background:#F0A82E;border-radius:2px;margin-right:10px;"></div>
+            <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:#2D323B;">Recent Test Results</span>
           </div>
-        </div>
-      </div>
-    </a>"""
+          {measurement_games_history(measurement_sessions)}
+        </div>"""
 
     body = f"""
-    <div style="max-width:860px;">
+    <div style="max-width:520px;margin:0 auto;">
       {window_banner}
       {hero}
-      {nudge_html}
-      {stats_html}
-      {report_cta}
-      {level_grid}
-      {resource_links_html}
+      {nav_cards}
       {history_html}
     </div>"""
     return layout("My Dashboard", body, user=user, active_nav="dashboard")
