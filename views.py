@@ -3022,7 +3022,7 @@ def group_achievement_summary_page(coach, group, participants_sessions, max_leve
         body = f"""
         <div class="page-head">
           <div><h1>{gname} &mdash; Achievement Summary</h1></div>
-          <a class="btn btn-ghost" href="/coach/groups">&larr; Groups</a>
+          <a class="btn btn-ghost" href="/coach/progress">&larr; Reports</a>
         </div>
         <div class="card">
           <p class="muted">No athletes in this group have two or more test sessions yet — come back after the second round of measurements.</p>
@@ -3241,7 +3241,7 @@ def group_achievement_summary_page(coach, group, participants_sessions, max_leve
       </div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
         <a class="btn btn-ghost" href="{prog_link}">Individual stats &rarr;</a>
-        <a class="btn btn-ghost" href="/coach/groups">&larr; Groups</a>
+        <a class="btn btn-ghost" href="/coach/progress">&larr; Reports</a>
       </div>
     </div>
     {level_bar}
@@ -3269,7 +3269,7 @@ def group_scores_table_page(coach, group, participants_sessions, max_level=None)
         body = f"""
         <div class="page-head">
           <div><h1>{gname} &mdash; Scores Table</h1></div>
-          <a class="btn btn-ghost" href="/coach/groups">&larr; Groups</a>
+          <a class="btn btn-ghost" href="/coach/progress">&larr; Reports</a>
         </div>
         <div class="card"><p class="muted">No test sessions recorded for this group yet.</p></div>"""
         return layout(f"{group['name']} Scores Table", body, user=coach, active_nav="progress")
@@ -3304,7 +3304,7 @@ def group_scores_table_page(coach, group, participants_sessions, max_level=None)
         body = f"""
         <div class="page-head">
           <div><h1>{gname} &mdash; Scores Table</h1></div>
-          <a class="btn btn-ghost" href="/coach/groups">&larr; Groups</a>
+          <a class="btn btn-ghost" href="/coach/progress">&larr; Reports</a>
         </div>
         <div class="card"><p class="muted">No measurement data recorded yet.</p></div>"""
         return layout(f"{group['name']} Scores Table", body, user=coach, active_nav="progress")
@@ -3403,7 +3403,7 @@ def group_scores_table_page(coach, group, participants_sessions, max_level=None)
           &#128438; Print / Save PDF
         </button>
         <a class="btn btn-ghost" href="{summary_url}">&#128200; Group Stats</a>
-        <a class="btn btn-ghost" href="/coach/groups">&larr; Groups</a>
+        <a class="btn btn-ghost" href="/coach/progress">&larr; Reports</a>
       </div>
     </div>
     <div class="no-print">{level_bar}</div>
@@ -11754,7 +11754,7 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
         body = f"""
         <div class="page-head">
           <div><h1>{group_name} — Next Steps</h1></div>
-          <a class="btn btn-ghost" href="/coach/group-hub">&larr; Group Hub</a>
+          <a class="btn btn-ghost" href="/coach/progress">&larr; Reports</a>
         </div>
         <div class="card"><p class="muted">No athletes in this group yet.</p></div>"""
         return layout(f"{group_name} — Next Steps", body, user=coach, active_nav="dashboard")
@@ -12167,8 +12167,8 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
             </div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-            <a href="/coach/group-hub" class="btn btn-ghost btn-sm"
-               style="color:rgba(255,255,255,0.70);border-color:rgba(255,255,255,0.25);">&larr; Group Hub</a>
+            <a href="/coach/progress" class="btn btn-ghost btn-sm"
+               style="color:rgba(255,255,255,0.70);border-color:rgba(255,255,255,0.25);">&larr; Reports</a>
             <button onclick="window.print()" class="btn btn-primary btn-sm">&#128438; Print</button>
           </div>
         </div>
