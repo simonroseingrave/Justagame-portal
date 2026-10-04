@@ -347,7 +347,13 @@ def athlete_resources(req):
     conn = db.get_conn()
     try:
         folder_groups, ungrouped = db.list_resources_by_folder(conn)
-        return Response(views.athlete_resources_page(user, folder_groups, ungrouped))
+        all_resources = [r for _, items in folder_groups for r in items] + list(ungrouped)
+        all_tags = db.list_tags(conn)
+        tags_by_resource = db.get_tags_for_resources(conn, [r["id"] for r in all_resources])
+        return Response(views.athlete_resources_page(
+            user, folder_groups, ungrouped,
+            all_tags=all_tags, tags_by_resource=tags_by_resource,
+        ))
     finally:
         conn.close()
 

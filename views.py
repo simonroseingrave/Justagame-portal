@@ -1378,56 +1378,136 @@ def participant_dashboard(user, measurement_sessions,
     return layout("My Dashboard", body, user=user, active_nav="dashboard")
 
 
-def athlete_resources_page(athlete, folder_groups, ungrouped):
-    """Athlete-facing resource browser — grouped by folder."""
+def athlete_resources_page(athlete, folder_groups, ungrouped, all_tags=None, tags_by_resource=None):
+    """Athlete-facing resource browser — grouped by folder with tag filter bar."""
+    all_tags = all_tags or []
+    tags_by_resource = tags_by_resource or {}
+
+    # ── Tag filter bar ────────────────────────────────────────────────────────
+    if all_tags:
+        chip_all = (
+            '<button onclick="jagFilter(\'all\',this)" '
+            'class="jag-tag-chip jag-tag-active" data-tag="all">'
+            'All</button>'
+        )
+        chips = "".join(
+            f'<button onclick="jagFilter(\'{esc(t["name"])}\',this)" '
+            f'class="jag-tag-chip" data-tag="{esc(t["name"])}">'
+            f'{esc(t["name"])}</button>'
+            for t in all_tags
+        )
+        filter_bar = f"""
+        <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:24px;align-items:center;">
+          <span style="font-size:12px;font-weight:700;color:#6E737B;text-transform:uppercase;
+                       letter-spacing:.06em;margin-right:4px;">Filter:</span>
+          {chip_all}{chips}
+        </div>
+        <style>
+          .jag-tag-chip {{
+            font-size:12px;font-weight:700;border:1.5px solid #E5E7EB;border-radius:999px;
+            padding:5px 14px;background:#fff;color:#6E737B;cursor:pointer;transition:.15s;
+          }}
+          .jag-tag-chip:hover {{ border-color:#F0A82E;color:#2D323B; }}
+          .jag-tag-chip.jag-tag-active {{ background:#F0A82E;border-color:#F0A82E;color:#2D323B; }}
+          .jag-res-tile[data-hidden="1"] {{ display:none !important; }}
+        </style>
+        <script>
+          function jagFilter(tag, btn) {{
+            document.querySelectorAll('.jag-tag-chip').forEach(function(b){{b.classList.remove('jag-tag-active');}});
+            btn.classList.add('jag-tag-active');
+            document.querySelectorAll('.jag-res-tile').forEach(function(tile){{
+              if (tag === 'all') {{ tile.dataset.hidden = '0'; return; }}
+              var tags = (tile.dataset.tags || '').split(',').map(function(s){{return s.trim().toLowerCase();}});
+              tile.dataset.hidden = tags.indexOf(tag.toLowerCase()) === -1 ? '1' : '0';
+            }});
+            // Show "no results" message
+            var sections = document.querySelectorAll('.jag-res-section');
+            sections.forEach(function(sec){{
+              var visible = sec.querySelectorAll('.jag-res-tile:not([data-hidden="1"])').length;
+              sec.querySelector('.jag-res-grid').style.display = visible ? '' : 'none';
+              var empty = sec.querySelector('.jag-res-empty');
+              if (empty) empty.style.display = visible ? 'none' : '';
+            }});
+            var totalVisible = document.querySelectorAll('.jag-res-tile:not([data-hidden="1"])').length;
+            var noRes = document.getElementById('jag-no-results');
+            if (noRes) noRes.style.display = totalVisible ? 'none' : '';
+          }}
+        </script>"""
+    else:
+        filter_bar = ""
+
+    # ── Resource sections ─────────────────────────────────────────────────────
     content_html = ""
     for folder, items in folder_groups:
         if not items:
             continue
-        tiles = _athlete_resource_tiles(items)
+        tiles = _athlete_resource_tiles(items, tags_by_resource)
         content_html += f"""
-        <div style="margin-bottom:28px;">
+        <div class="jag-res-section" style="margin-bottom:28px;">
           <h3 style="font-size:16px;font-weight:700;color:#2D323B;margin:0 0 10px;
                      padding-left:12px;border-left:4px solid #F0A82E;">{esc(folder["name"])}</h3>
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
+          <div class="jag-res-grid"
+               style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
             {tiles}
           </div>
+          <p class="jag-res-empty" style="display:none;font-size:13px;color:#9CA3AF;padding:12px 0;">
+            No resources match this filter in this section.
+          </p>
         </div>"""
     if ungrouped:
-        tiles = _athlete_resource_tiles(list(ungrouped))
+        tiles = _athlete_resource_tiles(list(ungrouped), tags_by_resource)
         label = "Other" if folder_groups else ""
         header = (f'<h3 style="font-size:16px;font-weight:700;color:#2D323B;margin:0 0 10px;'
                   f'padding-left:12px;border-left:4px solid #E5E7EB;">{label}</h3>') if label else ''
         content_html += f"""
-        <div style="margin-bottom:28px;">
+        <div class="jag-res-section" style="margin-bottom:28px;">
           {header}
-          <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
+          <div class="jag-res-grid"
+               style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;">
             {tiles}
           </div>
+          <p class="jag-res-empty" style="display:none;font-size:13px;color:#9CA3AF;padding:12px 0;">
+            No resources match this filter in this section.
+          </p>
         </div>"""
     if not content_html:
         content_html = '<p style="color:#9CA3AF;font-size:14px;padding:32px 0;text-align:center;">No resources have been shared yet.</p>'
 
     body = f"""
     <div style="max-width:900px;padding-top:28px;">
-      <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 20px;">Resources</h2>
+      <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 16px;">Resources</h2>
+      {filter_bar}
       {content_html}
+      <p id="jag-no-results" style="display:none;color:#9CA3AF;font-size:14px;
+         padding:32px 0;text-align:center;">No resources match this filter.</p>
     </div>"""
     return layout("Resources", body, user=athlete, active_nav="resources")
 
 
-def _athlete_resource_tiles(items):
+def _athlete_resource_tiles(items, tags_by_resource=None):
+    tags_by_resource = tags_by_resource or {}
     html = ""
     for r in items:
         r_name = esc(r.get("name", ""))
         r_url = r.get("url", "")
-        r_notes = esc(r.get("notes") or "")
+        r_notes = esc(r.get("notes") or r.get("description") or "")
         thumb = _gdrive_thumbnail(r_url) if "drive.google.com" in r_url else None
         img_html = (f'<img src="{thumb}" alt="" style="width:100%;height:100px;'
                     f'object-fit:cover;border-radius:8px 8px 0 0;display:block;">'
                     if thumb else '')
+        # Tags for this resource
+        res_tags = tags_by_resource.get(r["id"], [])
+        tag_names = ",".join(t["name"] for t in res_tags)
+        tag_chips = "".join(
+            f'<span style="font-size:10px;font-weight:700;background:rgba(240,168,46,0.12);'
+            f'color:#CF8F1F;border-radius:999px;padding:2px 8px;">{esc(t["name"])}</span>'
+            for t in res_tags
+        )
+        tag_chips_html = (f'<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:8px;">'
+                          f'{tag_chips}</div>') if tag_chips else ''
         html += f"""
         <a href="{esc(r_url)}" target="_blank" rel="noopener"
+           class="jag-res-tile" data-tags="{esc(tag_names)}" data-hidden="0"
            style="display:flex;flex-direction:column;background:#fff;
                   border:1px solid #E5E7EB;border-radius:12px;text-decoration:none;
                   overflow:hidden;transition:box-shadow 0.15s,border-color 0.15s;"
@@ -1437,6 +1517,7 @@ def _athlete_resource_tiles(items):
           <div style="padding:12px 14px;flex:1;">
             <div style="font-size:13px;font-weight:700;color:#2D323B;line-height:1.3;">{r_name}</div>
             {f'<div style="font-size:12px;color:#6E737B;margin-top:4px;">{r_notes}</div>' if r_notes else ''}
+            {tag_chips_html}
           </div>
         </a>"""
     return html
