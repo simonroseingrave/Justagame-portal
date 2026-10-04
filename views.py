@@ -11102,6 +11102,15 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
         latest_results = latest.get("results", {})
         latest_date = latest.get("date", "")
 
+    # First (oldest) session results — used for improvement calculation
+    first_results = {}
+    first_date = ""
+    has_history = len(sessions) >= 2
+    if has_history:
+        first = sessions[-1]
+        first_results = first.get("results", {})
+        first_date = first.get("date", "")
+
     # ── Per-area analysis ────────────────────────────────────────────────────
     FAMILY_ORDER = [
         "Balance & Postural Control",
@@ -11163,16 +11172,32 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
         elif not has_thresholds:
             is_gap = True   # flag all areas when no thresholds set
 
+        # First-session score for improvement calculation
+        if fk is None:
+            fvals = [first_results.get((gk, f)) for f in cfg.get("score_fields", [])]
+            fvals = [v for v in fvals if v is not None]
+            first_score = max(fvals) if fvals else None
+        else:
+            first_score = first_results.get((gk, fk))
+
+        # Direction-corrected % improvement (first → latest)
+        improvement = None
+        if score is not None and first_score is not None and first_score != 0:
+            raw_pct = (float(score) - float(first_score)) / abs(float(first_score)) * 100
+            improvement = -raw_pct if lower else raw_pct  # negative time change = improvement
+
         # Score row data
         score_s = f"{score:g}" if score is not None else "—"
         score_rows.append({
-            "display":   disp,
-            "score":     score_s,
-            "level":     cur_level,
-            "next_thr":  f"{next_thresh['threshold_value']:g}" if next_thresh else ("—" if has_thresholds else "not set"),
-            "is_gap":    is_gap,
-            "gap_label": gap_label,
-            "lower":     lower,
+            "display":     disp,
+            "score":       score_s,
+            "first_score": f"{first_score:g}" if first_score is not None else None,
+            "improvement": improvement,
+            "level":       cur_level,
+            "next_thr":    f"{next_thresh['threshold_value']:g}" if next_thresh else ("—" if has_thresholds else "not set"),
+            "is_gap":      is_gap,
+            "gap_label":   gap_label,
+            "lower":       lower,
         })
 
         if is_gap:
@@ -11214,6 +11239,19 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
         lbl = f"L{lvl}" if lvl else "—"
         return f'<span style="font-size:11px;font-weight:700;background:{bg};color:{fg};border-radius:999px;padding:2px 8px;">{lbl}</span>'
 
+    # Overall improvement summary (direction-corrected average across all areas with history)
+    all_imps = [r["improvement"] for r in score_rows if r["improvement"] is not None]
+    overall_imp = sum(all_imps) / len(all_imps) if all_imps else None
+
+    def _imp_cell(imp):
+        if imp is None:
+            return '<span style="font-size:12px;color:#9CA3AF;">—</span>'
+        sign = "+" if imp >= 0 else ""
+        col  = "#065F46" if imp >= 0 else "#9B1C1C"
+        bg   = "rgba(30,190,139,0.10)" if imp >= 0 else "rgba(220,38,38,0.08)"
+        return (f'<span style="font-size:11px;font-weight:700;color:{col};background:{bg};'
+                f'border-radius:999px;padding:2px 9px;">{sign}{imp:.1f}%</span>')
+
     trs = ""
     for r in score_rows:
         row_bg  = "rgba(240,168,46,0.06)" if r["is_gap"] else "#fff"
@@ -11222,21 +11260,39 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
                    'border-radius:999px;padding:2px 10px;">&#9650; Gap</span>'
                    ) if r["is_gap"] else '<span style="font-size:13px;color:#1EBE8B;font-weight:700;">&#10003;</span>'
         lower_note = " ↓" if r["lower"] else ""
+        first_cell = (f'<div style="font-size:10px;color:#9CA3AF;margin-top:1px;">was {esc(r["first_score"])}</div>'
+                      if r.get("first_score") else "")
         trs += f"""
         <tr style="background:{row_bg};border-bottom:1px solid #F3F4F5;">
           <td style="padding:8px 12px;font-size:13px;font-weight:600;color:#2D323B;">{esc(r['display'])}</td>
-          <td style="padding:8px 12px;font-size:13px;text-align:center;">{esc(r['score'])}{lower_note}</td>
+          <td style="padding:8px 12px;font-size:13px;text-align:center;">
+            {esc(r['score'])}{lower_note}{first_cell}
+          </td>
+          <td style="padding:8px 12px;text-align:center;">{_imp_cell(r['improvement'])}</td>
           <td style="padding:8px 12px;text-align:center;">{_level_chip(r['level'])}</td>
           <td style="padding:8px 12px;font-size:12px;color:#6E737B;text-align:center;">{esc(r['next_thr'])}</td>
           <td style="padding:8px 12px;text-align:center;">{gap_ind}</td>
         </tr>"""
 
+    imp_col_header = (f'<th style="padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;'
+                      f'letter-spacing:0.05em;color:rgba(255,255,255,0.75);text-align:center;">Change</th>'
+                      if has_history else
+                      f'<th style="padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;'
+                      f'letter-spacing:0.05em;color:rgba(255,255,255,0.40);text-align:center;">Change</th>')
+
+    history_note = ""
+    if has_history:
+        history_note = (f'<div style="font-size:11px;color:#6E737B;margin-bottom:12px;">'
+                        f'Showing improvement from first session ({esc(first_date[:10])}) to latest ({esc(latest_date[:10])}) '
+                        f'across {len(sessions)} sessions.</div>')
+
     no_thresh_note = ""
     if not has_thresholds:
-        no_thresh_note = '<div style="background:#FFF3D6;border-left:4px solid #F0A82E;border-radius:6px;padding:10px 14px;font-size:12px;color:#92400E;margin-bottom:16px;">No thresholds have been set yet — all scoring areas are shown. Once thresholds are configured, this report will highlight only the areas where this athlete is below their next level target.</div>'
+        no_thresh_note = '<div style="background:#FFF3D6;border-left:4px solid #F0A82E;border-radius:6px;padding:10px 14px;font-size:12px;color:#92400E;margin-bottom:12px;">No thresholds have been set yet — all scoring areas are shown. Once thresholds are configured, this report will highlight only the areas where this athlete is below their next level target.</div>'
 
     score_table = f"""
     {no_thresh_note}
+    {history_note}
     <div style="border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;margin-bottom:28px;">
       <table style="width:100%;border-collapse:collapse;">
         <thead>
@@ -11245,8 +11301,9 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
                         text-transform:uppercase;letter-spacing:0.05em;color:rgba(255,255,255,0.75);">Test Area</th>
             <th style="padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;
                         letter-spacing:0.05em;color:rgba(255,255,255,0.75);text-align:center;">Latest Score</th>
+            {imp_col_header}
             <th style="padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;
-                        letter-spacing:0.05em;color:rgba(255,255,255,0.75);text-align:center;">Current Level</th>
+                        letter-spacing:0.05em;color:rgba(255,255,255,0.75);text-align:center;">Level</th>
             <th style="padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;
                         letter-spacing:0.05em;color:rgba(255,255,255,0.75);text-align:center;">Next Threshold</th>
             <th style="padding:10px 12px;font-size:11px;font-weight:700;text-transform:uppercase;
@@ -11416,6 +11473,19 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
     athlete_meta += f"{sport} · " if sport else ""
     athlete_meta += f"Latest session: {esc(latest_date)}" if latest_date else "No sessions recorded"
 
+    if overall_imp is not None:
+        _oi_sign  = "+" if overall_imp >= 0 else ""
+        _oi_col   = "#1EBE8B" if overall_imp >= 0 else "#F87171"
+        _oi_arrow = "&#9650;" if overall_imp >= 0 else "&#9660;"
+        overall_imp_badge = (
+            f'<span style="display:inline-flex;align-items:center;gap:4px;font-size:11px;'
+            f'font-weight:700;color:{_oi_col};background:rgba(255,255,255,0.08);'
+            f'border:1px solid {_oi_col}44;border-radius:999px;padding:3px 10px;margin-top:6px;">'
+            f'{_oi_arrow} {_oi_sign}{overall_imp:.1f}% overall since first session</span>'
+        )
+    else:
+        overall_imp_badge = ""
+
     body = f"""
     <div class="container" style="max-width:860px;">
 
@@ -11432,6 +11502,7 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
                           color:rgba(240,168,46,0.80);margin-bottom:3px;">Adaptability Progress Report</div>
               <div style="font-size:22px;font-weight:800;color:#FFFFFF;line-height:1.2;">{name}</div>
               <div style="font-size:12px;color:rgba(255,255,255,0.50);margin-top:4px;">{athlete_meta}</div>
+              {overall_imp_badge}
             </div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
