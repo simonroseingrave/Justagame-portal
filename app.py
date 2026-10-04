@@ -3401,6 +3401,34 @@ def attendance_view(req, event_id):
     return Response(views.attendance_view_page(coach, dict(event), attendees, submitted_ids))
 
 
+@router.post("/coach/attendance/<int:event_id>/open")
+def attendance_open(req, event_id):
+    """Practitioner: open self-test window for a session event."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        db.open_session_event(conn, event_id)
+    finally:
+        conn.close()
+    return flash_redirect(f"/coach/attendance/{event_id}", "Self-test session opened — athletes can now log scores.")
+
+
+@router.post("/coach/attendance/<int:event_id>/close")
+def attendance_close(req, event_id):
+    """Practitioner: close self-test window for a session event."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        db.close_session_event(conn, event_id)
+    finally:
+        conn.close()
+    return flash_redirect(f"/coach/attendance/{event_id}", "Session closed — self-test entries are no longer accepted.")
+
+
 @router.post("/coach/attendance/<int:event_id>/delete")
 def attendance_delete(req, event_id):
     """System admin: delete a session event and its attendance records."""
@@ -3451,6 +3479,9 @@ def self_directed_entry_get(req, event_id):
         event = db.get_session_event(conn, event_id)
         if not event:
             return flash_redirect("/athlete/self-directed", "Session not found.")
+        # Check session is still open
+        if not event.get("is_open"):
+            return flash_redirect("/athlete/self-directed", "This session has been closed by your practitioner.")
         # Check if already scored
         already = conn.execute(
             "SELECT id FROM measurement_sessions WHERE participant_id = ? "
@@ -3479,6 +3510,10 @@ def self_directed_entry_post(req, event_id):
         ).fetchone()
         if not attended:
             return flash_redirect("/athlete/self-directed", "You don't have access to that session.")
+        # Check session is still open
+        event_row = db.get_session_event(conn, event_id)
+        if not event_row or not event_row.get("is_open"):
+            return flash_redirect("/athlete/self-directed", "This session has been closed by your practitioner.")
         # Check not already scored
         already = conn.execute(
             "SELECT id FROM measurement_sessions WHERE participant_id = ? "

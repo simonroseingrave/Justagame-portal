@@ -9305,6 +9305,8 @@ def attendance_view_page(coach, event, attendees, submitted_ids=None):
     date_str = event.get("date", "")[:10]
     group_name = esc(event.get("group_name") or "All athletes")
     event_id = event["id"]
+    is_open = bool(event.get("is_open"))
+    opened_at = event.get("opened_at") or ""
     submitted_ids = submitted_ids or set()
     submitted_count = sum(1 for a in attendees if a["id"] in submitted_ids)
 
@@ -9316,8 +9318,10 @@ def attendance_view_page(coach, event, attendees, submitted_ids=None):
             '<span style="font-size:11px;font-weight:700;color:#065F46;background:rgba(30,190,139,0.12);'
             'border:1px solid rgba(30,190,139,0.28);border-radius:999px;padding:2px 10px;">&#10003; Done</span>'
             if done else
-            '<span style="font-size:11px;font-weight:600;color:#7A5800;background:rgba(240,168,46,0.10);'
-            'border:1px solid rgba(240,168,46,0.28);border-radius:999px;padding:2px 10px;">Pending</span>'
+            ('<span style="font-size:11px;font-weight:600;color:#7A5800;background:rgba(240,168,46,0.10);'
+             'border:1px solid rgba(240,168,46,0.28);border-radius:999px;padding:2px 10px;">Pending</span>'
+             if is_open else
+             '<span style="font-size:11px;color:#9CA3AF;">—</span>')
         )
         rows += (
             f'<tr style="border-bottom:1px solid #F3F4F5;">'
@@ -9330,6 +9334,32 @@ def attendance_view_page(coach, event, attendees, submitted_ids=None):
         )
     if not rows:
         rows = '<tr><td colspan="4" style="padding:28px;text-align:center;color:#9CA3AF;font-size:13px;">No athletes marked present.</td></tr>'
+
+    # Session status control
+    if is_open:
+        status_badge = ('<div style="display:flex;align-items:center;gap:6px;">'
+                        '<div style="width:8px;height:8px;border-radius:50%;background:#1EBE8B;'
+                        'animation:pulse 1.5s infinite;flex-shrink:0;"></div>'
+                        '<span style="font-size:11px;font-weight:700;text-transform:uppercase;'
+                        'letter-spacing:0.07em;color:#1EBE8B;">Self-Test Open</span>'
+                        '</div>')
+        session_ctrl = f"""
+        <form method="POST" action="/coach/attendance/{event_id}/close" style="display:inline;">
+          <button type="submit"
+                  style="font-size:12px;font-weight:700;color:#fff;background:#D4622F;
+                         border:none;border-radius:20px;padding:6px 16px;cursor:pointer;">
+            &#9632; End Session</button>
+        </form>"""
+    else:
+        status_badge = ('<span style="font-size:11px;font-weight:700;text-transform:uppercase;'
+                        'letter-spacing:0.07em;color:#9CA3AF;">Self-Test Closed</span>')
+        session_ctrl = f"""
+        <form method="POST" action="/coach/attendance/{event_id}/open" style="display:inline;">
+          <button type="submit"
+                  style="font-size:12px;font-weight:700;color:#2D323B;background:#1EBE8B;
+                         border:none;border-radius:20px;padding:6px 16px;cursor:pointer;">
+            &#9654; Open Session</button>
+        </form>"""
 
     # Summary stats
     n = len(attendees)
@@ -9350,7 +9380,79 @@ def attendance_view_page(coach, event, attendees, submitted_ids=None):
       </div>
     </div>"""
 
+    # 1-hour warning modal (only injected when session is open and has an opened_at stamp)
+    timer_js = ""
+    if is_open and opened_at:
+        timer_js = f"""
+    <div id="session-timer-modal"
+         style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.55);
+                z-index:9999;align-items:center;justify-content:center;">
+      <div style="background:#fff;border-radius:16px;padding:32px 28px;max-width:400px;
+                  width:90%;box-shadow:0 20px 60px rgba(0,0,0,0.3);text-align:center;">
+        <div style="font-size:32px;margin-bottom:12px;">&#9201;</div>
+        <div style="font-size:18px;font-weight:800;color:#2D323B;margin-bottom:8px;">
+          Session has been open for 1 hour
+        </div>
+        <div style="font-size:13px;color:#6E737B;margin-bottom:24px;line-height:1.6;">
+          Are athletes still self-testing? You can end the session now or keep it open.
+        </div>
+        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+          <form method="POST" action="/coach/attendance/{event_id}/close">
+            <button type="submit"
+                    style="font-size:14px;font-weight:700;color:#fff;background:#D4622F;
+                           border:none;border-radius:12px;padding:12px 24px;cursor:pointer;
+                           min-width:140px;">
+              &#9632; End Session</button>
+          </form>
+          <button onclick="dismissTimer()"
+                  style="font-size:14px;font-weight:700;color:#2D323B;background:#F0A82E;
+                         border:none;border-radius:12px;padding:12px 24px;cursor:pointer;
+                         min-width:140px;">
+            Continue &#8250;</button>
+        </div>
+      </div>
+    </div>
+    <script>
+      (function() {{
+        var openedAt = new Date("{esc(opened_at)}");
+        var ONE_HOUR = 60 * 60 * 1000;
+        var SNOOZE_KEY = "jag_session_{event_id}_snoozed";
+        var modal = document.getElementById("session-timer-modal");
+
+        function showModal() {{
+          modal.style.display = "flex";
+        }}
+
+        function dismissTimer() {{
+          modal.style.display = "none";
+          sessionStorage.setItem(SNOOZE_KEY, Date.now().toString());
+        }}
+        window.dismissTimer = dismissTimer;
+
+        function check() {{
+          var now = Date.now();
+          var elapsed = now - openedAt.getTime();
+          if (elapsed < ONE_HOUR) {{
+            setTimeout(check, ONE_HOUR - elapsed + 1000);
+            return;
+          }}
+          var snoozed = parseInt(sessionStorage.getItem(SNOOZE_KEY) || "0");
+          // Re-show after snooze of 30 minutes
+          if (snoozed && (now - snoozed) < 30 * 60 * 1000) {{
+            setTimeout(check, 30 * 60 * 1000 - (now - snoozed) + 1000);
+            return;
+          }}
+          showModal();
+        }}
+        check();
+      }})();
+    </script>
+    <style>
+      @keyframes pulse {{ 0%,100% {{ opacity:1;transform:scale(1); }} 50% {{ opacity:0.4;transform:scale(1.4); }} }}
+    </style>"""
+
     body = f"""
+    {timer_js}
     <div class="container" style="max-width:760px;">
       <!-- Hero -->
       <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
@@ -9361,8 +9463,10 @@ def attendance_view_page(coach, event, attendees, submitted_ids=None):
                         color:rgba(240,168,46,0.80);margin-bottom:3px;">Session</div>
             <div style="font-size:20px;font-weight:800;color:#FFFFFF;line-height:1.2;">{group_name} &nbsp;·&nbsp; {esc(date_str)}</div>
             {f'<div style="font-size:12px;color:rgba(255,255,255,0.50);margin-top:4px;">{esc(event.get("notes",""))}</div>' if event.get("notes") else ""}
+            <div style="margin-top:10px;">{status_badge}</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            {session_ctrl}
             <a href="/coach/attendance/{event_id}/roll-call"
                style="font-size:12px;font-weight:700;color:#2D323B;background:#F0A82E;
                       text-decoration:none;padding:6px 16px;border-radius:20px;">Edit Roll-Call</a>

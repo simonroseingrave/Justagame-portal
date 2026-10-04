@@ -375,6 +375,8 @@ def init_db():
         "ALTER TABLE participant_groups ADD COLUMN show_leaderboard INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE resources ADD COLUMN level_range TEXT NOT NULL DEFAULT 'all'",
         "ALTER TABLE resources ADD COLUMN space_requirement TEXT NOT NULL DEFAULT 'unspecified'",
+        "ALTER TABLE session_events ADD COLUMN is_open INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE session_events ADD COLUMN opened_at TEXT",
     ]:
         try:
             conn.execute(sql)
@@ -1967,14 +1969,31 @@ def process_session_xp(conn, session_id, participant_id, is_formal=True):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def create_session_event(conn, group_id, date, created_by, notes=None):
-    """Create a new session event (training day). Returns event_id."""
+    """Create a new session event (training day). Returns event_id.
+    is_open defaults to 0 — practitioner explicitly opens self-test via open_session_event()."""
     eid = conn.execute(
-        "INSERT INTO session_events (group_id, date, notes, created_by, created_at) "
-        "VALUES (?, ?, ?, ?, ?)",
+        "INSERT INTO session_events (group_id, date, notes, created_by, created_at, is_open) "
+        "VALUES (?, ?, ?, ?, ?, 0)",
         (group_id or None, date, notes or None, created_by, now()),
     ).lastrowid
     conn.commit()
     return eid
+
+
+def open_session_event(conn, event_id):
+    """Open self-test window for a session event. Records opened_at timestamp in notes is avoided —
+    we reuse created_at as the start reference but stamp is_open and opened_at separately."""
+    conn.execute(
+        "UPDATE session_events SET is_open = 1, opened_at = ? WHERE id = ?",
+        (now(), event_id),
+    )
+    conn.commit()
+
+
+def close_session_event(conn, event_id):
+    """Close self-test window for a session event."""
+    conn.execute("UPDATE session_events SET is_open = 0 WHERE id = ?", (event_id,))
+    conn.commit()
 
 
 def get_session_event(conn, event_id):
@@ -2070,13 +2089,15 @@ def count_attendance(conn, participant_id):
 
 
 def get_pending_self_directed_events(conn, participant_id):
-    """Return session events the athlete attended but hasn't yet scored self-directed results for."""
+    """Return open session events the athlete attended but hasn't yet scored self-directed results for.
+    Only returns events where is_open = 1 (practitioner has opened the self-test window)."""
     return conn.execute(
         "SELECT se.*, pg.name AS group_name "
         "FROM session_attendance sa "
         "JOIN session_events se ON se.id = sa.event_id "
         "LEFT JOIN participant_groups pg ON pg.id = se.group_id "
         "WHERE sa.participant_id = ? "
+        "AND se.is_open = 1 "
         "AND NOT EXISTS ("
         "  SELECT 1 FROM measurement_sessions ms "
         "  WHERE ms.participant_id = ? AND ms.attendance_event_id = se.id "
