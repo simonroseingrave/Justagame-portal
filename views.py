@@ -3696,7 +3696,7 @@ def all_progress_page(coach, groups_data, sport_filter=None, max_level=None):
           </div>
         </div>"""
 
-    group_cards = f'<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:32px;">{group_cards_html}</div>' if group_cards_html else ""
+    group_cards = f'<div class="jag-group-cards-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:32px;">{group_cards_html}</div>' if group_cards_html else ""
 
     # Sport filter bar
     current_sport_label = esc(sport_filter) if sport_filter else "All sports"
@@ -3808,6 +3808,9 @@ def all_progress_page(coach, groups_data, sport_filter=None, max_level=None):
     <style>
       details summary::-webkit-details-marker {{ display:none; }}
       details[open] summary .acc-chev {{ transform:rotate(180deg); }}
+      @media (max-width: 640px) {{
+        .jag-group-cards-grid {{ display:none !important; }}
+      }}
     </style>
     <div class="page-head">
       <div>
