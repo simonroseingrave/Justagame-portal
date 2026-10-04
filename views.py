@@ -2674,7 +2674,7 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
         </div>
       </div>
       <!-- Stats row -->
-      <div style="display:flex;gap:20px;margin-top:14px;padding-top:12px;
+      <div style="display:flex;flex-wrap:wrap;gap:12px 20px;margin-top:14px;padding-top:12px;
                   border-top:1px solid rgba(255,255,255,0.09);">
         <div style="font-size:12px;color:rgba(255,255,255,0.50);">
           <span style="font-weight:700;color:#FFFFFF;">{session_count}</span> test sessions
@@ -11375,7 +11375,8 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
     {no_thresh_note}
     {history_note}
     <div style="border:1px solid #E5E7EB;border-radius:10px;overflow:hidden;margin-bottom:28px;">
-      <table style="width:100%;border-collapse:collapse;">
+      <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+      <table style="width:100%;border-collapse:collapse;min-width:540px;">
         <thead>
           <tr style="background:#2D323B;border-bottom:2px solid #F0A82E;">
             <th style="padding:10px 12px;text-align:left;font-size:11px;font-weight:700;
@@ -11393,6 +11394,7 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
         </thead>
         <tbody>{trs}</tbody>
       </table>
+      </div>
     </div>"""
 
     # ── Gap analysis section (CLA-framed) ────────────────────────────────────
