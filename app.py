@@ -367,7 +367,29 @@ def coach_home(req):
     coach = require_staff(req)
     if not coach:
         return redirect("/login")
-    return Response(views.practitioner_home_page(coach))
+    show_onboarding = not coach.get("onboarding_seen")
+    return Response(views.practitioner_home_page(coach, show_onboarding=show_onboarding))
+
+
+@router.get("/coach/getting-started")
+def getting_started_get(req):
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    return Response(views.getting_started_page(coach))
+
+
+@router.post("/coach/getting-started/dismiss")
+def getting_started_dismiss(req):
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        db.mark_onboarding_seen(conn, coach["id"])
+    finally:
+        conn.close()
+    return redirect("/coach")
 
 
 @router.get("/coach/groups")

@@ -377,6 +377,7 @@ def init_db():
         "ALTER TABLE resources ADD COLUMN space_requirement TEXT NOT NULL DEFAULT 'unspecified'",
         "ALTER TABLE session_events ADD COLUMN is_open INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE session_events ADD COLUMN opened_at TEXT",
+        "ALTER TABLE users ADD COLUMN onboarding_seen INTEGER NOT NULL DEFAULT 0",
     ]:
         try:
             conn.execute(sql)
@@ -1993,6 +1994,12 @@ def open_session_event(conn, event_id):
 def close_session_event(conn, event_id):
     """Close self-test window for a session event."""
     conn.execute("UPDATE session_events SET is_open = 0 WHERE id = ?", (event_id,))
+    conn.commit()
+
+
+def mark_onboarding_seen(conn, user_id):
+    """Flag that this practitioner has dismissed the onboarding callout."""
+    conn.execute("UPDATE users SET onboarding_seen = 1 WHERE id = ?", (user_id,))
     conn.commit()
 
 

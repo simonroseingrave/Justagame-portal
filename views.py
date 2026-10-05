@@ -1598,7 +1598,7 @@ def edit_group_page(user, group, error=None):
     return layout(f"Edit Group — {group['name']}", body, user=user, active_nav="dashboard")
 
 
-def practitioner_home_page(coach):
+def practitioner_home_page(coach, show_onboarding=False):
     """Landing page for practitioners — large card links to each main area."""
     name = coach.get("name", "").split()[0] if coach.get("name") else "there"
     is_admin = coach.get("role") in {"org_admin", "system_admin"}
@@ -1669,6 +1669,33 @@ def practitioner_home_page(coach):
           </div>
           <div class="prac-card-arrow">&#8250;</div>
         </a>"""
+
+    if show_onboarding:
+        onboarding_callout = (
+            '<div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);'
+            'border:2px solid #F0A82E;border-radius:16px;padding:20px 22px;'
+            'margin-bottom:24px;display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;">'
+            '<div style="width:44px;height:44px;border-radius:12px;background:rgba(240,168,46,0.18);'
+            'border:1px solid rgba(240,168,46,0.35);display:flex;align-items:center;'
+            'justify-content:center;font-size:22px;flex-shrink:0;">&#9733;</div>'
+            '<div style="flex:1;min-width:0;">'
+            '<div style="font-size:15px;font-weight:800;color:#FFFFFF;margin-bottom:4px;">'
+            'Welcome to JAG! Let&rsquo;s get you set up.</div>'
+            '<div style="font-size:13px;color:rgba(255,255,255,0.60);margin-bottom:14px;line-height:1.5;">'
+            'It only takes a few minutes to create your first group, add athletes, and run your first session.</div>'
+            '<div style="display:flex;gap:10px;flex-wrap:wrap;">'
+            '<a href="/coach/getting-started" '
+            'style="font-size:13px;font-weight:700;background:#F0A82E;color:#2D323B;'
+            'border-radius:8px;padding:8px 18px;text-decoration:none;">'
+            'View Getting Started Guide &#8250;</a>'
+            '<form method="post" action="/coach/getting-started/dismiss" style="margin:0;">'
+            '<button type="submit" '
+            'style="font-size:13px;color:rgba(255,255,255,0.45);background:none;border:none;'
+            'cursor:pointer;padding:8px 4px;font-weight:600;">Dismiss</button>'
+            '</form></div></div></div>'
+        )
+    else:
+        onboarding_callout = ""
 
     body = f"""
     <style>
@@ -1765,12 +1792,193 @@ def practitioner_home_page(coach):
         <h1>What are you keen to do today, <span>{esc(name)}</span>?</h1>
         <p>Choose an area to get started</p>
       </div>
+      {onboarding_callout}
       <div class="prac-cards">
         {cards_html}
       </div>
     </div>"""
 
     return layout("Home", body, user=coach, active_nav="home")
+
+
+def getting_started_page(coach):
+    """Step-by-step onboarding guide for new practitioners."""
+    is_admin = coach.get("role") in {"org_admin", "system_admin"}
+
+    STEPS = [
+        {
+            "num": "1",
+            "title": "Create a Group",
+            "body": (
+                "Groups are how you organise your athletes — typically a class, team, or training cohort. "
+                "Go to <strong>Groups &amp; Athletes</strong> and click <strong>+ New Group</strong>. "
+                "Give it a name, assign a sport, and it&rsquo;s ready to use."
+            ),
+            "href": "/coach/groups",
+            "cta": "Go to Groups",
+        },
+        {
+            "num": "2",
+            "title": "Add Your Athletes",
+            "body": (
+                "From your group page, use <strong>Add Athlete</strong> to create individual accounts, "
+                "or use the CSV import to onboard everyone at once. "
+                "Each athlete gets a login so they can access their own dashboard and self-test."
+            ),
+            "href": "/coach/groups",
+            "cta": "Go to Groups",
+        },
+        {
+            "num": "3",
+            "title": "Record Attendance &amp; Open a Session",
+            "body": (
+                "When your group meets, go to <strong>Record Attendance</strong>, select the group and date, "
+                "and mark who&rsquo;s present. Then hit <strong>Open Session</strong> to allow athletes "
+                "to submit their own self-test scores from their devices during the session."
+            ),
+            "href": "/coach/attendance/new",
+            "cta": "Record Attendance",
+        },
+        {
+            "num": "4",
+            "title": "Record Measurement Games Scores",
+            "body": (
+                "Go to <strong>Group Testing</strong>, choose your group, select which games were played, "
+                "and enter each athlete&rsquo;s scores. The system calculates derived scores automatically "
+                "and updates each athlete&rsquo;s level and AXP in real time."
+            ),
+            "href": "/coach/group-hub",
+            "cta": "Go to Group Testing",
+        },
+        {
+            "num": "5",
+            "title": "View Reports",
+            "body": (
+                "Head to <strong>Reports</strong> to see group-level progress and individual athlete snapshots. "
+                "Click any athlete to open their full <strong>CLA Movement Report</strong> — this shows "
+                "their current gaps framed as game environment constraints, with suggested games to target each area."
+            ),
+            "href": "/coach/progress",
+            "cta": "Go to Reports",
+        },
+        {
+            "num": "6",
+            "title": "Set Up the Resource Library",
+            "body": (
+                "Add guides, videos, and links that athletes can access from their dashboard. "
+                "Create tags (e.g. <em>balance</em>, <em>agility</em>, <em>reaction</em>) in the Admin Hub, "
+                "assign them to resources, and athletes can filter the library by their focus area."
+            ),
+            "href": "/coach/resources",
+            "cta": "Go to Resources",
+        },
+    ]
+
+    if is_admin:
+        STEPS.insert(0, {
+            "num": "0",
+            "title": "Set Up Your Organisation",
+            "body": (
+                "As an admin, start by going to <strong>Admin Hub &rarr; Organisations</strong> to create "
+                "your organisation and add its logo URL. This branding appears across the portal for your "
+                "practitioners and athletes."
+            ),
+            "href": "/coach/admin/hub",
+            "cta": "Go to Admin Hub",
+        })
+        for i, s in enumerate(STEPS):
+            s["num"] = str(i)
+
+    steps_html = ""
+    for s in STEPS:
+        steps_html += f"""
+        <div style="display:flex;gap:18px;margin-bottom:28px;align-items:flex-start;">
+          <div style="width:36px;height:36px;border-radius:50%;background:#F0A82E;color:#2D323B;
+                      font-size:15px;font-weight:800;display:flex;align-items:center;
+                      justify-content:center;flex-shrink:0;margin-top:2px;">{esc(s['num'])}</div>
+          <div style="flex:1;border-bottom:1px solid #F3F4F5;padding-bottom:24px;">
+            <div style="font-size:16px;font-weight:800;color:#2D323B;margin-bottom:6px;">{s['title']}</div>
+            <div style="font-size:14px;color:#374151;line-height:1.65;margin-bottom:12px;">{s['body']}</div>
+            <a href="{s['href']}"
+               style="font-size:12px;font-weight:700;color:#F0A82E;text-decoration:none;
+                      border:1.5px solid #F0A82E;border-radius:8px;padding:5px 14px;
+                      display:inline-block;"
+               onmouseover="this.style.background='#F0A82E';this.style.color='#2D323B';"
+               onmouseout="this.style.background='';this.style.color='#F0A82E';">
+              {esc(s['cta'])} &#8250;
+            </a>
+          </div>
+        </div>"""
+
+    body = f"""
+    <style>
+      @media print {{
+        nav, .nav, header, .site-header, .mobile-nav, .desktop-nav,
+        .print-hide, form[action*="dismiss"] {{ display: none !important; }}
+        body {{ font-size: 13px; }}
+        .gs-print-btn {{ display: none !important; }}
+        a {{ color: #2D323B !important; text-decoration: none !important; }}
+        .gs-hero {{ border: 2px solid #2D323B !important; background: #fff !important; }}
+        .gs-hero * {{ color: #2D323B !important; }}
+      }}
+    </style>
+
+    <div style="max-width:720px;margin:0 auto;padding:32px 16px 64px;">
+
+      <!-- Hero -->
+      <div class="gs-hero" style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);
+           border-radius:16px;padding:28px 32px;margin-bottom:36px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;
+                    gap:16px;flex-wrap:wrap;margin-bottom:8px;">
+          <div>
+            <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;
+                        color:rgba(240,168,46,0.85);margin-bottom:6px;">JAG Portal</div>
+            <h1 style="margin:0;font-size:26px;font-weight:900;color:#FFFFFF;line-height:1.2;">
+              Getting Started Guide
+            </h1>
+          </div>
+          <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <button class="gs-print-btn" onclick="window.print()"
+                    style="font-size:13px;font-weight:700;background:rgba(255,255,255,0.10);
+                           color:#FFFFFF;border:1.5px solid rgba(255,255,255,0.25);
+                           border-radius:8px;padding:7px 16px;cursor:pointer;">
+              &#128438; Print / Save PDF
+            </button>
+            <a href="/coach" style="font-size:13px;font-weight:700;color:rgba(255,255,255,0.55);
+                                    text-decoration:none;">&larr; Back</a>
+          </div>
+        </div>
+        <p style="margin:0;font-size:14px;color:rgba(255,255,255,0.60);line-height:1.55;">
+          Follow these steps to get your programme up and running. Each step links directly to the
+          relevant part of the portal.
+        </p>
+      </div>
+
+      <!-- Steps -->
+      <div style="padding:0 4px;">
+        {steps_html}
+      </div>
+
+      <!-- Footer note -->
+      <div style="background:rgba(240,168,46,0.08);border-left:4px solid #F0A82E;border-radius:8px;
+                  padding:14px 18px;font-size:13px;color:#7A5800;margin-top:8px;">
+        <strong>Tip:</strong> This guide is always available from the <strong>Help</strong> link
+        in the nav menu. You can print it or save it as a PDF using the button above.
+      </div>
+
+      <!-- Dismiss -->
+      <div style="margin-top:32px;text-align:center;" class="print-hide">
+        <form method="post" action="/coach/getting-started/dismiss">
+          <button type="submit"
+                  style="font-size:13px;color:#9CA3AF;background:none;border:none;
+                         cursor:pointer;text-decoration:underline;">
+            Got it &mdash; don&rsquo;t show the welcome banner again
+          </button>
+        </form>
+      </div>
+
+    </div>"""
+    return layout("Getting Started", body, user=coach, active_nav="home")
 
 
 def coach_dashboard_for(user, group_summaries, ungrouped_summaries, message=None, org_map=None, stats=None):
