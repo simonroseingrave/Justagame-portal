@@ -7249,6 +7249,24 @@ def help_page(user):
 
         sections_html += s_orgs + s_sys
 
+    if is_staff:
+        guide_card = (
+            '<a href="/coach/getting-started" style="display:flex;align-items:center;gap:16px;'
+            'background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border:1.5px solid ' + GOLD + ';'
+            'border-radius:14px;padding:18px 22px;text-decoration:none;margin-bottom:20px;">'
+            '<div style="width:44px;height:44px;border-radius:12px;background:rgba(240,168,46,0.18);'
+            'border:1px solid rgba(240,168,46,0.35);display:flex;align-items:center;'
+            'justify-content:center;font-size:22px;flex-shrink:0;">&#9733;</div>'
+            '<div style="flex:1;">'
+            '<div style="font-size:15px;font-weight:800;color:#FFFFFF;margin-bottom:3px;">Getting Started Guide</div>'
+            '<div style="font-size:13px;color:rgba(255,255,255,0.55);">Step-by-step setup — groups, athletes, sessions, reports. Printable.</div>'
+            '</div>'
+            '<div style="font-size:24px;color:' + GOLD + ';font-weight:300;">&#8250;</div>'
+            '</a>'
+        )
+    else:
+        guide_card = ""
+
     body = f"""
     <style>
       .help-section {{
@@ -7396,6 +7414,8 @@ def help_page(user):
         </div>
       </div>
     </div>
+
+    {guide_card}
 
     {sections_html}
 
