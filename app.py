@@ -3335,6 +3335,13 @@ def participant_export_csv(req):
 
 # ------------------------------------------------------------------- bootstrap
 
+# Initialise the database when the module is imported.
+# This runs whether the app is started with `python app.py` (wsgiref) or
+# `gunicorn app:application` — both import this module before serving requests.
+db.init_db()
+db.cleanup_demo_data()
+db.maybe_reset_coach_password()
+
 application = App(router, STATIC_DIR)
 
 
