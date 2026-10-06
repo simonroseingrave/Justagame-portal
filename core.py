@@ -105,15 +105,29 @@ class Response:
         self.headers = [("Content-Type", content_type)]
         self._cookies = SimpleCookie()
 
-    def set_cookie(self, name, value, max_age=None, path="/", httponly=True):
+    def set_cookie(self, name, value, max_age=None, path="/", httponly=True,
+                   secure=True, samesite="Lax"):
+        """Set a response cookie.
+
+        secure=True  — only sent over HTTPS (browsers exempt localhost so
+                        local dev still works).
+        samesite     — "Lax" blocks cross-site POST requests (CSRF mitigation).
+        """
         self._cookies[name] = value
         self._cookies[name]["path"] = path
         if httponly:
             self._cookies[name]["httponly"] = True
+        if secure:
+            self._cookies[name]["secure"] = True
+        if samesite:
+            self._cookies[name]["samesite"] = samesite
         if max_age is not None:
             self._cookies[name]["max-age"] = max_age
 
     def delete_cookie(self, name, path="/"):
+        # Clearing a cookie must include the same Secure/SameSite flags the
+        # browser originally received, otherwise some browsers ignore the
+        # max-age=0 directive.
         self.set_cookie(name, "", max_age=0, path=path)
 
     def render(self, start_response):
@@ -121,6 +135,24 @@ class Response:
         body_bytes = self.body.encode("utf-8") if isinstance(self.body, str) else self.body
         headers = list(self.headers)
         headers.append(("Content-Length", str(len(body_bytes))))
+        # ── Security headers ────────────────────────────────────────────────
+        # Applied to every response so browsers enforce safe defaults.
+        headers += [
+            # Prevent this app being embedded in iframes on other sites
+            # (clickjacking protection).
+            ("X-Frame-Options", "DENY"),
+            # Stops browsers from MIME-sniffing a response away from the
+            # declared Content-Type.
+            ("X-Content-Type-Options", "nosniff"),
+            # Only send the origin (no path/query) in the Referer header
+            # when navigating to third-party pages.
+            ("Referrer-Policy", "strict-origin-when-cross-origin"),
+            # Tell browsers to always use HTTPS for this domain for 1 year.
+            # Safe to include because Render terminates TLS before the app.
+            ("Strict-Transport-Security", "max-age=31536000; includeSubDomains"),
+            # Deny access to sensitive browser APIs we don't use.
+            ("Permissions-Policy", "geolocation=(), microphone=(), camera=()"),
+        ]
         for morsel in self._cookies.values():
             headers.append(("Set-Cookie", morsel.OutputString()))
         start_response(status_line, headers)
@@ -129,7 +161,8 @@ class Response:
 
 STATUS_TEXT = {
     200: "OK", 302: "Found", 303: "See Other", 401: "Unauthorized",
-    403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed", 500: "Internal Server Error",
+    403: "Forbidden", 404: "Not Found", 405: "Method Not Allowed",
+    429: "Too Many Requests", 500: "Internal Server Error",
 }
 
 

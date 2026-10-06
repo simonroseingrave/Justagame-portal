@@ -14,6 +14,8 @@ See README.md for deployment options and customisation notes.
 import os
 import sys
 import datetime
+import threading
+import time
 from wsgiref.simple_server import WSGIRequestHandler
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -28,6 +30,56 @@ import mailer
 
 router = Router()
 STATIC_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
+
+# ── Login rate limiting ───────────────────────────────────────────────────────
+# Simple in-memory store: maps client IP → [failure_count, window_start_epoch].
+# Resets when the service restarts (acceptable — persistent rate limiting would
+# require a DB table or Redis, which is overkill at current scale).
+#
+# On Render, the real client IP arrives in X-Forwarded-For because Render's
+# load balancer sits in front of the app. REMOTE_ADDR would be the proxy.
+
+_LOGIN_MAX_ATTEMPTS  = 10          # failures allowed per window
+_LOGIN_WINDOW_SECS   = 15 * 60    # 15-minute sliding window
+_login_lock          = threading.Lock()
+_login_attempts: dict = {}         # ip -> [count, window_start]
+
+
+def _client_ip(req) -> str:
+    """Return best-guess client IP, honouring Render's X-Forwarded-For header."""
+    forwarded = req.environ.get("HTTP_X_FORWARDED_FOR", "")
+    if forwarded:
+        return forwarded.split(",")[0].strip()
+    return req.environ.get("REMOTE_ADDR", "unknown")
+
+
+def _login_allowed(ip: str) -> bool:
+    """True if the IP has not exceeded the failure threshold."""
+    now = time.time()
+    with _login_lock:
+        entry = _login_attempts.get(ip)
+        if entry is None:
+            return True
+        count, window_start = entry
+        if now - window_start > _LOGIN_WINDOW_SECS:
+            del _login_attempts[ip]   # window expired
+            return True
+        return count < _LOGIN_MAX_ATTEMPTS
+
+
+def _record_failure(ip: str) -> None:
+    now = time.time()
+    with _login_lock:
+        entry = _login_attempts.get(ip)
+        if entry is None or now - entry[1] > _LOGIN_WINDOW_SECS:
+            _login_attempts[ip] = [1, now]
+        else:
+            _login_attempts[ip][0] += 1
+
+
+def _clear_failures(ip: str) -> None:
+    with _login_lock:
+        _login_attempts.pop(ip, None)
 
 SESSION_COOKIE  = "jag_session"
 VIEW_AS_COOKIE  = "jag_view_as"
@@ -230,6 +282,12 @@ def login_get(req):
 
 @router.post("/login")
 def login_post(req):
+    ip = _client_ip(req)
+    if not _login_allowed(ip):
+        return Response(
+            views.login_page(error="Too many failed login attempts. Please wait 15 minutes before trying again."),
+            status=429,
+        )
     login = req.form_get("login").strip()
     password = req.form_get("password")
     conn = db.get_conn()
@@ -239,8 +297,10 @@ def login_post(req):
             (login.lower(), login.lower()),
         ).fetchone()
         if not row or not verify_password(password, row["password_hash"]):
+            _record_failure(ip)
             return Response(views.login_page(error="Incorrect email, username or password.", prefill_login=login), status=401)
 
+        _clear_failures(ip)   # successful login — reset the counter for this IP
         token = new_session_token()
         conn.execute(
             "INSERT INTO sessions (session_id, user_id, created_at) VALUES (?, ?, ?)",
