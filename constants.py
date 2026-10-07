@@ -313,10 +313,11 @@ LEVEL_XP_AWARDS = {1: 100, 2: 200, 3: 350, 4: 500, 5: 750}
 # Rank tiers (ascending by min_xp). label, min_xp, hex colour
 XP_RANK_TIERS = [
     {"label": "Starter",  "min_xp": 0,     "colour": "#6E737B"},
-    {"label": "Bronze",   "min_xp": 2000,  "colour": "#1EBE8B"},
-    {"label": "Silver",   "min_xp": 5000,  "colour": "#F0A82E"},
-    {"label": "Gold",     "min_xp": 10000, "colour": "#F97316"},
-    {"label": "Titanium", "min_xp": 15000, "colour": "#8B5CF6"},
+    {"label": "Bronze",   "min_xp": 3000,  "colour": "#CD7F32"},
+    {"label": "Silver",   "min_xp": 6500,  "colour": "#A0A9B8"},
+    {"label": "Gold",     "min_xp": 11000, "colour": "#F3AA33"},
+    {"label": "Platinum", "min_xp": 17000, "colour": "#5EEAD4"},
+    {"label": "Titanium", "min_xp": 25000, "colour": "#8B5CF6"},
 ]
 
 # Flat XP award amounts for participation events
