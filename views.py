@@ -8338,6 +8338,11 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
       {ungrouped_list_html}
     </div>""" if ungrouped or is_admin else ""
 
+    from constants import CARD_TAXONOMY
+    _slug_opts = '<option value="">— None —</option>' + "".join(
+        f'<option value="{esc(slug)}">{esc(slug)}</option>'
+        for slug in sorted(CARD_TAXONOMY.keys())
+    )
     manage_forms = f"""
     <div style="display:flex; gap:10px; margin-bottom:28px; flex-wrap:wrap;">
       <button type="button" class="btn btn-primary" onclick="var p=document.getElementById('res-add-panel');p.style.display=p.style.display==='none'?'block':'none';">+ Add Resource</button>
@@ -8360,6 +8365,8 @@ def resources_page(user, folder_groups, ungrouped, folders, message=None, error=
           <input type="text" id="res_so" name="self_organisation" placeholder="e.g. Spatial awareness &amp; decision making" />
           <label for="res_folder">Folder (optional)</label>
           <select id="res_folder" name="folder_id">{folder_opts}</select>
+          <label for="res_slug" style="margin-top:14px;">Card (auto-taxonomy, optional)</label>
+          <select id="res_slug" name="card_slug">{_slug_opts}</select>
           <button type="submit" class="btn btn-primary btn-block" style="margin-top:14px;">Add Resource</button>
         </form>
       </div>
@@ -8654,6 +8661,11 @@ def edit_resource_page(user, resource, folders, selected_game_keys=None,
       </div>
     </div>"""
 
+    _cur_slug = resource.get('card_slug') or ''
+    _edit_slug_opts = '<option value="">— None —</option>' + "".join(
+        f'<option value="{esc(s)}"{"  selected" if s == _cur_slug else ""}>{esc(s)}</option>'
+        for s in sorted(CARD_TAXONOMY.keys())
+    )
     body = f"""
     <div class="page-head">
       <h1>Edit Resource</h1>
@@ -8670,14 +8682,10 @@ def edit_resource_page(user, resource, folders, selected_game_keys=None,
         <input type="text" id="description" name="description" value="{esc(resource['description'] or '')}" />
         <label for="self_organisation">Self-organisation focus (optional)</label>
         <input type="text" id="self_organisation" name="self_organisation" value="{esc(resource.get('self_organisation') or '')}" placeholder="e.g. Spatial awareness &amp; decision making" />
-        <label for="card_slug" style="margin-top:14px;">Card Slug (auto-taxonomy)</label>
-        <input type="text" id="card_slug" name="card_slug"
-               value="{esc(resource.get('card_slug') or '')}"
-               placeholder="e.g. lob-scotch  (leave blank to set tags manually below)"
-               style="font-family:monospace;font-size:12px;" />
+        <label for="card_slug" style="margin-top:14px;">Card (auto-taxonomy, optional)</label>
+        <select id="card_slug" name="card_slug">{_edit_slug_opts}</select>
         <p style="font-size:11px;color:#6E737B;margin-top:3px;margin-bottom:10px;">
-          Match a slug from the card library (e.g. <code>lob-scotch</code>, <code>grid-leap</code>).
-          When set, saving will auto-fill all taxonomy dimensions from the card definition — no manual ticking needed.
+          Saving with a card selected will auto-fill all taxonomy dimensions — no manual ticking needed.
         </p>
         <label for="folder_id">Folder</label>
         <select id="folder_id" name="folder_id">{folder_opts}</select>
