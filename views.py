@@ -513,28 +513,7 @@ def measurement_games_form(participant_id, selected_label=None, selected_month=N
     section. Each field has its own quick-save button; the session is
     created lazily on the first save. A bulk-submit fallback is also
     available via the full form.
-
-    athlete_levels: optional dict {game_key: highest_level} — when supplied,
-    a coloured level badge is shown next to each game name so the coach can
-    see at a glance where the athlete currently stands.
     """
-    athlete_levels = athlete_levels or {}
-    LEVEL_COLOURS_FORM = {
-        0: ("#E5E7EB", "#6E737B"),
-        1: ("#1EBE8B", "#fff"),
-        2: ("#F0A82E", "#2D323B"),
-        3: ("#2D323B", "#fff"),
-        4: ("#F97316", "#fff"),
-        5: ("#8B5CF6", "#fff"),
-    }
-
-    def _level_badge_html(game_key):
-        lvl = athlete_levels.get(game_key, 0)
-        if lvl == 0:
-            return ""
-        bg, fg = LEVEL_COLOURS_FORM.get(lvl, ("#6E737B", "#fff"))
-        return (f'<span style="font-size:10px;font-weight:700;background:{bg};color:{fg};'
-                f'border-radius:999px;padding:1px 7px;margin-left:6px;">L{lvl}</span>')
 
     # Build game chip list and sections HTML together — active games only
     # (deprecated games and hidden fields excluded via active_measurement_games())
@@ -548,7 +527,7 @@ def measurement_games_form(participant_id, selected_label=None, selected_month=N
         f' onclick="toggleChip(this)"'
         f' style="padding:5px 14px;border-radius:999px;border:2px solid #2D323B;background:#2D323B;'
         f'color:#F0A82E;font-size:13px;font-weight:600;cursor:pointer;transition:all 0.15s;">'
-        f'{esc(g["name"])}{_level_badge_html(g["key"])}</button>'
+        f'{esc(g["name"])}</button>'
         for g in all_games_for_chips
     )
 
@@ -581,28 +560,12 @@ def measurement_games_form(participant_id, selected_label=None, selected_month=N
       <div id="mg-strip-pills" style="display:flex;flex-wrap:wrap;gap:6px;"></div>
     </div>"""
 
-    def _fieldset_with_level(g):
-        """Wrap _measurement_game_fieldset and inject a level badge into the header."""
-        html = _measurement_game_fieldset(g)
-        lvl = athlete_levels.get(g["key"], 0)
-        if lvl > 0:
-            bg, fg = LEVEL_COLOURS_FORM.get(lvl, ("#6E737B", "#fff"))
-            badge = (f'<span style="font-size:10px;font-weight:700;background:{bg};color:{fg};'
-                     f'border-radius:999px;padding:1px 8px;margin-left:6px;vertical-align:middle;">L{lvl}</span>')
-            # Insert badge after the game name span in the header
-            html = html.replace(
-                f'<span style="font-size:14px;font-weight:700;color:#2D323B;">{esc(g["name"])}</span>',
-                f'<span style="font-size:14px;font-weight:700;color:#2D323B;">{esc(g["name"])}</span>{badge}',
-                1,
-            )
-        return html
-
     sections_html = completion_strip_html + chip_panel_html + "".join(f"""
     <div class="mg-section" style="margin-bottom:24px;">
       <div style="border-left:4px solid #F0A82E;padding-left:10px;margin-bottom:12px;">
         <h4 style="margin:0;font-size:15px;font-weight:700;color:var(--jag-navy);">{esc(section['section'])}</h4>
       </div>
-      {''.join(_fieldset_with_level(g) for g in section['games'])}
+      {''.join(_measurement_game_fieldset(g) for g in section['games'])}
     </div>
     """ for section in active_measurement_games())
 
@@ -2700,30 +2663,6 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
     tier = xp_data.get("tier") or {"label": "Starter", "colour": "#6E737B"}
     tier_colour = tier["colour"]
     tier_label = esc(tier["label"])
-    games_with_level = sum(1 for g in CORE_AAP_GAMES if levels.get(g, 0) >= 1)
-    LEVEL_COLOURS = {
-        0: ("#E5E7EB", "#6E737B"),
-        1: ("#1EBE8B", "#fff"),
-        2: ("#F0A82E", "#2D323B"),
-        3: ("#2D323B", "#fff"),
-        4: ("#F97316", "#fff"),
-        5: ("#8B5CF6", "#fff"),
-    }
-    level_badges = ""
-    from constants import find_measurement_game
-    for gk in CORE_AAP_GAMES:
-        gdef = find_measurement_game(gk)
-        gname = esc(gdef["name"][:22] + ("…" if len(gdef["name"]) > 22 else "")) if gdef else esc(gk)
-        lvl = levels.get(gk, 0)
-        bg, fg = LEVEL_COLOURS.get(lvl, ("#E5E7EB", "#6E737B"))
-        label = f"L{lvl}" if lvl > 0 else "—"
-        level_badges += (
-            f'<div style="display:flex;align-items:center;justify-content:space-between;'
-            f'padding:5px 10px;background:#F3F4F5;border-radius:6px;">'
-            f'<span style="font-size:12px;color:#2D323B;">{gname}</span>'
-            f'<span style="font-size:11px;font-weight:700;background:{bg};color:{fg};'
-            f'border-radius:999px;padding:1px 8px;">{label}</span></div>'
-        )
     # AXP journey line for coach view
     from constants import XP_RANK_TIERS
     _cj_max = XP_RANK_TIERS[-1]["min_xp"]
@@ -2760,21 +2699,6 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
                   f'{_xtn:,} AXP to {esc(_next_tier_c["label"])}</div>')
     else:
         _cnote = '<div style="font-size:10px;color:#1EBE8B;margin-top:2px;font-weight:700;">Max rank!</div>'
-
-    # compact level grid used in body below
-    level_grid_html = f"""
-    <div style="margin-bottom:24px;">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-        <div style="width:3px;height:16px;background:#F0A82E;border-radius:2px;"></div>
-        <span style="font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.07em;
-                     color:#2D323B;">Game Levels</span>
-        <span style="font-size:12px;font-weight:700;background:#2D323B;color:#F0A82E;
-                     border-radius:999px;padding:1px 9px;">{games_with_level}/8</span>
-      </div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;">
-        {level_badges}
-      </div>
-    </div>"""
 
     # Build group transfer history notice
     group_lookup = {g["id"]: g["name"] for g in groups} if groups else {}
@@ -2918,9 +2842,7 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
       {nav_cards}
     </div>
 
-    {level_grid_html}
-
-    {measurement_games_form(pid, athlete_levels=levels)}
+    {measurement_games_form(pid)}
 
     <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px;">
       <div style="width:3px;height:16px;background:#F0A82E;border-radius:2px;"></div>

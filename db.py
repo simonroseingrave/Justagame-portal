@@ -2104,15 +2104,6 @@ def _check_all_8_in_session(conn, session_id):
     return [g for g in CORE_AAP_GAMES if g in played]
 
 
-def _has_all_8_l1(conn, participant_id):
-    """True if the athlete holds L1 in all 8 core games."""
-    XP_GAME_CONFIG, LEVEL_XP_AWARDS, XP_RANK_TIERS, XP_PARTICIPATION, CORE_AAP_GAMES = _import_xp_constants()
-    for game_key in CORE_AAP_GAMES:
-        if get_athlete_level(conn, participant_id, game_key) < 1:
-            return False
-    return True
-
-
 def _has_awarded_xp_type_for_session(conn, participant_id, xp_type, session_id, game_key=None):
     """True if this xp_type has already been awarded for this session (prevents double-up).
     Pass game_key to restrict the check to a specific game."""
@@ -2261,15 +2252,6 @@ def process_session_xp(conn, session_id, participant_id, is_formal=True):
                                  notes=f"Personal best — {game_key} ({score})")
                         awarded.append((pb_type, pb_xp, game_key, f"PB {score}"))
 
-        # ── Level threshold check (formal sessions only) ──────────────────
-        if is_formal:
-            new_levels = _check_level_thresholds(
-                conn, participant_id, game_key, game_results, session_id
-            )
-            for lvl in new_levels:
-                xp_amt = LEVEL_XP_AWARDS.get(lvl, 0)
-                awarded.append(("level_achievement", xp_amt, game_key, f"Level {lvl}"))
-
     # ── All 8 core games in one session bonus ─────────────────────────────
     core_in_session = _check_all_8_in_session(conn, session_id)
     if len(core_in_session) >= 8:
@@ -2278,14 +2260,6 @@ def process_session_xp(conn, session_id, participant_id, is_formal=True):
             award_xp(conn, participant_id, "all_8_session", amt,
                      session_id=session_id, notes="All 8 core games in one session")
             awarded.append(("all_8_session", amt, None, "All 8 games bonus"))
-
-    # ── Breadth milestone: L1 in all 8 core games ────────────────────────
-    if is_formal and not _has_awarded_xp_type(conn, participant_id, "all_8_l1"):
-        if _has_all_8_l1(conn, participant_id):
-            amt = XP_PARTICIPATION["all_8_l1"]
-            award_xp(conn, participant_id, "all_8_l1", amt,
-                     session_id=session_id, notes="Earned Level 1 in all 8 core games")
-            awarded.append(("all_8_l1", amt, None, "L1 all 8 games milestone"))
 
     total = sum(a[1] for a in awarded)
     return {

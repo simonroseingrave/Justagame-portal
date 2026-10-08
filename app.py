@@ -299,13 +299,7 @@ def dashboard(req):
         pid = user["id"]
         measurement_sessions = db.measurement_sessions_for(conn, pid)
         xp_data = db.get_athlete_xp(conn, pid)
-        levels = db.get_all_athlete_levels(conn, pid)
-        levels_by_area = db.get_all_athlete_levels_by_area(conn, pid)
         pending_sd = db.get_pending_self_directed_events(conn, pid)
-        thresholds_raw = db.get_all_thresholds(conn)
-        # Key: "game_key|field_key|level" for per-area lookups in the level grid
-        thresholds = {f"{r['game_key']}|{r['field_key']}|{r['level']}": r["threshold_value"]
-                      for r in thresholds_raw}
         att_count = db.count_attendance(conn, pid)
         # Active testing round for this athlete's group
         active_window = None
@@ -329,10 +323,8 @@ def dashboard(req):
             resources = []
         return Response(views.participant_dashboard(
             user, measurement_sessions,
-            xp_data=xp_data, levels=levels,
-            levels_by_area=levels_by_area,
+            xp_data=xp_data,
             pending_self_directed=pending_sd,
-            thresholds=thresholds,
             resources=resources,
             attendance_count=att_count,
             active_window=active_window,
@@ -611,11 +603,10 @@ def coach_participant_detail(req, participant_id):
         groups = db.list_participant_groups(conn)
         message = req.get_query("flash")
         xp_data = db.get_athlete_xp(conn, participant_id)
-        levels = db.get_all_athlete_levels(conn, participant_id)
         att_count = db.count_attendance(conn, participant_id)
         return Response(views.coach_participant_detail(
             coach, dict(participant), measurement_sessions, groups=groups, message=message,
-            xp_data=xp_data, levels=levels, attendance_count=att_count,
+            xp_data=xp_data, attendance_count=att_count,
         ))
     finally:
         conn.close()
@@ -689,10 +680,8 @@ def coach_participant_report(req, participant_id):
             if participant["group_id"] not in coach_group_ids:
                 return Response(views.simple_message_page("Access denied", "You don't have access to this participant.", user=coach), status=403)
         sessions = db.measurement_sessions_for(conn, participant_id)
-        levels_by_area = db.get_all_athlete_levels_by_area(conn, participant_id)
-        thresholds_raw = db.get_all_thresholds(conn)
         return Response(views.individual_athlete_report_page(
-            coach, dict(participant), sessions, levels_by_area, thresholds_raw
+            coach, dict(participant), sessions, {}, []
         ))
     finally:
         conn.close()
@@ -914,16 +903,14 @@ def group_hub_get(req):
                         ).fetchall()
                         existing[a["id"]] = {r["field_key"]: r["value"] for r in rows}
 
-        # Fetch XP + level data per athlete for the overview panel
+        # Fetch XP data per athlete for the overview panel
         athlete_xp_levels = {}
         for a in athletes:
             try:
                 xp = db.get_athlete_xp(conn, a["id"])
-                lvs = db.get_all_athlete_levels(conn, a["id"])
                 athlete_xp_levels[a["id"]] = {
                     "total_xp": xp.get("total", 0),
                     "tier": xp.get("tier"),
-                    "levels": lvs,
                 }
             except Exception:
                 pass
@@ -1439,7 +1426,6 @@ def group_next_steps(req, group_id):
             if group_id not in coach_group_ids:
                 return Response(views.simple_message_page("Access denied", "You don't have access to this group.", user=coach), status=403)
         athletes_with_levels = db.get_group_athletes_with_levels(conn, group_id)
-        thresholds_raw = db.get_all_thresholds(conn)
         # Build per-game-key resource lists from taxonomy tagging
         resource_rows = conn.execute(
             "SELECT rgl.game_key, r.name, rf.name AS folder_name "
@@ -1459,7 +1445,7 @@ def group_next_steps(req, group_id):
             else:
                 game_resources[gk]["test"].append(row["name"])
         return Response(views.group_next_steps_page(
-            coach, dict(group), athletes_with_levels, thresholds_raw,
+            coach, dict(group), athletes_with_levels, [],
             game_resources=game_resources
         ))
     finally:
@@ -3666,10 +3652,9 @@ def athlete_xp_page(req):
     conn = db.get_conn()
     try:
         xp_data = db.get_athlete_xp(conn, user["id"])
-        levels = db.get_all_athlete_levels(conn, user["id"])
     finally:
         conn.close()
-    return Response(views.athlete_xp_page(user, xp_data, levels))
+    return Response(views.athlete_xp_page(user, xp_data, {}))
 
 
 @router.get("/athlete/report")
@@ -3681,12 +3666,10 @@ def athlete_report(req):
     conn = db.get_conn()
     try:
         sessions = db.measurement_sessions_for(conn, user["id"])
-        levels_by_area = db.get_all_athlete_levels_by_area(conn, user["id"])
-        thresholds_raw = db.get_all_thresholds(conn)
     finally:
         conn.close()
     return Response(views.athlete_movement_report_page(
-        dict(user), sessions, levels_by_area, thresholds_raw
+        dict(user), sessions, {}, []
     ))
 
 
@@ -3724,14 +3707,12 @@ def athlete_leaderboard(req):
         for a in athletes:
             pid = a["id"]
             xp_data = db.get_athlete_xp(conn, pid)
-            levels = db.get_all_athlete_levels(conn, pid)
             total_xp = xp_data.get("total", 0)
             ranked.append({
                 "id": pid,
                 "name": a["name"],
                 "total_xp": total_xp,
                 "tier": xp_data.get("tier") or XP_RANK_TIERS[0],
-                "levels": levels,
             })
         ranked.sort(key=lambda x: x["total_xp"], reverse=True)
     finally:
@@ -3944,67 +3925,9 @@ def score_distribution_get(req):
     return Response(views.score_distribution_page(coach, distributions))
 
 
-@router.get("/coach/admin/game-thresholds")
-def game_thresholds_get(req):
-    """System admin: view and set level achievement thresholds per scoring area."""
-    coach = require_system_admin(req)
-    if not coach:
-        return redirect("/login")
-    conn = db.get_conn()
-    try:
-        thresholds = db.get_all_thresholds(conn)
-    finally:
-        conn.close()
-    from constants import SCORING_AREAS, XP_GAME_CONFIG, threshold_field_key
-    return Response(views.game_thresholds_page(
-        coach, thresholds, SCORING_AREAS, XP_GAME_CONFIG, threshold_field_key))
-
-
-@router.post("/coach/admin/game-thresholds/set")
-def game_thresholds_set(req):
-    """System admin: set or update a single game/level threshold."""
-    coach = require_system_admin(req)
-    if not coach:
-        return redirect("/login")
-    game_key  = req.form_get("game_key")
-    level     = req.form_get("level")
-    field_key = req.form_get("field_key")
-    threshold = req.form_get("threshold_value")
-    lower     = req.form_get("lower_is_better") == "1"
-    try:
-        level = int(level)
-        threshold = float(threshold)
-    except (TypeError, ValueError):
-        return flash_redirect("/coach/admin/game-thresholds", "Invalid level or threshold value.")
-    conn = db.get_conn()
-    try:
-        db.set_game_threshold(conn, game_key, level, field_key, threshold,
-                              lower_is_better=lower, set_by=coach["id"])
-    finally:
-        conn.close()
-    return flash_redirect("/coach/admin/game-thresholds",
-                          f"Threshold set: {game_key} L{level} = {threshold}")
-
-
-@router.post("/coach/admin/game-thresholds/delete")
-def game_thresholds_delete(req):
-    """System admin: remove a threshold."""
-    coach = require_system_admin(req)
-    if not coach:
-        return redirect("/login")
-    game_key = req.form_get("game_key")
-    field_key = req.form_get("field_key") or None
-    try:
-        level = int(req.form_get("level"))
-    except (TypeError, ValueError):
-        return flash_redirect("/coach/admin/game-thresholds", "Invalid level.")
-    conn = db.get_conn()
-    try:
-        db.delete_game_threshold(conn, game_key, level, field_key=field_key)
-    finally:
-        conn.close()
-    return flash_redirect("/coach/admin/game-thresholds",
-                          f"Threshold removed: {game_key} L{level}")
+# Threshold admin routes removed — individual level thresholds are no longer used.
+# Levels are now expressed through game card environments (group progression),
+# not individual athlete achievement tracking.
 
 
 @router.get("/coach/leaderboard")
