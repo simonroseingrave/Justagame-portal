@@ -303,6 +303,11 @@ ROUND_XP_COMPLETION_BONUS   = 50   # bonus for completing all 8 core games in a 
 ROUND_XP_IMPROVEMENT_FACTOR = 6    # improvement_pct × 6 AXP per game
 ROUND_XP_IMPROVEMENT_CAP    = 150  # max AXP per game per re-test round
 
+# Kept as empty dict so legacy imports in db.py / views.py don't crash.
+# Automatic level-up XP from session recording is disabled — levels are now
+# controlled exclusively through testing rounds (see testing_rounds table).
+LEVEL_XP_AWARDS = {}
+
 # Rank tiers (ascending by min_xp). label, min_xp, hex colour
 XP_RANK_TIERS = [
     {"label": "Starter",  "min_xp": 0,     "colour": "#6E737B"},

@@ -1214,12 +1214,16 @@ def participant_dashboard(user, measurement_sessions,
         </div>
       </div>"""
 
-    # ── Active measurement window banner ──────────────────────────────────────
+    # ── Active testing round banner ────────────────────────────────────────────
     window_banner = ""
     if active_window:
-        wid = active_window["id"]
-        label_txt = esc(active_window.get("session_label") or "")
-        label_line = f'<div style="font-size:13px;font-weight:700;color:#F0A82E;letter-spacing:0.05em;text-transform:uppercase;margin-bottom:4px;">{label_txt}</div>' if label_txt else ''
+        wid    = active_window["id"]
+        lvl    = active_window.get("level", "")
+        rtype  = active_window.get("round_type", "")
+        seq    = active_window.get("retest_sequence")
+        rlabel = f"Level {lvl} {rtype.title()}" + (f" #{seq}" if seq else "")
+        LEVEL_COLOURS = {1:"#1EBE8B", 2:"#3B82F6", 3:"#F3AA33", 4:"#F97316", 5:"#8B5CF6"}
+        clr = LEVEL_COLOURS.get(lvl, "#F0A82E")
         if already_submitted:
             window_banner = f"""
     <div style="background:linear-gradient(135deg,#064E3B 0%,#065F46 100%);border-radius:16px;
@@ -1230,35 +1234,42 @@ def participant_dashboard(user, measurement_sessions,
                     display:flex;align-items:center;justify-content:center;font-size:22px;
                     flex-shrink:0;color:#1EBE8B;">&#10003;</div>
         <div>
-          {label_line}
+          <div style="font-size:12px;font-weight:700;color:#1EBE8B;letter-spacing:0.05em;
+                      text-transform:uppercase;margin-bottom:2px;">{esc(rlabel)}</div>
           <div style="font-weight:800;color:#FFFFFF;font-size:16px;">Scores submitted!</div>
           <div style="color:rgba(255,255,255,0.60);font-size:13px;margin-top:2px;">
-            AXP will be awarded when your practitioner closes the session.
+            AXP will be awarded when your practitioner closes the round.
           </div>
         </div>
       </div>
+      <a href="/athlete/round/{wid}"
+         style="display:block;text-align:center;margin-top:14px;background:rgba(255,255,255,0.12);
+                color:#FFFFFF;font-weight:700;font-size:13px;border-radius:10px;
+                padding:10px 20px;text-decoration:none;">
+        Review / Update My Scores &#8250;
+      </a>
     </div>"""
         else:
             window_banner = f"""
     <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
                 padding:22px 24px;margin-bottom:20px;
-                border:2px solid #F0A82E;
-                box-shadow:0 0 0 4px rgba(240,168,46,0.12);">
+                border:2px solid {clr};
+                box-shadow:0 0 0 4px {clr}22;">
       <div style="display:flex;align-items:center;gap:6px;margin-bottom:10px;">
-        <div style="width:8px;height:8px;border-radius:50%;background:#F0A82E;
+        <div style="width:8px;height:8px;border-radius:50%;background:{clr};
                     animation:pulse 1.5s infinite;"></div>
         <span style="font-size:11px;font-weight:700;text-transform:uppercase;
-                     letter-spacing:0.08em;color:#F0A82E;">Live Session</span>
+                     letter-spacing:0.08em;color:{clr};">Testing Round Open</span>
       </div>
-      {label_line}
       <div style="font-size:20px;font-weight:800;color:#FFFFFF;margin-bottom:4px;">
-        Testing session is open &#8212; enter your scores!
+        {esc(rlabel)} &#8212; enter your scores!
       </div>
       <div style="font-size:13px;color:rgba(255,255,255,0.55);margin-bottom:18px;">
-        Your practitioner is waiting. Submit your results to earn AXP.
+        Use your <strong style="color:rgba(255,255,255,0.80);">Level {lvl} game cards</strong>.
+        Submit your results to earn AXP.
       </div>
-      <a href="/athlete/window/{wid}"
-         style="display:block;text-align:center;background:#F0A82E;color:#2D323B;
+      <a href="/athlete/round/{wid}"
+         style="display:block;text-align:center;background:{clr};color:#2D323B;
                 font-weight:800;font-size:16px;border-radius:12px;padding:14px 24px;
                 text-decoration:none;letter-spacing:0.02em;">
         Enter My Scores &#8250;
@@ -10262,7 +10273,9 @@ def group_leaderboard_page(coach, groups, selected_group_id=None, ranked_athlete
 
 def axp_info_page(user):
     """Plain-English explainer of the AXP points system for athletes."""
-    from constants import XP_RANK_TIERS, XP_PARTICIPATION, LEVEL_XP_AWARDS
+    from constants import (XP_RANK_TIERS, XP_PARTICIPATION,
+                           ROUND_XP_BASELINE_PER_GAME, ROUND_XP_COMPLETION_BONUS,
+                           ROUND_XP_IMPROVEMENT_FACTOR, ROUND_XP_IMPROVEMENT_CAP)
 
     tier_rows = ""
     for t in XP_RANK_TIERS:
@@ -10275,36 +10288,44 @@ def axp_info_page(user):
           <span style="font-size:13px;color:#6B7280;">{t['min_xp']:,} AXP{' +' if t['min_xp'] > 0 else ''}</span>
         </div>"""
 
-    earn_rows = [
-        ("🏃 Completing a game in a testing session", "50 AXP"),
-        ("⭐ Personal best in a testing session", "50 AXP"),
-        ("🎯 Completing a self-directed session game", "25 AXP"),
-        ("🌟 Personal best in a self-directed session", "25 AXP"),
-        ("👋 First ever session (Welcome Bonus)", "100 AXP"),
-        ("🆕 First time playing a new game", "20 AXP"),
-        ("🏆 All 8 games in one session", "100 AXP"),
-        ("🔥 3-session attendance streak", "30 AXP"),
-        ("🔥🔥 5-session attendance streak", "75 AXP"),
-        ("📍 10th session milestone", "150 AXP"),
-        ("📍 25th session milestone", "300 AXP"),
-        ("📍 50th session milestone", "600 AXP"),
+    # Testing round AXP
+    testing_rows = [
+        (f"&#9654; Each game completed in a Baseline round", f"{ROUND_XP_BASELINE_PER_GAME} AXP"),
+        (f"&#9654; Finishing all games in a Baseline round", f"+{ROUND_XP_COMPLETION_BONUS} AXP bonus"),
+        (f"&#9654; Each game in a Re-Test (based on improvement)", f"Up to {ROUND_XP_IMPROVEMENT_CAP} AXP"),
+        (f"&#9654; Completing all games in a Re-Test round", f"+{ROUND_XP_COMPLETION_BONUS} AXP bonus"),
     ]
-    earn_html = ""
-    for label, pts in earn_rows:
-        earn_html += f"""
+    testing_html = ""
+    for label, pts in testing_rows:
+        testing_html += f"""
+        <div style="display:flex;justify-content:space-between;align-items:center;
+                    padding:9px 0;border-bottom:1px solid #F3F4F6;gap:12px;">
+          <span style="font-size:13px;color:#374151;">{label}</span>
+          <span style="font-size:13px;font-weight:700;color:#F0A82E;white-space:nowrap;">{pts}</span>
+        </div>"""
+
+    # Other AXP
+    other_rows = [
+        ("&#9733; Completing a game in a regular session", "50 AXP"),
+        ("&#9733; Personal best in a regular session", "50 AXP"),
+        ("&#9733; Completing a self-directed session game", "25 AXP"),
+        ("&#9733; Personal best in a self-directed session", "25 AXP"),
+        ("&#9733; First ever session (Welcome Bonus)", "100 AXP"),
+        ("&#9733; First time playing a new game", "20 AXP"),
+        ("&#9733; All 8 games in one session", "100 AXP"),
+        ("&#9733; 3-session attendance streak", "30 AXP"),
+        ("&#9733; 5-session attendance streak", "75 AXP"),
+        ("&#9733; 10th session milestone", "150 AXP"),
+        ("&#9733; 25th session milestone", "300 AXP"),
+        ("&#9733; 50th session milestone", "600 AXP"),
+    ]
+    other_html = ""
+    for label, pts in other_rows:
+        other_html += f"""
         <div style="display:flex;justify-content:space-between;align-items:center;
                     padding:9px 0;border-bottom:1px solid #F3F4F6;gap:12px;">
           <span style="font-size:13px;color:#374151;">{label}</span>
           <span style="font-size:13px;font-weight:700;color:#2D323B;white-space:nowrap;">{pts}</span>
-        </div>"""
-
-    level_rows = ""
-    for lvl, pts in LEVEL_XP_AWARDS.items():
-        level_rows += f"""
-        <div style="display:flex;justify-content:space-between;align-items:center;
-                    padding:9px 0;border-bottom:1px solid #F3F4F6;gap:12px;">
-          <span style="font-size:13px;color:#374151;">Reaching Level {lvl} in any game</span>
-          <span style="font-size:13px;font-weight:700;color:#2D323B;">{pts} AXP (one-time)</span>
         </div>"""
 
     body = f"""
@@ -10317,35 +10338,40 @@ def axp_info_page(user):
         <h1 style="font-size:26px;font-weight:800;margin:0 0 10px;">What is AXP?</h1>
         <p style="font-size:14px;color:rgba(255,255,255,0.8);line-height:1.7;margin:0;">
           <strong style="color:#F0A82E;">AXP (Adaptability Experience Points)</strong> is how we track
-          your effort and progress in the Athlete Adaptability Programme. Every time you turn up,
-          test yourself, hit a personal best, or reach a new level — you earn AXP.
+          your effort and progress in the Athlete Adaptability Programme. Every time you show up,
+          test yourself, or improve your scores — you earn AXP.
           It&rsquo;s not just about how good you are; it&rsquo;s about how much you&rsquo;re
           putting in and growing.
         </p>
       </div>
 
       <div class="card" style="margin-bottom:20px;">
+        <h2 style="font-size:15px;font-weight:700;color:#2D323B;margin:0 0 4px;">AXP from Testing Rounds</h2>
+        <p style="font-size:13px;color:#6B7280;margin:0 0 4px;">
+          The biggest AXP comes from testing rounds opened by your practitioner.
+        </p>
+        <p style="font-size:13px;color:#6B7280;margin:0 0 12px;">
+          <strong>Re-Test AXP</strong> is based on how much you improved since your last test.
+          The formula is: <em>improvement % &times; {ROUND_XP_IMPROVEMENT_FACTOR}</em>, capped at {ROUND_XP_IMPROVEMENT_CAP} AXP per game.
+          A 20% improvement earns 120 AXP per game — so the harder you work between tests, the more you earn.
+        </p>
+        {testing_html}
+      </div>
+
+      <div class="card" style="margin-bottom:20px;">
+        <h2 style="font-size:15px;font-weight:700;color:#2D323B;margin:0 0 4px;">Other ways to earn AXP</h2>
+        <p style="font-size:13px;color:#6B7280;margin:0 0 12px;">
+          You also earn AXP for regular sessions, streaks, and milestones.
+        </p>
+        {other_html}
+      </div>
+
+      <div class="card">
         <h2 style="font-size:15px;font-weight:700;color:#2D323B;margin:0 0 4px;">Ranks</h2>
         <p style="font-size:13px;color:#6B7280;margin:0 0 12px;">
           Your rank shows how much AXP you&rsquo;ve earned overall. Keep showing up and it keeps climbing.
         </p>
         {tier_rows}
-      </div>
-
-      <div class="card" style="margin-bottom:20px;">
-        <h2 style="font-size:15px;font-weight:700;color:#2D323B;margin:0 0 4px;">How you earn AXP</h2>
-        <p style="font-size:13px;color:#6B7280;margin:0 0 12px;">
-          AXP is awarded by your practitioner after each session closes.
-        </p>
-        {earn_html}
-      </div>
-
-      <div class="card">
-        <h2 style="font-size:15px;font-weight:700;color:#2D323B;margin:0 0 4px;">Level bonuses</h2>
-        <p style="font-size:13px;color:#6B7280;margin:0 0 12px;">
-          Each time you reach a new level in any game, you get a one-time bonus on top of your session AXP.
-        </p>
-        {level_rows}
       </div>
     </div>"""
 
@@ -11435,6 +11461,147 @@ def testing_round_page(coach, rnd, athletes, scores_by_athlete, games):
     </script>"""
 
     return layout(f"{rlabel} — Scores", body, user=coach, active_nav="group_hub")
+
+
+def athlete_round_page(athlete, rnd, games, existing_scores):
+    """Athlete self-entry page for an open testing round."""
+    from constants import GAME_DISPLAY_NAMES, XP_GAME_CONFIG, ROUND_XP_BASELINE_PER_GAME, ROUND_XP_COMPLETION_BONUS, ROUND_XP_IMPROVEMENT_FACTOR, ROUND_XP_IMPROVEMENT_CAP
+    rid    = rnd["id"]
+    lvl    = rnd["level"]
+    rtype  = rnd["round_type"]
+    seq    = rnd.get("retest_sequence")
+    is_open = rnd["status"] == "open"
+    rlabel = f"Level {lvl} {rtype.title()}" + (f" #{seq}" if seq else "")
+
+    LEVEL_COLOURS = {1:"#1EBE8B", 2:"#3B82F6", 3:"#F3AA33", 4:"#F97316", 5:"#8B5CF6"}
+    clr = LEVEL_COLOURS.get(lvl, "#6E737B")
+
+    if rtype == "baseline":
+        axp_note = f"You earn <strong>{ROUND_XP_BASELINE_PER_GAME} AXP</strong> per game you complete, plus a <strong>{ROUND_XP_COMPLETION_BONUS} AXP</strong> bonus for finishing all games."
+    else:
+        axp_note = f"AXP is based on how much you improved since your baseline. The more you improve, the more AXP you earn — up to <strong>{ROUND_XP_IMPROVEMENT_CAP} AXP</strong> per game plus a <strong>{ROUND_XP_COMPLETION_BONUS} AXP</strong> completion bonus."
+
+    callout = f"""
+    <div style="background:linear-gradient(135deg,{clr}22 0%,{clr}11 100%);
+                border:2px solid {clr};border-radius:16px;padding:18px 20px;margin-bottom:20px;">
+      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;
+                  color:{clr};margin-bottom:6px;">Testing Round Open</div>
+      <div style="font-size:22px;font-weight:900;color:#2D323B;margin-bottom:6px;">{esc(rlabel)}</div>
+      <p style="margin:0;font-size:13px;color:#555;">
+        Enter your scores below using the <strong>Level {lvl} game cards</strong>.
+        Make sure you're playing at Level {lvl} for all games — check your game card before starting each one.
+      </p>
+      <p style="margin:10px 0 0;font-size:13px;color:#555;">{axp_note}</p>
+    </div>"""
+
+    if not is_open:
+        callout = f"""
+    <div style="background:#F4F5F7;border-radius:14px;padding:14px 18px;margin-bottom:20px;
+                font-size:13px;color:#6E737B;">
+      This round (<strong>{esc(rlabel)}</strong>) is now <strong>closed</strong>.
+      Your scores are saved — AXP has been awarded.
+    </div>"""
+
+    # Score entry fields
+    score_cards = ""
+    for section in games:
+        for g in section.get("games", []):
+            gkey  = g["key"]
+            gdisp = esc(GAME_DISPLAY_NAMES.get(gkey, gkey.replace("_", " ").title()))
+            visible = [f for f in g.get("fields", []) if not f.get("hidden") and not f.get("computed")]
+            if not visible:
+                continue
+            inputs = ""
+            for f in visible:
+                fkey   = f["key"]
+                flabel = esc(f.get("label", fkey))
+                funit  = esc(f.get("unit", ""))
+                val    = existing_scores.get(gkey, {}).get(fkey, "")
+                val_s  = str(val) if val != "" else ""
+                ro     = 'readonly style="background:#F4F5F7;color:#9CA3AF;"' if not is_open else ""
+                inputs += f"""
+              <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+                <label style="flex:1;font-size:13px;color:#555555;">{flabel}
+                  {f'<span style="color:#BDC4CA;font-size:11px;"> ({funit})</span>' if funit else ''}
+                </label>
+                <input type="number" step="any" placeholder="—"
+                       class="score-input" data-game="{gkey}" data-field="{fkey}"
+                       value="{val_s}" {ro}
+                       style="width:90px;border:1.5px solid #DDE0E3;border-radius:8px;
+                              padding:7px 10px;font-size:15px;text-align:center;
+                              font-weight:700;color:#2D323B;">
+              </div>"""
+            save_btn = ""
+            if is_open:
+                save_btn = f"""
+            <button onclick="saveGame('{gkey}', this)"
+                    data-gkey="{gkey}"
+                    style="margin-top:8px;background:{clr};color:#fff;font-weight:700;
+                           font-size:13px;border:none;border-radius:8px;padding:9px 18px;
+                           cursor:pointer;width:100%;">
+              Save {gdisp} Scores
+            </button>
+            <div class="save-msg" data-gkey="{gkey}"
+                 style="font-size:12px;color:#6E737B;margin-top:6px;text-align:center;"></div>"""
+            score_cards += f"""
+        <div style="background:#FFFFFF;border:1.5px solid #E5E7EB;border-radius:14px;
+                    padding:16px 18px;margin-bottom:14px;">
+          <div style="font-weight:800;font-size:15px;color:#2D323B;margin-bottom:12px;
+                      display:flex;align-items:center;gap:8px;">
+            <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                         background:{clr};flex-shrink:0;"></span>
+            {gdisp}
+          </div>
+          {inputs}
+          {save_btn}
+        </div>"""
+
+    body = f"""
+    <div style="max-width:560px;margin:0 auto;">
+      {callout}
+      {score_cards}
+      <div style="margin-top:8px;padding:14px;background:#EEF3F5;border-radius:12px;
+                  font-size:13px;color:#6E737B;text-align:center;">
+        AXP is awarded automatically when your practitioner closes the round.<br>
+        You can update your scores any time while the round is open.
+      </div>
+    </div>
+
+    <script>
+    async function saveGame(gkey, btn) {{
+      const inputs = document.querySelectorAll(`.score-input[data-game="${{gkey}}"]`);
+      const scores = {{}};
+      inputs.forEach(inp => {{
+        if (inp.value !== '') scores[gkey + '.' + inp.dataset.field] = parseFloat(inp.value);
+      }});
+      const msgEl = document.querySelector(`.save-msg[data-gkey="${{gkey}}"]`);
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      try {{
+        const r = await fetch('/athlete/round/{rid}/score', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify({{ scores }}),
+        }});
+        const j = await r.json();
+        if (j.ok) {{
+          msgEl.textContent = '✓ Saved';
+          msgEl.style.color = '#1EBE8B';
+        }} else {{
+          msgEl.textContent = j.error || 'Error — try again';
+          msgEl.style.color = '#EF4444';
+        }}
+      }} catch(e) {{
+        msgEl.textContent = 'Network error';
+        msgEl.style.color = '#EF4444';
+      }}
+      btn.disabled = false;
+      btn.textContent = 'Save ' + btn.dataset.gkey.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase()) + ' Scores';
+      setTimeout(() => {{ if (msgEl) msgEl.textContent = ''; }}, 4000);
+    }}
+    </script>"""
+
+    return layout(f"{rlabel} — My Scores", body, user=athlete, active_nav="home")
 
 
 def measurement_window_status_page(coach, window, group, athletes, submissions, submitted_ids):

@@ -316,6 +316,8 @@ def dashboard(req):
                 rnd = db.get_open_round_for_group(conn, gid)
                 if rnd:
                     active_window = dict(rnd)
+                    existing = db.get_athlete_round_scores(conn, rnd["id"], pid)
+                    already_submitted = bool(existing)
         except Exception:
             pass
         # Recent public resources for dashboard preview (up to 6)
@@ -3713,6 +3715,67 @@ def athlete_leaderboard(req):
     finally:
         conn.close()
     return Response(views.athlete_leaderboard_page(user, ranked, group_name=group_name))
+
+
+@router.get("/athlete/round/<int:round_id>")
+def athlete_round_view(req, round_id):
+    """Athlete self-entry page for an open testing round."""
+    user = require_participant(req)
+    if not user:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        rnd = db.get_testing_round(conn, round_id)
+        if not rnd:
+            return Response("Round not found", status=404)
+        # Confirm this athlete belongs to the round's group
+        group_row = conn.execute(
+            "SELECT group_id FROM participant_group_members WHERE participant_id = ? AND group_id = ?",
+            (user["id"], rnd["group_id"])
+        ).fetchone()
+        if not group_row:
+            return Response("Access denied", status=403)
+        existing = db.get_athlete_round_scores(conn, round_id, user["id"])
+    finally:
+        conn.close()
+    from constants import active_measurement_games
+    games = active_measurement_games()
+    return Response(views.athlete_round_page(user, rnd, games, existing))
+
+
+@router.post("/athlete/round/<int:round_id>/score")
+def athlete_round_score_save(req, round_id):
+    """Athlete saves their own scores for an open testing round (JSON)."""
+    import json as _json
+    user = require_participant(req)
+    if not user:
+        return json_response({"ok": False, "error": "Not logged in"}, status=401)
+    try:
+        body = _json.loads(req.body)
+        scores = body.get("scores", {})
+    except Exception:
+        return json_response({"ok": False, "error": "Bad request"}, status=400)
+    conn = db.get_conn()
+    try:
+        rnd = db.get_testing_round(conn, round_id)
+        if not rnd or rnd["status"] != "open":
+            return json_response({"ok": False, "error": "Round not open"})
+        # Confirm athlete is in this group
+        group_row = conn.execute(
+            "SELECT group_id FROM participant_group_members WHERE participant_id = ? AND group_id = ?",
+            (user["id"], rnd["group_id"])
+        ).fetchone()
+        if not group_row:
+            return json_response({"ok": False, "error": "Access denied"}, status=403)
+        for key, val in scores.items():
+            if "." not in key:
+                continue
+            gkey, fkey = key.split(".", 1)
+            db.upsert_round_score(conn, round_id, user["id"], gkey, fkey, val, user["id"])
+        conn.commit()
+    finally:
+        conn.close()
+    return json_response({"ok": True})
 
 
 @router.get("/coach/participants/<int:participant_id>/xp")
