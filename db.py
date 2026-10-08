@@ -235,26 +235,47 @@ CREATE TABLE IF NOT EXISTS athlete_personal_bests (
     UNIQUE (participant_id, game_key, field_key)
 );
 
-CREATE TABLE IF NOT EXISTS measurement_windows (
+-- Testing round: a group-level formal testing event at a specific level and type.
+-- round_type: 'baseline' (first time at this level) or 'retest' (repeat for comparison).
+-- retest_sequence: null for baseline; 1, 2, 3... for successive retests at same level.
+-- Unlock rules enforced in Python: baseline requires previous level retest; retest requires baseline.
+CREATE TABLE IF NOT EXISTS testing_rounds (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     group_id INTEGER NOT NULL REFERENCES participant_groups(id),
-    opened_by INTEGER NOT NULL REFERENCES users(id),
+    level INTEGER NOT NULL CHECK (level BETWEEN 1 AND 5),
+    round_type TEXT NOT NULL CHECK (round_type IN ('baseline', 'retest')),
+    retest_sequence INTEGER,
+    status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
     opened_at TEXT NOT NULL,
     closed_at TEXT,
-    status TEXT NOT NULL DEFAULT 'open',
-    session_label TEXT,
-    session_month TEXT,
+    opened_by INTEGER NOT NULL REFERENCES users(id),
     notes TEXT
 );
 
-CREATE TABLE IF NOT EXISTS window_submissions (
+-- Individual athlete scores recorded within a testing round.
+-- One row per (round × athlete × game × field).
+CREATE TABLE IF NOT EXISTS round_scores (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    window_id INTEGER NOT NULL REFERENCES measurement_windows(id),
-    participant_id INTEGER NOT NULL REFERENCES users(id),
-    session_id INTEGER REFERENCES measurement_sessions(id),
-    submitted_at TEXT NOT NULL,
-    committed INTEGER NOT NULL DEFAULT 0,
-    UNIQUE (window_id, participant_id)
+    round_id INTEGER NOT NULL REFERENCES testing_rounds(id),
+    athlete_id INTEGER NOT NULL REFERENCES users(id),
+    game_key TEXT NOT NULL,
+    field_key TEXT NOT NULL,
+    value REAL NOT NULL,
+    recorded_at TEXT NOT NULL,
+    recorded_by INTEGER NOT NULL REFERENCES users(id)
+);
+
+-- AXP awarded per athlete per game per round, calculated on round close.
+-- award_type: 'baseline_participation', 'improvement', or 'completion_bonus'.
+CREATE TABLE IF NOT EXISTS round_xp_awards (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    round_id INTEGER NOT NULL REFERENCES testing_rounds(id),
+    athlete_id INTEGER NOT NULL REFERENCES users(id),
+    game_key TEXT,
+    improvement_pct REAL,
+    xp_awarded INTEGER NOT NULL,
+    award_type TEXT NOT NULL,
+    awarded_at TEXT NOT NULL
 );
 """
 
@@ -1616,64 +1637,338 @@ def award_level(conn, participant_id, game_key, level, field_key="", session_id=
 
 # ── Level Thresholds ──────────────────────────────────────────────────────────
 
-def get_game_threshold(conn, game_key, level, field_key=None):
-    """Return threshold row or None. Looks up by (game_key, field_key, level).
-    If field_key is None, returns the first threshold for (game_key, level)."""
-    if field_key is not None:
-        return conn.execute(
-            "SELECT * FROM game_level_thresholds WHERE game_key = ? AND field_key = ? AND level = ?",
-            (game_key, field_key, level),
+# ── Testing Round Helpers ─────────────────────────────────────────────────────
+
+def get_available_round_options(conn, group_id):
+    """Return a list of dicts describing what round types the group can open next.
+    Rules:
+    - Only one round may be open at a time.
+    - If any round is open, returns [].
+    - Level 1 Baseline is always available if never done.
+    - Re-Test requires the same level's Baseline to be closed.
+    - Level N Baseline requires Level N-1 Re-Test (at least one) to be closed.
+    - Multiple Re-Tests at same level are allowed before advancing.
+    """
+    open_round = conn.execute(
+        "SELECT id FROM testing_rounds WHERE group_id = ? AND status = 'open'", (group_id,)
+    ).fetchone()
+    if open_round:
+        return []
+
+    closed = conn.execute(
+        "SELECT level, round_type FROM testing_rounds "
+        "WHERE group_id = ? AND status = 'closed' ORDER BY id",
+        (group_id,),
+    ).fetchall()
+
+    done_baselines = {r["level"] for r in closed if r["round_type"] == "baseline"}
+    done_retests   = {r["level"] for r in closed if r["round_type"] == "retest"}
+
+    options = []
+
+    # Level 1 Baseline always available if not yet done
+    if 1 not in done_baselines:
+        options.append({"level": 1, "round_type": "baseline", "label": "Level 1 Baseline"})
+        return options  # nothing else can happen until L1 baseline is done
+
+    # For each level: if baseline done but no retest → retest is the only option
+    # If retest done → can do another retest OR next level's baseline
+    for lvl in range(1, 6):
+        if lvl not in done_baselines:
+            break
+        if lvl not in done_retests:
+            # Must complete retest before anything else
+            options.append({"level": lvl, "round_type": "retest", "label": f"Level {lvl} Re-Test"})
+            return options
+        else:
+            # Can repeat retest at this level
+            options.append({"level": lvl, "round_type": "retest", "label": f"Level {lvl} Re-Test"})
+            # Or advance to next level baseline (if not already done and level exists)
+            next_lvl = lvl + 1
+            if next_lvl <= 5 and next_lvl not in done_baselines:
+                options.append({"level": next_lvl, "round_type": "baseline",
+                                "label": f"Level {next_lvl} Baseline"})
+
+    return options
+
+
+def open_testing_round(conn, group_id, level, round_type, opened_by):
+    """Open a new testing round for a group. Validates unlock rules.
+    Returns (round_id, None) on success or (None, error_message) on failure."""
+    available = get_available_round_options(conn, group_id)
+    if not available:
+        return None, "A round is already open for this group, or no rounds are available."
+    valid = any(o["level"] == level and o["round_type"] == round_type for o in available)
+    if not valid:
+        return None, f"Level {level} {round_type} is not available for this group yet."
+
+    # Calculate retest_sequence
+    retest_sequence = None
+    if round_type == "retest":
+        existing = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM testing_rounds "
+            "WHERE group_id = ? AND level = ? AND round_type = 'retest'",
+            (group_id, level),
         ).fetchone()
+        retest_sequence = (existing["cnt"] or 0) + 1
+
+    conn.execute(
+        "INSERT INTO testing_rounds (group_id, level, round_type, retest_sequence, "
+        "status, opened_at, opened_by) VALUES (?, ?, ?, ?, 'open', ?, ?)",
+        (group_id, level, round_type, retest_sequence, now(), opened_by),
+    )
+    conn.commit()
+    row = conn.execute(
+        "SELECT id FROM testing_rounds WHERE group_id = ? ORDER BY id DESC LIMIT 1", (group_id,)
+    ).fetchone()
+    return row["id"], None
+
+
+def get_testing_round(conn, round_id):
     return conn.execute(
-        "SELECT * FROM game_level_thresholds WHERE game_key = ? AND level = ? LIMIT 1",
-        (game_key, level),
+        "SELECT tr.*, pg.name AS group_name FROM testing_rounds tr "
+        "JOIN participant_groups pg ON pg.id = tr.group_id "
+        "WHERE tr.id = ?", (round_id,)
     ).fetchone()
 
 
-def get_all_thresholds(conn):
-    """Return all threshold rows ordered by game_key, field_key, level."""
+def get_open_round_for_group(conn, group_id):
     return conn.execute(
-        "SELECT * FROM game_level_thresholds ORDER BY game_key, field_key, level"
+        "SELECT * FROM testing_rounds WHERE group_id = ? AND status = 'open' "
+        "ORDER BY opened_at DESC LIMIT 1", (group_id,)
+    ).fetchone()
+
+
+def get_rounds_for_group(conn, group_id):
+    return conn.execute(
+        "SELECT * FROM testing_rounds WHERE group_id = ? ORDER BY id DESC", (group_id,)
     ).fetchall()
 
 
-def set_game_threshold(conn, game_key, level, field_key, threshold_value,
-                       lower_is_better=False, set_by=None):
-    """Insert or update a threshold keyed by (game_key, field_key, level).
-    Only system_admin should call this."""
+def upsert_round_score(conn, round_id, athlete_id, game_key, field_key, value, recorded_by):
+    """Insert or update a single score field for an athlete in a round."""
     existing = conn.execute(
-        "SELECT id FROM game_level_thresholds WHERE game_key = ? AND field_key = ? AND level = ?",
-        (game_key, field_key, level),
+        "SELECT id FROM round_scores WHERE round_id = ? AND athlete_id = ? "
+        "AND game_key = ? AND field_key = ?",
+        (round_id, athlete_id, game_key, field_key),
     ).fetchone()
     if existing:
         conn.execute(
-            "UPDATE game_level_thresholds SET threshold_value = ?, "
-            "lower_is_better = ?, set_by = ?, updated_at = ? WHERE id = ?",
-            (threshold_value, 1 if lower_is_better else 0, set_by, now(), existing["id"]),
+            "UPDATE round_scores SET value = ?, recorded_at = ?, recorded_by = ? WHERE id = ?",
+            (value, now(), recorded_by, existing["id"]),
         )
     else:
         conn.execute(
-            "INSERT INTO game_level_thresholds "
-            "(game_key, field_key, level, threshold_value, lower_is_better, set_by, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (game_key, field_key, level, threshold_value, 1 if lower_is_better else 0, set_by, now()),
+            "INSERT INTO round_scores (round_id, athlete_id, game_key, field_key, "
+            "value, recorded_at, recorded_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (round_id, athlete_id, game_key, field_key, value, now(), recorded_by),
         )
     conn.commit()
 
 
-def delete_game_threshold(conn, game_key, level, field_key=None):
-    """Delete threshold(s) for a game+level. Pass field_key to delete one specific row."""
-    if field_key is not None:
-        conn.execute(
-            "DELETE FROM game_level_thresholds WHERE game_key = ? AND field_key = ? AND level = ?",
-            (game_key, field_key, level),
-        )
+def get_round_scores(conn, round_id):
+    """Return all score rows for a round."""
+    return conn.execute(
+        "SELECT rs.*, u.name AS athlete_name FROM round_scores rs "
+        "JOIN users u ON u.id = rs.athlete_id WHERE rs.round_id = ? "
+        "ORDER BY u.name, rs.game_key, rs.field_key",
+        (round_id,),
+    ).fetchall()
+
+
+def get_athlete_round_scores(conn, round_id, athlete_id):
+    """Return scores for one athlete in a round as {game_key: {field_key: value}}."""
+    rows = conn.execute(
+        "SELECT game_key, field_key, value FROM round_scores "
+        "WHERE round_id = ? AND athlete_id = ?",
+        (round_id, athlete_id),
+    ).fetchall()
+    result = {}
+    for r in rows:
+        result.setdefault(r["game_key"], {})[r["field_key"]] = r["value"]
+    return result
+
+
+def get_previous_round_for_comparison(conn, round_id):
+    """Return the round that should be used as the comparison baseline for this round.
+    For retest_sequence=1: compare to the baseline round at the same level.
+    For retest_sequence=2+: compare to the previous retest at the same level.
+    Returns None for baseline rounds (no comparison possible).
+    """
+    rnd = conn.execute("SELECT * FROM testing_rounds WHERE id = ?", (round_id,)).fetchone()
+    if not rnd or rnd["round_type"] == "baseline":
+        return None
+    group_id = rnd["group_id"]
+    level    = rnd["level"]
+    seq      = rnd["retest_sequence"] or 1
+
+    if seq == 1:
+        # Compare to the baseline at this level
+        return conn.execute(
+            "SELECT * FROM testing_rounds WHERE group_id = ? AND level = ? "
+            "AND round_type = 'baseline' AND status = 'closed' ORDER BY id DESC LIMIT 1",
+            (group_id, level),
+        ).fetchone()
     else:
-        conn.execute(
-            "DELETE FROM game_level_thresholds WHERE game_key = ? AND level = ?",
-            (game_key, level),
-        )
+        # Compare to previous retest at this level
+        return conn.execute(
+            "SELECT * FROM testing_rounds WHERE group_id = ? AND level = ? "
+            "AND round_type = 'retest' AND retest_sequence = ? AND status = 'closed' ORDER BY id DESC LIMIT 1",
+            (group_id, level, seq - 1),
+        ).fetchone()
+
+
+def close_testing_round(conn, round_id):
+    """Close a testing round and calculate + award AXP for all athletes.
+    Returns list of {athlete_id, athlete_name, total_xp} dicts.
+    """
+    from constants import (
+        XP_GAME_CONFIG, CORE_AAP_GAMES,
+        ROUND_XP_BASELINE_PER_GAME, ROUND_XP_COMPLETION_BONUS,
+        ROUND_XP_IMPROVEMENT_FACTOR, ROUND_XP_IMPROVEMENT_CAP,
+    )
+    rnd = conn.execute("SELECT * FROM testing_rounds WHERE id = ?", (round_id,)).fetchone()
+    if not rnd:
+        return []
+    is_baseline   = (rnd["round_type"] == "baseline")
+    prev_round    = None if is_baseline else get_previous_round_for_comparison(conn, round_id)
+    group_id      = rnd["group_id"]
+    ts            = now()
+
+    # Gather all athletes in this group
+    athletes = conn.execute(
+        "SELECT u.id, u.name FROM users u "
+        "JOIN participant_groups pg ON pg.id = ? "
+        "WHERE u.group_id = ? AND u.role = 'participant' AND u.active = 1",
+        (group_id, group_id),
+    ).fetchall()
+    # Fallback: get athletes from round_scores if group membership query returns nothing
+    if not athletes:
+        athletes = conn.execute(
+            "SELECT DISTINCT u.id, u.name FROM users u "
+            "JOIN round_scores rs ON rs.athlete_id = u.id WHERE rs.round_id = ?",
+            (round_id,),
+        ).fetchall()
+
+    summaries = []
+    for athlete in athletes:
+        aid   = athlete["id"]
+        aname = athlete["name"]
+        scores_this  = get_athlete_round_scores(conn, round_id, aid)
+        scores_prev  = {} if not prev_round else get_athlete_round_scores(conn, prev_round["id"], aid)
+        total_xp     = 0
+        games_scored = 0
+
+        for game_key in CORE_AAP_GAMES:
+            cfg = XP_GAME_CONFIG.get(game_key, {})
+            primary_field     = cfg.get("primary_field")
+            higher_is_better  = cfg.get("higher_is_better", True)
+            this_game         = scores_this.get(game_key, {})
+            score_this        = this_game.get(primary_field) if primary_field else None
+
+            if score_this is None:
+                continue
+            try:
+                score_this = float(score_this)
+            except (TypeError, ValueError):
+                continue
+
+            games_scored += 1
+
+            if is_baseline:
+                xp = ROUND_XP_BASELINE_PER_GAME
+                conn.execute(
+                    "INSERT INTO round_xp_awards (round_id, athlete_id, game_key, "
+                    "improvement_pct, xp_awarded, award_type, awarded_at) VALUES (?,?,?,NULL,?,?,?)",
+                    (round_id, aid, game_key, xp, "baseline_participation", ts),
+                )
+                conn.execute(
+                    "INSERT INTO xp_events (participant_id, xp_type, amount, game_key, notes, created_at) "
+                    "VALUES (?, 'round_baseline', ?, ?, ?, ?)",
+                    (aid, xp, game_key, f"Baseline round Level {rnd['level']}", ts),
+                )
+                total_xp += xp
+            else:
+                prev_game  = scores_prev.get(game_key, {})
+                score_prev = prev_game.get(primary_field) if primary_field else None
+                if score_prev is None:
+                    continue
+                try:
+                    score_prev = float(score_prev)
+                except (TypeError, ValueError):
+                    continue
+                if score_prev == 0:
+                    improvement_pct = 0.0
+                elif higher_is_better:
+                    improvement_pct = max(0.0, (score_this - score_prev) / score_prev * 100)
+                else:
+                    improvement_pct = max(0.0, (score_prev - score_this) / score_prev * 100)
+
+                xp = min(int(improvement_pct * ROUND_XP_IMPROVEMENT_FACTOR), ROUND_XP_IMPROVEMENT_CAP)
+                conn.execute(
+                    "INSERT INTO round_xp_awards (round_id, athlete_id, game_key, "
+                    "improvement_pct, xp_awarded, award_type, awarded_at) VALUES (?,?,?,?,?,?,?)",
+                    (round_id, aid, game_key, round(improvement_pct, 2), xp, "improvement", ts),
+                )
+                if xp > 0:
+                    conn.execute(
+                        "INSERT INTO xp_events (participant_id, xp_type, amount, game_key, notes, created_at) "
+                        "VALUES (?, 'round_improvement', ?, ?, ?, ?)",
+                        (aid, xp, game_key,
+                         f"Level {rnd['level']} Re-Test {rnd['retest_sequence']} — "
+                         f"{round(improvement_pct,1)}% improvement", ts),
+                    )
+                total_xp += xp
+
+        # Completion bonus: all 8 core games scored
+        if games_scored >= len(CORE_AAP_GAMES):
+            bonus = ROUND_XP_COMPLETION_BONUS
+            conn.execute(
+                "INSERT INTO round_xp_awards (round_id, athlete_id, game_key, "
+                "improvement_pct, xp_awarded, award_type, awarded_at) VALUES (?,?,NULL,NULL,?,?,?)",
+                (round_id, aid, bonus, "completion_bonus", ts),
+            )
+            conn.execute(
+                "INSERT INTO xp_events (participant_id, xp_type, amount, game_key, notes, created_at) "
+                "VALUES (?, 'round_completion', ?, NULL, ?, ?)",
+                (aid, bonus, f"Completed all games — Level {rnd['level']} round", ts),
+            )
+            total_xp += bonus
+
+        summaries.append({"athlete_id": aid, "athlete_name": aname, "total_xp": total_xp})
+
+    conn.execute(
+        "UPDATE testing_rounds SET status = 'closed', closed_at = ? WHERE id = ?",
+        (ts, round_id),
+    )
     conn.commit()
+    return summaries
+
+
+def get_round_xp_summary(conn, round_id, athlete_id):
+    """Return AXP award rows for one athlete in a round."""
+    return conn.execute(
+        "SELECT * FROM round_xp_awards WHERE round_id = ? AND athlete_id = ? ORDER BY id",
+        (round_id, athlete_id),
+    ).fetchall()
+
+
+def get_athlete_testing_history(conn, athlete_id, group_id=None):
+    """Return all closed rounds an athlete has scores in, with total XP earned per round."""
+    q = (
+        "SELECT tr.id, tr.level, tr.round_type, tr.retest_sequence, tr.closed_at, "
+        "tr.group_id, COALESCE(SUM(rxa.xp_awarded), 0) AS total_xp "
+        "FROM testing_rounds tr "
+        "JOIN round_scores rs ON rs.round_id = tr.id AND rs.athlete_id = ? "
+        "LEFT JOIN round_xp_awards rxa ON rxa.round_id = tr.id AND rxa.athlete_id = ? "
+        "WHERE tr.status = 'closed'"
+    )
+    params = [athlete_id, athlete_id]
+    if group_id:
+        q += " AND tr.group_id = ?"
+        params.append(group_id)
+    q += " GROUP BY tr.id ORDER BY tr.id"
+    return conn.execute(q, params).fetchall()
 
 
 def _check_level_thresholds(conn, participant_id, game_key, results_for_game, session_id):
@@ -2419,6 +2714,7 @@ def cleanup_demo_data():
 # ── Measurement Windows ───────────────────────────────────────────────────────
 
 def open_measurement_window(conn, group_id, opened_by, session_label=None, session_month=None):
+    # DEPRECATED — use open_testing_round instead. Retained for migration safety.
     """Open a new measurement window for a group. Returns the new window id."""
     now = datetime.datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
     cur = conn.execute(

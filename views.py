@@ -1169,7 +1169,7 @@ def participant_dashboard(user, measurement_sessions,
 
     # ── AXP journey line ──────────────────────────────────────────────────────
     from constants import XP_RANK_TIERS
-    _jl_max = XP_RANK_TIERS[-1]["min_xp"]  # 15000
+    _jl_max = XP_RANK_TIERS[-1]["min_xp"]  # 25000 (Titanium)
     _jl_fill = min(100.0, (total_xp / _jl_max * 100)) if _jl_max else 100.0
     _jl_dots = ""
     _jl_labels = ""
@@ -11078,7 +11078,371 @@ def athlete_quickstart_card_pdf(participant, xp_data, levels):
 
 # ── Measurement Window views ───────────────────────────────────────────────────
 
+def testing_hub_page(coach, group, rounds, options, open_rnd, athletes):
+    """Practitioner testing hub: round history + open next round."""
+    gid   = group["id"]
+    gname = esc(group.get("name", "Group"))
+
+    # Level callout colours
+    LEVEL_COLOURS = {1:"#1EBE8B", 2:"#3B82F6", 3:"#F3AA33", 4:"#F97316", 5:"#8B5CF6"}
+
+    # ── Options panel ────────────────────────────────────────────────────────
+    if open_rnd:
+        rtype  = open_rnd["round_type"].title()
+        rlabel = f"Level {open_rnd['level']} {rtype}"
+        if open_rnd["retest_sequence"]:
+            rlabel += f" #{open_rnd['retest_sequence']}"
+        clr = LEVEL_COLOURS.get(open_rnd["level"], "#6E737B")
+        options_html = f"""
+        <div style="background:#FEF3C7;border:1.5px solid #F3AA33;border-radius:14px;
+                    padding:18px 20px;margin-bottom:20px;">
+          <p style="margin:0 0 4px;font-size:12px;font-weight:700;color:#92400E;
+                    text-transform:uppercase;letter-spacing:0.06em;">Round in Progress</p>
+          <div style="font-size:18px;font-weight:800;color:#2D323B;margin-bottom:12px;">
+            {esc(rlabel)}
+          </div>
+          <a href="/coach/round/{open_rnd['id']}"
+             style="display:inline-block;background:#2D323B;color:#F3AA33;font-weight:700;
+                    font-size:14px;border-radius:10px;padding:10px 20px;text-decoration:none;">
+            Enter / Review Scores →
+          </a>
+        </div>"""
+    elif options:
+        btns = ""
+        for opt in options:
+            lvl   = opt["level"]
+            rtype = opt["round_type"]
+            clr   = LEVEL_COLOURS.get(lvl, "#6E737B")
+            btns += f"""
+          <button type="submit" name="round_type" value="{rtype}"
+                  onclick="this.form.elements['level'].value='{lvl}'"
+                  style="flex:1;min-width:160px;background:{clr};color:#fff;
+                         font-weight:700;font-size:14px;border:none;border-radius:10px;
+                         padding:12px 16px;cursor:pointer;">
+            {esc(opt['label'])}
+          </button>"""
+        options_html = f"""
+        <div style="background:#EEF3F5;border:1.5px solid #BDC4CA;border-radius:14px;
+                    padding:18px 20px;margin-bottom:20px;">
+          <p style="margin:0 0 6px;font-size:12px;font-weight:700;color:#6E737B;
+                    text-transform:uppercase;letter-spacing:0.06em;">Open Next Round</p>
+
+          <div style="background:#FFF8E7;border:1.5px solid #F3AA33;border-radius:10px;
+                      padding:12px 14px;margin-bottom:14px;font-size:13px;color:#92400E;">
+            <strong>Before opening:</strong> Confirm all athletes will use the correct level game cards.
+            All games must be completed at the same level across the group.
+          </div>
+
+          <form method="post" action="/coach/groups/{gid}/testing/open" style="margin:0;">
+            <input type="hidden" name="level" value="">
+            <div style="display:flex;flex-wrap:wrap;gap:10px;">
+              {btns}
+            </div>
+          </form>
+        </div>"""
+    else:
+        options_html = """
+        <div style="background:#F4F5F7;border-radius:14px;padding:16px 20px;
+                    margin-bottom:20px;color:#6E737B;font-size:14px;">
+          All 5 levels complete — no further testing rounds available for this group.
+        </div>"""
+
+    # ── Round history table ──────────────────────────────────────────────────
+    if rounds:
+        rows = ""
+        for r in rounds:
+            lvl   = r["level"]
+            rtype = r["round_type"].title()
+            seq   = r.get("retest_sequence")
+            rlbl  = f"Level {lvl} {rtype}" + (f" #{seq}" if seq else "")
+            clr   = LEVEL_COLOURS.get(lvl, "#6E737B")
+            stat  = r["status"]
+            stat_chip = (
+                f'<span style="background:#1EBE8B;color:#fff;border-radius:999px;'
+                f'padding:2px 10px;font-size:11px;font-weight:700;">OPEN</span>'
+                if stat == "open" else
+                f'<span style="background:#E5E7EB;color:#6E737B;border-radius:999px;'
+                f'padding:2px 10px;font-size:11px;font-weight:600;">Closed</span>'
+            )
+            opened  = esc((r.get("opened_at") or "")[:10])
+            closed  = esc((r.get("closed_at") or "—")[:10])
+            link    = f'<a href="/coach/round/{r["id"]}" style="color:#2D323B;font-weight:600;text-decoration:none;">View →</a>'
+            rows += f"""
+          <tr>
+            <td style="padding:10px 12px;">
+              <span style="display:inline-block;width:10px;height:10px;border-radius:50%;
+                           background:{clr};margin-right:6px;"></span>
+              <strong>{esc(rlbl)}</strong>
+            </td>
+            <td style="padding:10px 12px;">{stat_chip}</td>
+            <td style="padding:10px 12px;color:#6E737B;font-size:13px;">{opened}</td>
+            <td style="padding:10px 12px;color:#6E737B;font-size:13px;">{closed}</td>
+            <td style="padding:10px 12px;">{link}</td>
+          </tr>"""
+        history_html = f"""
+        <div class="card" style="padding:0;overflow:hidden;">
+          <table style="width:100%;border-collapse:collapse;">
+            <thead>
+              <tr style="background:#2D323B;color:#fff;font-size:11px;
+                         text-transform:uppercase;letter-spacing:0.06em;">
+                <th style="padding:10px 12px;text-align:left;">Round</th>
+                <th style="padding:10px 12px;text-align:left;">Status</th>
+                <th style="padding:10px 12px;text-align:left;">Opened</th>
+                <th style="padding:10px 12px;text-align:left;">Closed</th>
+                <th style="padding:10px 12px;"></th>
+              </tr>
+            </thead>
+            <tbody>{rows}</tbody>
+          </table>
+        </div>"""
+    else:
+        history_html = """
+        <div style="background:#F4F5F7;border-radius:12px;padding:16px 20px;
+                    color:#9CA3AF;font-size:14px;text-align:center;">
+          No testing rounds yet. Open the first round above to begin.
+        </div>"""
+
+    body = f"""
+    <div style="max-width:820px;">
+      <div class="page-head" style="margin-bottom:20px;">
+        <div>
+          <h1 style="margin:0 0 4px;">Testing Rounds — {gname}</h1>
+          <p class="muted" style="margin:0;">{len(athletes)} athlete(s) in this group</p>
+        </div>
+        <a href="/coach/group-hub?group_id={gid}"
+           style="background:#F4F5F7;color:#2D323B;font-weight:600;font-size:14px;
+                  border-radius:10px;padding:10px 18px;text-decoration:none;">
+          ← Group Hub
+        </a>
+      </div>
+
+      {options_html}
+
+      <h2 style="font-size:14px;font-weight:700;color:#6E737B;text-transform:uppercase;
+                 letter-spacing:0.06em;margin:0 0 10px;">Round History</h2>
+      {history_html}
+    </div>"""
+
+    return layout(f"Testing — {gname}", body, user=coach, active_nav="group_hub")
+
+
+def testing_round_page(coach, rnd, athletes, scores_by_athlete, games):
+    """Practitioner score-entry grid for an open (or closed) testing round."""
+    from constants import GAME_DISPLAY_NAMES, XP_GAME_CONFIG
+    rid    = rnd["id"]
+    lvl    = rnd["level"]
+    rtype  = rnd["round_type"]
+    seq    = rnd.get("retest_sequence")
+    is_open = rnd["status"] == "open"
+    gid    = rnd["group_id"]
+    rlabel = f"Level {lvl} {rtype.title()}" + (f" #{seq}" if seq else "")
+    LEVEL_COLOURS = {1:"#1EBE8B", 2:"#3B82F6", 3:"#F3AA33", 4:"#F97316", 5:"#8B5CF6"}
+    clr = LEVEL_COLOURS.get(lvl, "#6E737B")
+
+    # Callout banner
+    callout = f"""
+    <div style="background:#FFF8E7;border:2px solid #F3AA33;border-radius:14px;
+                padding:14px 18px;margin-bottom:20px;">
+      <p style="margin:0;font-size:13px;color:#92400E;">
+        <strong>⚠ Level {lvl} Testing.</strong>
+        Before recording any scores, confirm all athletes are using
+        <strong>Level {lvl} game cards</strong>.
+        All games must be completed at Level {lvl} across the whole group —
+        do not mix levels within a round.
+      </p>
+    </div>"""
+
+    if not is_open:
+        callout = f"""
+    <div style="background:#F4F5F7;border-radius:14px;padding:12px 18px;margin-bottom:20px;
+                font-size:13px;color:#6E737B;">
+      This round is <strong>closed</strong>. Scores are read-only.
+    </div>"""
+
+    # Build athlete tabs / score grids
+    if not athletes:
+        athlete_html = '<div style="color:#9CA3AF;padding:20px;">No athletes in this group.</div>'
+    else:
+        tabs = ""
+        panels = ""
+        for i, a in enumerate(athletes):
+            aid   = a["id"]
+            aname = esc(a["name"])
+            anum  = esc(a.get("athlete_number") or "")
+            active_cls = "active" if i == 0 else ""
+            tabs += f"""
+          <button class="rtab {active_cls}" data-aid="{aid}"
+                  onclick="switchTab({aid})"
+                  style="padding:9px 16px;font-size:13px;font-weight:600;border:none;
+                         border-bottom:3px solid transparent;background:transparent;
+                         cursor:pointer;color:#6E737B;white-space:nowrap;">
+            {aname}{(' <span style="color:#BDC4CA;font-size:11px;">#' + anum + '</span>') if anum else ''}
+          </button>"""
+            # Score fields for this athlete
+            fields_html = ""
+            for section in games:
+                for g in section.get("games", []):
+                    gkey  = g["key"]
+                    gdisp = esc(GAME_DISPLAY_NAMES.get(gkey, gkey.replace("_", " ").title()))
+                    visible = [f for f in g.get("fields", []) if not f.get("hidden") and not f.get("computed")]
+                    if not visible:
+                        continue
+                    inputs = ""
+                    for f in visible:
+                        fkey   = f["key"]
+                        flabel = esc(f.get("label", fkey))
+                        funit  = esc(f.get("unit", ""))
+                        val    = scores_by_athlete.get(aid, {}).get(gkey, {}).get(fkey, "")
+                        val_s  = str(val) if val != "" else ""
+                        ro     = 'readonly style="background:#F4F5F7;color:#9CA3AF;"' if not is_open else ""
+                        inputs += f"""
+                  <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+                    <label style="flex:1;font-size:12px;color:#6E737B;">{flabel}
+                      {f'<span style="color:#BDC4CA;font-size:10px;">({funit})</span>' if funit else ''}
+                    </label>
+                    <input type="number" step="any" placeholder="—"
+                           class="score-field" data-game="{gkey}" data-field="{fkey}"
+                           value="{val_s}" {ro}
+                           style="width:80px;border:1.5px solid #DDE0E3;border-radius:8px;
+                                  padding:6px 8px;font-size:14px;text-align:center;
+                                  font-weight:600;color:#2D323B;">
+                  </div>"""
+                    fields_html += f"""
+              <div style="background:#F9FAFB;border:1px solid #E5E7EB;border-radius:10px;
+                          padding:12px 14px;margin-bottom:10px;">
+                <div style="font-weight:700;color:#2D323B;font-size:13px;margin-bottom:8px;">
+                  {gdisp}
+                </div>
+                {inputs}
+              </div>"""
+            save_btn = ""
+            if is_open:
+                save_btn = f"""
+            <div style="margin-top:14px;">
+              <button onclick="saveScores({aid})"
+                      id="saveBtn_{aid}"
+                      style="background:{clr};color:#fff;font-weight:700;font-size:14px;
+                             border:none;border-radius:10px;padding:11px 24px;cursor:pointer;">
+                Save {aname.split()[0] if aname else 'Athlete'}'s Scores
+              </button>
+              <span id="saveMsg_{aid}" style="margin-left:12px;font-size:13px;color:#6E737B;"></span>
+            </div>"""
+            panels += f"""
+          <div class="rpanel" data-aid="{aid}"
+               style="display:{'block' if i == 0 else 'none'};padding:16px 0;">
+            {fields_html}
+            {save_btn}
+          </div>"""
+        athlete_html = f"""
+        <div style="border-bottom:2px solid #E5E7EB;display:flex;gap:0;overflow-x:auto;
+                    margin-bottom:0;">
+          {tabs}
+        </div>
+        {panels}"""
+
+    # Close button
+    close_btn = ""
+    if is_open:
+        close_btn = f"""
+    <div style="margin-top:24px;padding-top:16px;border-top:1px solid #E5E7EB;">
+      <form method="post" action="/coach/round/{rid}/close" style="display:inline;">
+        <button type="submit"
+                onclick="return confirm('Close this round and award AXP to all athletes?')"
+                style="background:#2D323B;color:#F3AA33;font-weight:700;font-size:14px;
+                       border:none;border-radius:10px;padding:12px 24px;cursor:pointer;">
+          Close Round &amp; Award AXP
+        </button>
+      </form>
+      <a href="/coach/groups/{gid}/testing"
+         style="margin-left:12px;color:#6E737B;font-size:13px;text-decoration:none;">
+        ← Testing Hub
+      </a>
+    </div>"""
+
+    body = f"""
+    <div style="max-width:860px;">
+      <div class="page-head" style="margin-bottom:16px;">
+        <div>
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:4px;">
+            <span style="display:inline-block;width:12px;height:12px;border-radius:50%;
+                         background:{clr};"></span>
+            <h1 style="margin:0;font-size:20px;">{esc(rlabel)}</h1>
+            {'<span style="background:#1EBE8B;color:#fff;border-radius:999px;padding:2px 10px;font-size:11px;font-weight:700;">OPEN</span>' if is_open else '<span style="background:#E5E7EB;color:#6E737B;border-radius:999px;padding:2px 10px;font-size:11px;">Closed</span>'}
+          </div>
+          <p class="muted" style="margin:0;">
+            {esc(rnd.get('group_name',''))} &nbsp;·&nbsp;
+            Opened: {esc((rnd.get('opened_at') or '')[:10])}
+            {f"&nbsp;·&nbsp; Closed: {esc((rnd.get('closed_at') or '')[:10])}" if rnd.get('closed_at') else ''}
+          </p>
+        </div>
+      </div>
+
+      {callout}
+
+      <div class="card" style="padding:16px 20px 20px;">
+        {athlete_html}
+      </div>
+
+      {close_btn}
+    </div>
+
+    <script>
+    function switchTab(aid) {{
+      document.querySelectorAll('.rtab').forEach(b => {{
+        b.style.borderBottomColor = b.dataset.aid == aid ? '#F3AA33' : 'transparent';
+        b.style.color = b.dataset.aid == aid ? '#2D323B' : '#6E737B';
+      }});
+      document.querySelectorAll('.rpanel').forEach(p => {{
+        p.style.display = p.dataset.aid == aid ? 'block' : 'none';
+      }});
+    }}
+
+    async function saveScores(aid) {{
+      const panel = document.querySelector(`.rpanel[data-aid="${{aid}}"]`);
+      const scores = {{}};
+      panel.querySelectorAll('.score-field').forEach(inp => {{
+        if (inp.value !== '') scores[inp.dataset.game + '.' + inp.dataset.field] = parseFloat(inp.value);
+      }});
+      const btn = document.getElementById('saveBtn_' + aid);
+      const msg = document.getElementById('saveMsg_' + aid);
+      btn.disabled = true;
+      btn.textContent = 'Saving…';
+      try {{
+        const r = await fetch('/coach/round/{rid}/score', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify({{ athlete_id: aid, scores }}),
+        }});
+        const j = await r.json();
+        if (j.ok) {{
+          msg.textContent = '✓ Saved';
+          msg.style.color = '#1EBE8B';
+        }} else {{
+          msg.textContent = 'Error — try again';
+          msg.style.color = '#EF4444';
+        }}
+      }} catch(e) {{
+        msg.textContent = 'Network error';
+        msg.style.color = '#EF4444';
+      }}
+      btn.disabled = false;
+      btn.textContent = "Save Scores";
+      setTimeout(() => {{ msg.textContent = ''; }}, 3000);
+    }}
+
+    // Highlight active tab on load
+    switchTab(document.querySelector('.rtab')?.dataset.aid);
+    </script>"""
+
+    return layout(f"{rlabel} — Scores", body, user=coach, active_nav="group_hub")
+
+
 def measurement_window_status_page(coach, window, group, athletes, submissions, submitted_ids):
+    # DEPRECATED — kept for any lingering references. Redirects to testing hub.
+    gid = window.get("group_id", "")
+    return layout("Redirecting…",
+        f'<script>window.location="/coach/groups/{gid}/testing";</script>',
+        user=coach)
     """Practitioner live status view for an open/closed measurement window."""
     wid     = window["id"]
     status  = window.get("status", "open")

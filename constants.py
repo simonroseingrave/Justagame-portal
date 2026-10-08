@@ -245,70 +245,63 @@ CORE_AAP_GAMES = [
 ]
 
 # Per-game XP configuration.
-# xp_type "count"       → score * multiplier XP awarded per session
-# xp_type "improvement" → XP only on PB, 5 XP per unit_size improvement
-# score_fields: all fields that can contribute a score (used for in-game XP total)
-# primary_field: the single field used for PB tracking and level threshold checks
+# primary_field: the single field used for improvement % calculation in testing rounds.
+# higher_is_better: True  → improvement = (new - old) / old * 100
+#                   False → improvement = (old - new) / old * 100  (e.g. timing games)
+# score_fields: all fields recorded in a testing round session.
 XP_GAME_CONFIG = {
     "skipping_rope_sprint": {
-        "xp_type": "improvement",
-        "xp_per_unit": 5,
-        "unit_size": 0.1,           # seconds per XP unit
         "score_fields": ["average"],
         "primary_field": "average",
-        "lower_is_better": True,
-        "pb_only": True,
+        "higher_is_better": False,   # lower time = better
     },
     "balance_ball_catching": {
-        "xp_type": "count",
-        "multiplier": 1,
-        # Active score fields only — hidden/historical fields excluded from XP calculation
+        # Active score fields only — hidden/historical fields excluded
         "score_fields": ["large_ball_wall_bounce", "one_foot_balance_catch"],
-        # Historical one-foot fields — both checked when computing best score for display/PB
         "one_foot_fields": ["one_foot_balance_catch", "opposite_foot_balance_catch"],
-        "primary_field": "large_ball_wall_bounce",   # Large Ball Two Feet — used for level thresholds
+        "primary_field": "large_ball_wall_bounce",
+        "higher_is_better": True,
     },
     "leap_catching_throwing": {
-        "xp_type": "count",
-        "multiplier": 5,
         "score_fields": ["points"],
         "primary_field": "points",
+        "higher_is_better": True,
     },
     "split_step": {
-        "xp_type": "count",
-        "multiplier": 1,
         "score_fields": ["catches"],
         "primary_field": "catches",
+        "higher_is_better": True,
     },
     "diamond_gates": {
-        "xp_type": "count",
-        "multiplier": 5,
         "score_fields": ["small_group", "large_group"],
         "primary_field": "small_group",
+        "higher_is_better": True,
     },
     "diamond_dribble": {
-        "xp_type": "count",
-        "multiplier": 5,
         "score_fields": ["small_group", "large_group"],
         "primary_field": "small_group",
+        "higher_is_better": True,
     },
     "step_up": {
-        "xp_type": "count",
-        "multiplier": 1,
-        # step_bench_small hidden from new forms; excluded from active XP calculation
+        # step_bench_small hidden from new forms
         "score_fields": ["step_bench"],
-        "primary_field": "step_bench",   # Large Ball — used for level thresholds
+        "primary_field": "step_bench",
+        "higher_is_better": True,
     },
     "lob_scotch": {
-        "xp_type": "count",
-        "multiplier": 5,
         "score_fields": ["squares_scored"],
         "primary_field": "squares_scored",
+        "higher_is_better": True,
     },
 }
 
-# XP awarded when an athlete earns a level achievement (one-time, permanent)
-LEVEL_XP_AWARDS = {1: 100, 2: 200, 3: 350, 4: 500, 5: 750}
+# AXP per testing round (see db.py award_round_xp)
+# Baseline round: flat participation AXP per game completed + completion bonus
+ROUND_XP_BASELINE_PER_GAME = 25    # per game recorded in a baseline round
+ROUND_XP_COMPLETION_BONUS   = 50   # bonus for completing all 8 core games in a round
+# Re-test round: improvement % × ROUND_XP_IMPROVEMENT_FACTOR per game, capped at max
+ROUND_XP_IMPROVEMENT_FACTOR = 6    # improvement_pct × 6 AXP per game
+ROUND_XP_IMPROVEMENT_CAP    = 150  # max AXP per game per re-test round
 
 # Rank tiers (ascending by min_xp). label, min_xp, hex colour
 XP_RANK_TIERS = [
