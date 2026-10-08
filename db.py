@@ -2713,6 +2713,65 @@ def cleanup_demo_data():
 
 # ── Measurement Windows ───────────────────────────────────────────────────────
 
+# ── Threshold helpers (retained — used by score distribution + SC gap report) ─
+
+def get_all_thresholds(conn):
+    """Return all rows from game_thresholds, or [] if the table doesn't exist."""
+    try:
+        return conn.execute(
+            "SELECT game_key, field_key, level, threshold_value, lower_is_better "
+            "FROM game_thresholds ORDER BY game_key, level, field_key"
+        ).fetchall()
+    except Exception:
+        return []
+
+
+def get_game_threshold(conn, game_key, level, field_key=None):
+    """Return threshold row for a specific game/level/field, or None."""
+    try:
+        if field_key:
+            return conn.execute(
+                "SELECT * FROM game_thresholds WHERE game_key=? AND level=? AND field_key=?",
+                (game_key, level, field_key)
+            ).fetchone()
+        return conn.execute(
+            "SELECT * FROM game_thresholds WHERE game_key=? AND level=?",
+            (game_key, level)
+        ).fetchone()
+    except Exception:
+        return None
+
+
+def set_game_threshold(conn, game_key, level, field_key, threshold_value,
+                       lower_is_better=False, set_by=None):
+    """Upsert a threshold value."""
+    now_ts = now()
+    conn.execute(
+        "INSERT INTO game_thresholds (game_key, field_key, level, threshold_value, "
+        "lower_is_better, set_by, set_at) VALUES (?,?,?,?,?,?,?) "
+        "ON CONFLICT(game_key, field_key, level) DO UPDATE SET "
+        "threshold_value=excluded.threshold_value, "
+        "lower_is_better=excluded.lower_is_better, set_at=excluded.set_at",
+        (game_key, field_key, level, threshold_value, int(lower_is_better), set_by, now_ts)
+    )
+    conn.commit()
+
+
+def delete_game_threshold(conn, game_key, level, field_key=None):
+    """Delete one or all thresholds for a game/level."""
+    if field_key:
+        conn.execute(
+            "DELETE FROM game_thresholds WHERE game_key=? AND level=? AND field_key=?",
+            (game_key, level, field_key)
+        )
+    else:
+        conn.execute(
+            "DELETE FROM game_thresholds WHERE game_key=? AND level=?",
+            (game_key, level)
+        )
+    conn.commit()
+
+
 def open_measurement_window(conn, group_id, opened_by, session_label=None, session_month=None):
     # DEPRECATED — use open_testing_round instead. Retained for migration safety.
     """Open a new measurement window for a group. Returns the new window id."""
