@@ -353,12 +353,12 @@ LEVEL_XP_AWARDS = {}
 
 # Rank tiers (ascending by min_xp). label, min_xp, hex colour
 XP_RANK_TIERS = [
-    {"label": "Starter",  "min_xp": 0,     "colour": "#6E737B"},
-    {"label": "Bronze",   "min_xp": 3000,  "colour": "#CD7F32"},
-    {"label": "Silver",   "min_xp": 6500,  "colour": "#A0A9B8"},
-    {"label": "Gold",     "min_xp": 11000, "colour": "#F3AA33"},
-    {"label": "Platinum", "min_xp": 17000, "colour": "#5EEAD4"},
-    {"label": "Titanium", "min_xp": 25000, "colour": "#8B5CF6"},
+    {"label": "Explorer",   "min_xp": 0,     "colour": "#6E737B"},
+    {"label": "Discoverer", "min_xp": 3000,  "colour": "#CD7F32"},
+    {"label": "Adapter",    "min_xp": 6500,  "colour": "#A0A9B8"},
+    {"label": "Connector",  "min_xp": 11000, "colour": "#F3AA33"},
+    {"label": "Attuned",    "min_xp": 17000, "colour": "#5EEAD4"},
+    {"label": "Dynamic",    "min_xp": 25000, "colour": "#8B5CF6"},
 ]
 
 # Flat XP award amounts for participation events
@@ -389,7 +389,7 @@ def get_athlete_rank_tier(total_xp):
 
 
 def get_next_rank_tier(total_xp):
-    """Return the next rank tier dict (or None if at Titanium)."""
+    """Return the next rank tier dict (or None if at Dynamic)."""
     for i, t in enumerate(XP_RANK_TIERS):
         if total_xp < t["min_xp"]:
             return t

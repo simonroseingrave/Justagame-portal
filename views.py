@@ -1116,7 +1116,7 @@ def participant_dashboard(user, measurement_sessions,
     # ── XP & rank ────────────────────────────────────────────────────────────
     xp_data = xp_data or {}
     total_xp = xp_data.get("total", 0)
-    tier = xp_data.get("tier") or {"label": "Starter", "colour": "#6E737B"}
+    tier = xp_data.get("tier") or {"label": "Explorer", "colour": "#6E737B"}
     next_tier = xp_data.get("next_tier")
     xp_progress = xp_data.get("progress", 0.0)
     tier_colour = tier["colour"]
@@ -1132,7 +1132,7 @@ def participant_dashboard(user, measurement_sessions,
 
     # ── AXP journey line ──────────────────────────────────────────────────────
     from constants import XP_RANK_TIERS
-    _jl_max = XP_RANK_TIERS[-1]["min_xp"]  # 25000 (Titanium)
+    _jl_max = XP_RANK_TIERS[-1]["min_xp"]  # 25000 (Dynamic)
     _jl_fill = min(100.0, (total_xp / _jl_max * 100)) if _jl_max else 100.0
     _jl_dots = ""
     _jl_labels = ""
@@ -2660,7 +2660,7 @@ def coach_participant_detail(coach, participant, measurement_sessions, groups=No
     xp_data = xp_data or {}
     levels = levels or {}
     total_xp = xp_data.get("total", 0)
-    tier = xp_data.get("tier") or {"label": "Starter", "colour": "#6E737B"}
+    tier = xp_data.get("tier") or {"label": "Explorer", "colour": "#6E737B"}
     tier_colour = tier["colour"]
     tier_label = esc(tier["label"])
     # AXP journey line for coach view
@@ -4961,7 +4961,7 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
             an = a.get("athlete_number") or ""
             ax = athlete_xp_levels.get(aid, {})
             levels = ax.get("levels", {})
-            tier = ax.get("tier") or {"label": "Starter", "colour": "#6E737B"}
+            tier = ax.get("tier") or {"label": "Explorer", "colour": "#6E737B"}
             total_xp = ax.get("total_xp", 0)
             tier_colour = tier["colour"]
 
@@ -10043,7 +10043,7 @@ def group_leaderboard_page(coach, groups, selected_group_id=None, ranked_athlete
                 cols += '<div style="flex:1;"></div>'
                 continue
             a = top3[rank_idx]
-            tier = a.get("tier") or {"label": "Starter", "colour": "#6E737B"}
+            tier = a.get("tier") or {"label": "Explorer", "colour": "#6E737B"}
             mc = MEDAL.get(rank_idx + 1, "#9CA3AF")
             pos_label = label_txt[rank_idx]
             inits = _inits(a["name"])
@@ -10080,7 +10080,7 @@ def group_leaderboard_page(coach, groups, selected_group_id=None, ranked_athlete
         rows = ""
         for i, a in enumerate(athletes_list):
             pos = i + 1
-            tier = a.get("tier") or {"label": "Starter", "colour": "#6E737B"}
+            tier = a.get("tier") or {"label": "Explorer", "colour": "#6E737B"}
             levels = a.get("levels", {})
             games_at_l1 = sum(1 for gk in CORE_AAP_GAMES if levels.get(gk, 0) >= 1)
             inits = _inits(a["name"])
@@ -10337,7 +10337,7 @@ def athlete_leaderboard_page(athlete, ranked_athletes, group_name=""):
         for i, a in enumerate(ranked_athletes):
             pos = i + 1
             is_me = a["id"] == own_id
-            tier = a.get("tier") or {"label": "Starter", "colour": "#6E737B"}
+            tier = a.get("tier") or {"label": "Explorer", "colour": "#6E737B"}
             levels = a.get("levels", {})
             name_parts = a["name"].strip().split()
             inits = (name_parts[0][0] + name_parts[-1][0]).upper() if len(name_parts) >= 2 else name_parts[0][0].upper()
