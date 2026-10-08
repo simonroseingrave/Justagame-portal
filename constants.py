@@ -204,14 +204,15 @@ MEASUREMENT_GAMES = [
         "games": [
             {
                 "key": "lateral_ladder",
-                "name": "Lateral Ladder",
+                "name": "Lateral Ladder - 1 minute",
                 "level": 1,
                 # Lateral skater leap pattern. Two parallel lines 1.5 m apart; dots along
                 # each line vary by level (rung spacing = longitudinal dot spacing).
-                # Score = total dots claimed (2 per rung). 12 rungs at all levels.
+                # Timed: 1 minute. Score = total dots claimed (2 per rung). 12 rungs at all levels.
                 # L1: 0.5 m spacing (6 m course) · max 24  L2: 0.5 m · max 24
                 # L3: 0.75 m spacing (9 m course) · max 24  L4: 1.0 m (12 m course) · max 24
                 # L5: 1.25 m spacing (15 m course) · max 24
+                "level_threshold_hint": "Dots claimed in 1 minute. Athlete returns to Start if they miss a dot or drop the ball. Set thresholds for each level based on dot count (max 24).",
                 "level_setups": {
                     1: "0.5 m rung spacing · 6 m course · 12 rungs · max 24 dots",
                     2: "0.5 m rung spacing · 6 m course · 12 rungs · max 24 dots",
@@ -220,7 +221,7 @@ MEASUREMENT_GAMES = [
                     5: "1.25 m rung spacing · 15 m course · 12 rungs · max 24 dots",
                 },
                 "fields": [
-                    {"key": "dots_claimed", "label": "Dots Claimed", "type": "number"},
+                    {"key": "dots_claimed", "label": "Dots Claimed (1 minute)", "type": "number"},
                 ],
             },
         ],
