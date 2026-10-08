@@ -9051,6 +9051,7 @@ _GAME_DISPLAY_NAMES = {
     "diamond_dribble":       "Diamond Dribble",
     "step_up":               "Step Up",
     "lob_scotch":            "Lob Scotch",
+    "lateral_ladder":        "Lateral Ladder",
 }
 
 _LEVEL_COLOURS = {

@@ -199,6 +199,32 @@ MEASUREMENT_GAMES = [
             },
         ],
     },
+    {
+        "section": "Lateral Ladder",
+        "games": [
+            {
+                "key": "lateral_ladder",
+                "name": "Lateral Ladder",
+                "level": 1,
+                # Lateral skater leap pattern. Two parallel lines 1.5 m apart; dots along
+                # each line vary by level (rung spacing = longitudinal dot spacing).
+                # Score = total dots claimed (2 per rung). 12 rungs at all levels.
+                # L1: 0.5 m spacing (6 m course) · max 24  L2: 0.5 m · max 24
+                # L3: 0.75 m spacing (9 m course) · max 24  L4: 1.0 m (12 m course) · max 24
+                # L5: 1.25 m spacing (15 m course) · max 24
+                "level_setups": {
+                    1: "0.5 m rung spacing · 6 m course · 12 rungs · max 24 dots",
+                    2: "0.5 m rung spacing · 6 m course · 12 rungs · max 24 dots",
+                    3: "0.75 m rung spacing · 9 m course · 12 rungs · max 24 dots",
+                    4: "1.0 m rung spacing · 12 m course · 12 rungs · max 24 dots",
+                    5: "1.25 m rung spacing · 15 m course · 12 rungs · max 24 dots",
+                },
+                "fields": [
+                    {"key": "dots_claimed", "label": "Dots Claimed", "type": "number"},
+                ],
+            },
+        ],
+    },
 ]
 
 
@@ -252,6 +278,7 @@ CORE_AAP_GAMES = [
     "diamond_dribble",
     "step_up",
     "lob_scotch",
+    "lateral_ladder",
 ]
 
 # Per-game XP configuration.
@@ -301,6 +328,11 @@ XP_GAME_CONFIG = {
     "lob_scotch": {
         "score_fields": ["squares_scored"],
         "primary_field": "squares_scored",
+        "higher_is_better": True,
+    },
+    "lateral_ladder": {
+        "score_fields": ["dots_claimed"],
+        "primary_field": "dots_claimed",
         "higher_is_better": True,
     },
 }
@@ -377,6 +409,7 @@ GAME_DISPLAY_NAMES = {
     "diamond_dribble":        "Diamond Dribble",
     "step_up":                "Step Up",
     "lob_scotch":             "Lob Scotch",
+    "lateral_ladder":         "Lateral Ladder",
     # Deprecated games — kept for historical display
     "step_over":              "Step Over",
     "throw_down":             "Throw Down",
@@ -718,6 +751,18 @@ CARD_TAXONOMY = {
         'D9': ['Level 1', 'Level 2', 'Level 3', 'Level 4', 'Level 5'],
         'game_keys': ['split_step'],
     },
+    'lateral-ladder': {
+        'D1': ['Balance & Postural Control', 'Explosive & Landing'],
+        'D2': ['Unilateral Balance', 'Plyometric Power', 'Landing Mechanics', 'Hand-Eye Coordination'],
+        'D3': ['Perception-Action Coupling', 'Postural Attunement', 'Self-Organisation', 'Repetition Without Repetition'],
+        'D4': ['Unilateral', 'Alternating'],
+        'D5': ['Task'],
+        'D6': ['Small Ball', 'Gate / Cone'],
+        'D7': ['Large 15m+'],
+        'D8': ['Individual'],
+        'D9': ['Level 1', 'Level 2', 'Level 3', 'Level 4', 'Level 5'],
+        'game_keys': ['lateral_ladder'],
+    },
 }
 
 # Per-game level progression descriptions used in athlete reports and
@@ -780,6 +825,13 @@ GAME_LEVEL_DESCRIPTIONS = {
         "L3 — 50 cm dots · 15 squares · target: all 15 claimed",
         "L4 — 60 cm dots · 15 squares · target: 9 claimed",
         "L5 — 75 cm dots · 15 squares · target: 12 claimed",
+    ],
+    "lateral_ladder": [
+        "L1 — 0.5 m rung spacing · 6 m course · target: 10 dots claimed",
+        "L2 — 0.5 m rung spacing · 6 m course · target: 18 dots claimed",
+        "L3 — 0.75 m rung spacing · 9 m course · target: 16 dots claimed",
+        "L4 — 1.0 m rung spacing · 12 m course · target: 16 dots claimed",
+        "L5 — 1.25 m rung spacing · 15 m course · target: 20 dots claimed",
     ],
 }
 
@@ -1000,6 +1052,12 @@ SCORING_AREAS = [
         "field_key":    "squares_scored",
         "lower_is_better": False,
     },
+    {
+        "display_name": "Lateral Ladder",
+        "game_key":     "lateral_ladder",
+        "field_key":    "dots_claimed",
+        "lower_is_better": False,
+    },
 ]
 
 def threshold_field_key(area):
@@ -1070,6 +1128,33 @@ SC_GAP_LANGUAGE = {
         "athlete_why": "Most sport happens on one leg — cutting, landing, holding your position. Getting comfortable here makes you more robust and harder to knock off balance.",
         "athlete_games": ["Balance Ball Catching (self-test)", "Step Up", "Grid Leap"],
         "athlete_sc": "Practice standing on one leg for 30 seconds at a time — once that's easy, try catching a ball while you do it. Simple but effective.",
+    },
+    ("lateral_ladder", "dots_claimed"): {
+        "display": "Lateral Ladder",
+        "family": "Balance & Postural Control",
+        "cla_constraint": (
+            "The constraint here is lateral projective movement with concurrent ball handling "
+            "— the athlete must couple an explosive skater leap with a self-lob throw and catch, "
+            "all while landing accurately on a defined target. Game environments that combine "
+            "lateral displacement, landing accuracy, and a perceptual task (tracking, catching) "
+            "will directly challenge and develop this coupling."
+        ),
+        "resource_tag": "balance",
+        "sc_gap": (
+            "Lateral power and landing mechanics deficit — the athlete is unable to generate "
+            "and absorb explosive lateral movement while simultaneously managing a perceptual "
+            "task. Single-leg lateral control and lateral plyometric loading are underdeveloped."
+        ),
+        "sc_programme": (
+            "Lateral plyometric progression: lateral box steps → lateral hops to stick → "
+            "reactive lateral bounds. Single-leg lateral band work (hip abductors) to support "
+            "landing control. Pair with simple catch tasks once landing control is established."
+        ),
+        "d2_focus": ["Unilateral balance", "Lateral power", "Hand-eye coordination"],
+        "athlete_what": "Your lateral leaping power and landing control is an area to build — it's a very coachable movement quality.",
+        "athlete_why": "Explosive lateral movement — cutting, closing gaps, getting to a ball wide — is one of the most important physical qualities in sport. Landing well on those movements keeps you injury-free.",
+        "athlete_games": ["Lateral Ladder (self-test)", "Lob Scotch", "Grid Leap"],
+        "athlete_sc": "Stand side-on and practice lateral hops, landing on one foot and holding for 2 seconds before hopping back. Keep your knee soft and land quietly.",
     },
     ("lob_scotch", "squares_scored"): {
         "display": "Lob Scotch",
