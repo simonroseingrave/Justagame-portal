@@ -369,11 +369,11 @@ LEVEL_XP_AWARDS = {}
 # Rank tiers (ascending by min_xp). label, min_xp, hex colour
 XP_RANK_TIERS = [
     {"label": "Explorer",   "min_xp": 0,     "colour": "#6E737B"},
-    {"label": "Discoverer", "min_xp": 3000,  "colour": "#CD7F32"},
-    {"label": "Adapter",    "min_xp": 6500,  "colour": "#A0A9B8"},
-    {"label": "Connector",  "min_xp": 11000, "colour": "#F3AA33"},
-    {"label": "Attuned",    "min_xp": 17000, "colour": "#5EEAD4"},
-    {"label": "Dynamic",    "min_xp": 25000, "colour": "#8B5CF6"},
+    {"label": "Discoverer", "min_xp": 5000,  "colour": "#CD7F32"},
+    {"label": "Adapter",    "min_xp": 10000, "colour": "#A0A9B8"},
+    {"label": "Connector",  "min_xp": 15000, "colour": "#F3AA33"},
+    {"label": "Attuned",    "min_xp": 21000, "colour": "#5EEAD4"},
+    {"label": "Dynamic",    "min_xp": 28000, "colour": "#8B5CF6"},
 ]
 
 # Flat XP award amounts for participation events

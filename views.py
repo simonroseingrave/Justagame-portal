@@ -185,9 +185,10 @@ def layout(title, body, user=None, flash=None, active_nav=None):
                 if is_sys:
                     dropdown_links += (
                         _drop_divider("System Admin") +
-                        _drop_item("/coach/admin/hub",               "Admin Hub",         "⚙", "#F0A82E") +
-                        _drop_item("/coach/admin/score-distribution", "Score Distribution","▦", "#F0A82E") +
-                        _drop_item("/coach/admin/game-thresholds",    "AXP Thresholds",   "◎", "#F0A82E")
+                        _drop_item("/coach/admin/hub",               "Admin Hub",          "⚙", "#F0A82E") +
+                        _drop_item("/coach/admin/score-distribution", "Score Distribution", "▦", "#F0A82E") +
+                        _drop_item("/coach/admin/game-thresholds",    "AXP Thresholds",    "◎", "#F0A82E") +
+                        _drop_item("/coach/admin/axp-projection",     "AXP Projection",    "◈", "#F0A82E")
                     )
 
                 manage_html = f"""
@@ -1133,7 +1134,7 @@ def participant_dashboard(user, measurement_sessions,
 
     # ── AXP journey line ──────────────────────────────────────────────────────
     from constants import XP_RANK_TIERS
-    _jl_max = XP_RANK_TIERS[-1]["min_xp"]  # 25000 (Dynamic)
+    _jl_max = XP_RANK_TIERS[-1]["min_xp"]  # 28000 (Dynamic)
     _jl_fill = min(100.0, (total_xp / _jl_max * 100)) if _jl_max else 100.0
     _jl_dots = ""
     _jl_labels = ""
@@ -13229,3 +13230,161 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
     </style>"""
 
     return layout(f"Next Steps — {group_name}", body, user=coach, active_nav="dashboard")
+
+
+# --------------------------------------------------------- AXP projection (system admin)
+
+def axp_projection_page(coach):
+    """Interactive AXP projection tool — system admin only.
+    Shows estimated cumulative AXP across 8-week programme iterations
+    with adjustable tier threshold lines for calibration.
+    """
+    from constants import XP_RANK_TIERS
+
+    tier_js = "[" + ",".join(
+        f'{{"label":"{t["label"]}","min":{t["min_xp"]},"col":"{t["colour"]}"}}'
+        for t in XP_RANK_TIERS
+    ) + "]"
+
+    body = f"""
+    <div class="page-head">
+      <h1>AXP Projection Calibration</h1>
+      <span style="font-size:13px;color:var(--jag-muted);">System Admin only</span>
+    </div>
+
+    <div class="card" style="padding:20px;margin-bottom:20px;">
+      <p style="margin:0 0 4px;font-size:13px;color:var(--jag-muted);">
+        Estimates cumulative AXP across repeated 8-week programme iterations.
+        Each iteration assumes one L-level baseline + retest, 6 formal sessions (8 games),
+        2 self-directed sessions (3 games). PB rate declines from 50% → 25% as athlete
+        matures. Milestone bonuses fire at sessions 25 (iter 3) and 50 (iter 6).
+        Tier lines reflect live values from <code>XP_RANK_TIERS</code> in constants.py.
+      </p>
+    </div>
+
+    <div class="card" style="padding:20px;margin-bottom:20px;">
+      <h2 style="font-size:15px;margin:0 0 16px;">Cumulative AXP by iteration</h2>
+      <div style="position:relative;height:340px;">
+        <canvas id="axpChart" role="img"
+          aria-label="Bar chart showing cumulative AXP across 8 iterations of 8-week programmes.">
+          Cumulative AXP per iteration: see table below for values.
+        </canvas>
+      </div>
+      <div id="legend" style="display:flex;flex-wrap:wrap;gap:14px;margin-top:14px;font-size:12px;color:var(--jag-muted);"></div>
+    </div>
+
+    <div class="card" style="padding:20px;">
+      <h2 style="font-size:15px;margin:0 0 14px;">Per-iteration breakdown</h2>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:13px;">
+          <thead>
+            <tr style="border-bottom:1.5px solid var(--jag-border);">
+              <th style="text-align:left;padding:6px 10px;font-weight:600;color:var(--jag-muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Iteration</th>
+              <th style="text-align:left;padding:6px 10px;font-weight:600;color:var(--jag-muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Year / Term</th>
+              <th style="text-align:right;padding:6px 10px;font-weight:600;color:var(--jag-muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;">This iteration</th>
+              <th style="text-align:right;padding:6px 10px;font-weight:600;color:var(--jag-muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Cumulative</th>
+              <th style="text-align:left;padding:6px 10px;font-weight:600;color:var(--jag-muted);font-size:11px;text-transform:uppercase;letter-spacing:.06em;">Rank</th>
+            </tr>
+          </thead>
+          <tbody id="breakdown-tbody"></tbody>
+        </table>
+      </div>
+      <p style="margin:14px 0 0;font-size:11px;color:var(--jag-muted);">
+        To adjust tier thresholds, edit <code>XP_RANK_TIERS</code> in <code>constants.py</code>
+        and redeploy. The chart above reflects live values.
+      </p>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+    <script>
+    (function() {{
+      const tiers = {tier_js};
+      const iterXP  = [5645, 4800, 4900, 4400, 4200, 4600, 3800, 3600];
+      const yearTerms = ["Y1 T1","Y1 T2","Y2 T1","Y2 T2","Y3 T1","Y3 T2","Y4 T1","Y4 T2"];
+      const levels  = ["L1","L2","L3","L4","L4","L5","L5","L5"];
+
+      const cumulative = [];
+      iterXP.reduce((acc, v, i) => {{ cumulative.push(acc + v); return acc + v; }}, 0);
+
+      function rankFor(xp) {{
+        let r = tiers[0];
+        for (const t of tiers) {{ if (xp >= t.min) r = t; }}
+        return r;
+      }}
+
+      const barCols = cumulative.map(v => rankFor(v).col + 'aa');
+      const borderCols = cumulative.map(v => rankFor(v).col);
+
+      const annotations = {{}};
+      tiers.slice(1).forEach((t, i) => {{
+        annotations['tier' + i] = {{
+          type: 'line', yMin: t.min, yMax: t.min,
+          borderColor: t.col, borderWidth: 1.5, borderDash: [5, 4],
+          label: {{ display: true, content: t.label + ' (' + (t.min/1000).toFixed(0) + 'k)', position: 'start',
+                    backgroundColor: 'transparent', color: t.col, font: {{ size: 11, weight: '600' }}, padding: 2 }}
+        }};
+      }});
+
+      new Chart(document.getElementById('axpChart'), {{
+        type: 'bar',
+        data: {{
+          labels: yearTerms,
+          datasets: [{{
+            label: 'Cumulative AXP',
+            data: cumulative,
+            backgroundColor: barCols,
+            borderColor: borderCols,
+            borderWidth: 1.5,
+            borderRadius: 4,
+          }}]
+        }},
+        options: {{
+          responsive: true, maintainAspectRatio: false,
+          plugins: {{
+            legend: {{ display: false }},
+            tooltip: {{ callbacks: {{ label: ctx => ctx.parsed.y.toLocaleString() + ' AXP cumulative' }} }},
+            annotation: {{ annotations }}
+          }},
+          scales: {{
+            x: {{ grid: {{ display: false }}, ticks: {{ color: '#888', font: {{ size: 12 }} }} }},
+            y: {{ max: 40000, grid: {{ color: 'rgba(0,0,0,0.06)' }},
+                  ticks: {{ color: '#888', font: {{ size: 11 }}, callback: v => v >= 1000 ? (v/1000).toFixed(0) + 'k' : v }} }}
+          }}
+        }}
+      }});
+
+      // Legend
+      const leg = document.getElementById('legend');
+      tiers.slice(1).forEach(t => {{
+        const s = document.createElement('span');
+        s.style.display = 'inline-flex';
+        s.style.alignItems = 'center';
+        s.style.gap = '5px';
+        s.innerHTML = '<span style="width:10px;height:10px;border-radius:2px;background:' + t.col + '"></span>' + t.label + ' (' + (t.min/1000).toFixed(0) + 'k)';
+        leg.appendChild(s);
+      }});
+
+      // Breakdown table
+      const tbody = document.getElementById('breakdown-tbody');
+      let html = '';
+      cumulative.forEach((cum, i) => {{
+        const rank = rankFor(cum);
+        const next = tiers[tiers.findIndex(t => t.label === rank.label) + 1];
+        const note = next ? (cum >= next.min ? '' : '+ ' + (next.min - cum).toLocaleString() + ' to ' + next.label) : '★ Maximum';
+        const isOdd = i % 2 === 1;
+        html += '<tr style="background:' + (isOdd ? 'rgba(0,0,0,0.02)' : 'transparent') + '">' +
+          '<td style="padding:8px 10px;font-weight:600;">Iter ' + (i+1) + ' (' + levels[i] + ')</td>' +
+          '<td style="padding:8px 10px;color:#666;">' + yearTerms[i] + '</td>' +
+          '<td style="padding:8px 10px;text-align:right;">+' + iterXP[i].toLocaleString() + '</td>' +
+          '<td style="padding:8px 10px;text-align:right;font-weight:600;">' + cum.toLocaleString() + '</td>' +
+          '<td style="padding:8px 10px;">' +
+            '<span style="font-size:11px;font-weight:600;padding:2px 10px;border-radius:20px;background:' + rank.col + '22;color:' + rank.col + ';">' + rank.label + '</span>' +
+            (note ? '<span style="font-size:11px;color:#888;margin-left:6px;">' + note + '</span>' : '') +
+          '</td>' +
+        '</tr>';
+      }});
+      tbody.innerHTML = html;
+    }})();
+    </script>"""
+
+    return layout("AXP Projection", body, user=coach, active_nav="axp_projection")

@@ -3968,6 +3968,15 @@ def score_distribution_get(req):
     return Response(views.score_distribution_page(coach, distributions))
 
 
+@router.get("/coach/admin/axp-projection")
+def axp_projection(req):
+    """AXP projection calibration tool — system_admin only."""
+    coach = require_system_admin(req)
+    if not coach:
+        return redirect("/login")
+    return Response(views.axp_projection_page(coach))
+
+
 # Threshold admin routes removed — individual level thresholds are no longer used.
 # Levels are now expressed through game card environments (group progression),
 # not individual athlete achievement tracking.
