@@ -764,6 +764,18 @@ CARD_TAXONOMY = {
         'D9': ['Level 1', 'Level 2', 'Level 3', 'Level 4', 'Level 5'],
         'game_keys': ['lateral_ladder'],
     },
+    'lateral-ladder-partner-feed': {
+        'D1': ['Balance & Postural Control', 'Explosive & Landing'],
+        'D2': ['Unilateral Balance', 'Plyometric Power', 'Landing Mechanics', 'Hand-Eye Coordination'],
+        'D3': ['Perception-Action Coupling', 'Postural Attunement', 'Self-Organisation', 'Interpersonal Coordination'],
+        'D4': ['Unilateral', 'Alternating'],
+        'D5': ['Task', 'Environmental'],
+        'D6': ['Small Ball', 'Gate / Cone'],
+        'D7': ['Large 15m+'],
+        'D8': ['Pair'],
+        'D9': ['Level 1', 'Level 2', 'Level 3', 'Level 4', 'Level 5'],
+        'game_keys': ['lateral_ladder'],
+    },
 }
 
 # Per-game level progression descriptions used in athlete reports and
