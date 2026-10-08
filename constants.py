@@ -183,8 +183,18 @@ MEASUREMENT_GAMES = [
                 "key": "lob_scotch",
                 "name": "Lob Scotch",
                 "level": 1,
+                # Straight hopscotch pattern. Dot spacing and square count vary by level:
+                #   L1: 50 cm · 12 squares   L2: 50 cm · 15 squares   L3: 50 cm · 15 squares
+                #   L4: 60 cm · 12 squares   L5: 75 cm · 12 squares
+                "level_setups": {
+                    1: "50 cm dots · 12 squares · max score 12",
+                    2: "50 cm dots · 15 squares · max score 15",
+                    3: "50 cm dots · 15 squares · max score 15",
+                    4: "60 cm dots · 15 squares · max score 15",
+                    5: "75 cm dots · 15 squares · max score 15",
+                },
                 "fields": [
-                    {"key": "squares_scored", "label": "Squares Scored", "type": "number"},
+                    {"key": "squares_scored", "label": "Squares Claimed", "type": "number"},
                 ],
             },
         ],
@@ -427,11 +437,11 @@ GAME_LEVEL_DESCRIPTIONS = {
         "L5 — Maximum step-ups; elite balance and coordination",
     ],
     "lob_scotch": [
-        "L1 — Scoring squares with basic lob trajectory",
-        "L2 — Increasing squares scored; trajectory improving",
-        "L3 — Consistent scoring; adapting angle and power",
-        "L4 — High square count; reading the grid confidently",
-        "L5 — Maximum squares; elite lob control and placement",
+        "L1 — 50 cm dots · 12 squares · target: 6 claimed",
+        "L2 — 50 cm dots · 15 squares · target: 9 claimed",
+        "L3 — 50 cm dots · 15 squares · target: all 15 claimed",
+        "L4 — 60 cm dots · 15 squares · target: 9 claimed",
+        "L5 — 75 cm dots · 15 squares · target: 12 claimed",
     ],
 }
 
