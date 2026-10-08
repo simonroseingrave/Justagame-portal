@@ -799,14 +799,19 @@ def reports_progress(req):
             "SELECT name, self_organisation FROM resources WHERE self_organisation IS NOT NULL"
         ).fetchall()
         athletes_data = []
+        axp_by_athlete = {}
         for a in athletes:
-            sessions = db.measurement_sessions_for(conn, a["id"])
+            aid = a["id"]
+            sessions = db.measurement_sessions_for(conn, aid)
             athletes_data.append((dict(a), sessions))
+            axp_by_athlete[aid] = db.xp_total_for(conn, aid)
     finally:
         conn.close()
     group_dict = scope["group"]
     group_dict["name"] = label
-    return Response(views.progress_report_page(coach, group_dict, athletes_data, resources=resources))
+    return Response(views.progress_report_page(
+        coach, group_dict, athletes_data, resources=resources, axp_by_athlete=axp_by_athlete
+    ))
 
 
 @router.get("/coach/reports/completion")

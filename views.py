@@ -6349,18 +6349,20 @@ def baseline_report_page(coach, group, athletes_data, resources=None):
     return _report_html_shell("Athlete Baseline Report", group_name, group_name, body_content, today)
 
 
-def progress_report_page(coach, group, athletes_data, resources=None):
+def progress_report_page(coach, group, athletes_data, resources=None, axp_by_athlete=None):
     """
     athletes_data: list of (athlete_row, sessions_list) ordered most-recent-first.
     Compares sessions[-1] = baseline (oldest) vs sessions[0] = latest.
     Only athletes with >= 2 sessions appear.
     resources: list of resource rows (for self-organisation tag matching).
+    axp_by_athlete: dict {athlete_id: total_xp_int} for AXP rank column.
     """
-    from constants import find_any_game, IMPROVEMENT_LEVELS
+    from constants import find_any_game, IMPROVEMENT_LEVELS, get_athlete_rank_tier
 
     today = _dt.date.today().strftime("%d %B %Y")
     group_name = group["name"] if group else "All Athletes"
     so_map = _build_game_so_map(resources or [])
+    axp_by_athlete = axp_by_athlete or {}
 
     eligible = [(a, s) for a, s in athletes_data if len(s) >= 2]
 
@@ -6368,15 +6370,26 @@ def progress_report_page(coach, group, athletes_data, resources=None):
         body_content = '<p style="color:#888;margin-top:20px;">No athletes with 2 or more test sessions found in this group.</p>'
         return _report_html_shell("Athlete Progress Report", group_name, group_name, body_content, today)
 
-    def _aap_level_label(pct):
-        """Map improvement % to the highest matching IMPROVEMENT_LEVELS label."""
+    def _improvement_band(pct):
+        """Map improvement % to the highest matching IMPROVEMENT_LEVELS label + formatted pct."""
         if pct is None:
-            return "—"
+            return "—", ""
         label = IMPROVEMENT_LEVELS[0][1]
         for threshold, name in IMPROVEMENT_LEVELS:
             if pct >= threshold:
                 label = name
-        return label
+        sign = "+" if pct >= 0 else ""
+        return label, f"{sign}{pct:.1f}%"
+
+    def _axp_rank_cell(athlete_id):
+        """Return a coloured rank pill for this athlete's current AXP total."""
+        total = axp_by_athlete.get(athlete_id, 0)
+        tier = get_athlete_rank_tier(total)
+        colour = tier.get("colour", "#6E737B")
+        label = tier.get("label", "Explorer")
+        return (f'<span style="font-size:10px;font-weight:700;color:#fff;background:{colour};'
+                f'border-radius:999px;padding:2px 9px;white-space:nowrap;">{esc(label)}</span>'
+                f'<div style="font-size:9px;color:#9CA3AF;margin-top:2px;">{total:,} AXP</div>')
 
     # Collect used columns from baseline or latest of any eligible athlete
     used_cols = []
@@ -6429,7 +6442,8 @@ def progress_report_page(coach, group, athletes_data, resources=None):
     header = (
         f'<tr><th rowspan="2">#</th><th rowspan="2">Athlete</th>{th_cols}'
         f'<th rowspan="2" style="border-left:2px solid rgba(255,255,255,0.2);">Overall Δ%</th>'
-        f'<th rowspan="2" style="border-left:2px solid rgba(255,255,255,0.2);">AAP Level</th></tr>'
+        f'<th rowspan="2" style="border-left:2px solid rgba(255,255,255,0.2);">Programme Improvement</th>'
+        f'<th rowspan="2" style="border-left:2px solid rgba(255,255,255,0.2);">AXP Rank</th></tr>'
         f'<tr>{th_sub}</tr>'
     )
 
@@ -6460,15 +6474,20 @@ def progress_report_page(coach, group, athletes_data, resources=None):
 
         overall_pct = sum(field_pcts) / len(field_pcts) if field_pcts else None
         o_css, o_s = pct_class(overall_pct)
-        aap_label = _aap_level_label(overall_pct)
+        band_label, band_pct = _improvement_band(overall_pct)
         session_count = len(sessions)
+        imp_cell = (
+            f'<span style="font-size:11px;font-weight:700;color:#2D323B;">{esc(band_label)}</span>'
+            + (f'<div style="font-size:9px;color:#9CA3AF;margin-top:2px;">{esc(band_pct)}</div>' if band_pct else "")
+        )
         rows += (
             f'<tr><td style="color:#888;">{esc(athlete.get("athlete_number") or "")}</td>'
             f'<td style="font-weight:600;">{esc(athlete["name"])}'
             f'<div style="font-size:9px;color:#888;font-weight:400;">{session_count} session{"s" if session_count != 1 else ""}</div></td>'
             f'{tds}'
             f'<td class="{o_css}" style="font-size:13px;border-left:2px solid #ccc;">{o_s}</td>'
-            f'<td style="font-size:11px;font-weight:600;color:#2D323B;border-left:2px solid #ccc;white-space:nowrap;">{esc(aap_label)}</td></tr>'
+            f'<td style="border-left:2px solid #ccc;white-space:nowrap;">{imp_cell}</td>'
+            f'<td style="border-left:2px solid #ccc;text-align:center;">{_axp_rank_cell(athlete["id"])}</td></tr>'
         )
 
     base_date   = eligible[0][1][-1]["date"] if eligible else ""
@@ -12028,7 +12047,7 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
         elif score is None:
             is_gap = False  # not enough data yet
         elif not has_thresholds:
-            is_gap = True   # flag all areas when no thresholds set
+            is_gap = False  # don't flag as gap — thresholds not configured yet
 
         # First-session score for improvement calculation
         if fk is None:
@@ -12146,7 +12165,7 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
 
     no_thresh_note = ""
     if not has_thresholds:
-        no_thresh_note = '<div style="background:#FFF3D6;border-left:4px solid #F0A82E;border-radius:6px;padding:10px 14px;font-size:12px;color:#92400E;margin-bottom:12px;">No thresholds have been set yet — all scoring areas are shown. Once thresholds are configured, this report will highlight only the areas where this athlete is below their next level target.</div>'
+        no_thresh_note = '<div style="background:#FFF3D6;border-left:4px solid #F0A82E;border-radius:6px;padding:10px 14px;font-size:12px;color:#92400E;margin-bottom:12px;"><strong>Thresholds not configured.</strong> This report shows scores and improvement data, but gap analysis is disabled until game thresholds are set by your programme administrator. AXP is earned through the testing round system — scores here reflect session recordings.</div>'
 
     score_table = f"""
     {no_thresh_note}
@@ -12176,9 +12195,14 @@ def individual_athlete_report_page(coach, athlete, sessions, levels_by_area,
 
     # ── Gap analysis section (CLA-framed) ────────────────────────────────────
     if not gap_areas:
-        gap_html = ('<div style="background:rgba(30,190,139,0.08);border-left:4px solid #1EBE8B;'
-                    'border-radius:8px;padding:14px 18px;font-size:13px;color:#065F46;margin-bottom:28px;">'
-                    '<strong>No gaps identified.</strong> This athlete is meeting all current thresholds.</div>')
+        if not has_thresholds:
+            gap_html = ('<div style="background:#F3F4F6;border-left:4px solid #9CA3AF;'
+                        'border-radius:8px;padding:14px 18px;font-size:13px;color:#4B5563;margin-bottom:28px;">'
+                        '<strong>Gap analysis unavailable.</strong> Configure game thresholds in Admin &rarr; AXP Thresholds to enable targeted gap identification for each athlete.</div>')
+        else:
+            gap_html = ('<div style="background:rgba(30,190,139,0.08);border-left:4px solid #1EBE8B;'
+                        'border-radius:8px;padding:14px 18px;font-size:13px;color:#065F46;margin-bottom:28px;">'
+                        '<strong>No gaps identified.</strong> This athlete is meeting all current thresholds.</div>')
     else:
         by_family = {}
         for g in gap_areas:
@@ -12519,7 +12543,10 @@ def athlete_movement_report_page(athlete, sessions, levels_by_area, thresholds_r
     n_well = len(well)
     n_focus = len(focus)
     if n_well == 0 and n_focus == 0:
-        synopsis = "No measurement data yet — once you've been tested your report will appear here."
+        if not thresholds_raw:
+            synopsis = f"Your scores have been recorded, {first_name}. Your full movement report will be available once your programme administrator has configured the testing thresholds."
+        else:
+            synopsis = "No measurement data yet — once you've been tested your report will appear here."
     elif n_focus == 0:
         synopsis = f"You're tracking well across all your tested areas, {first_name}. Keep playing, keep challenging yourself."
     elif n_well == 0:
