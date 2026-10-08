@@ -2395,6 +2395,49 @@ def organisation_delete(req, org_id):
         conn.close()
 
 
+# --------------------------------------------------------- org self-service settings
+
+
+@router.get("/org/settings")
+def org_settings_get(req):
+    coach = require_org_admin(req)
+    if not coach:
+        return redirect("/login")
+    org_id = coach.get("organisation_id")
+    if not org_id:
+        return flash_redirect("/coach", "Your account is not linked to an organisation.")
+    conn = db.get_conn()
+    try:
+        org = db.get_organisation(conn, org_id)
+        if not org:
+            return flash_redirect("/coach", "Organisation not found.")
+        message = req.get_query("flash")
+        return Response(views.org_settings_page(coach, org, message=message))
+    finally:
+        conn.close()
+
+
+@router.post("/org/settings")
+def org_settings_post(req):
+    coach = require_org_admin(req)
+    if not coach:
+        return redirect("/login")
+    org_id = coach.get("organisation_id")
+    if not org_id:
+        return flash_redirect("/coach", "Your account is not linked to an organisation.")
+    icon_url = req.form_get("icon_url").strip() or None
+    conn = db.get_conn()
+    try:
+        org = db.get_organisation(conn, org_id)
+        if not org:
+            return flash_redirect("/coach", "Organisation not found.")
+        # Preserve existing name/type; only update the logo URL
+        db.update_organisation(conn, org_id, org["name"], org_type=org.get("type"), icon_url=icon_url)
+        return flash_redirect("/org/settings", "Logo updated.")
+    finally:
+        conn.close()
+
+
 # --------------------------------------------------------- participant groups
 
 

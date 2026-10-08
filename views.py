@@ -177,9 +177,10 @@ def layout(title, body, user=None, flash=None, active_nav=None):
                     return '<div style="height:1px;background:rgba(255,255,255,0.10);margin:4px 8px;"></div>'
 
                 dropdown_links = (
-                    _drop_item("/coach/participants/new", "Add Participant", "+") +
-                    _drop_item("/coach/coaches",          "Practitioners",   "◉") +
-                    _drop_item("/coach/organisations",    "Organisations",   "▣")
+                    _drop_item("/coach/participants/new", "Add Participant",   "+") +
+                    _drop_item("/coach/coaches",          "Practitioners",     "◉") +
+                    _drop_item("/coach/organisations",    "Organisations",     "▣") +
+                    _drop_item("/org/settings",           "Org Logo Settings", "🖼")
                 )
                 if is_sys:
                     dropdown_links += (
@@ -8155,6 +8156,78 @@ def organisation_form(user, org=None, error=None):
     return layout(title, body, user=user, active_nav="organisations")
 
 
+def org_settings_page(user, org, message=None):
+    """Self-service org settings page — accessible to org_admin and system_admin."""
+    msg_html = f'<div class="alert alert-success">{esc(message)}</div>' if message else ""
+    cur_url = esc(org.get("icon_url") or "")
+    preview_html = ""
+    if cur_url:
+        preview_html = (
+            f'<div id="logo-preview-wrap" style="margin-bottom:14px;">'
+            f'<img id="logo-preview" src="{cur_url}" alt="Current logo" '
+            f'style="height:60px;width:auto;max-width:240px;object-fit:contain;'
+            f'border-radius:6px;border:1px solid var(--jag-border);padding:6px;background:#fff;" '
+            f'onerror="this.parentElement.style.display=\'none\'" /></div>'
+        )
+    else:
+        preview_html = (
+            '<div id="logo-preview-wrap" style="display:none;margin-bottom:14px;">'
+            '<img id="logo-preview" src="" alt="Logo preview" '
+            'style="height:60px;width:auto;max-width:240px;object-fit:contain;'
+            'border-radius:6px;border:1px solid var(--jag-border);padding:6px;background:#fff;" '
+            'onerror="this.parentElement.style.display=\'none\'" /></div>'
+        )
+    body = f"""
+    <div class="page-head">
+      <h1>Organisation Settings</h1>
+    </div>
+    {msg_html}
+    <div class="card form-card" style="max-width:520px;">
+      <h2 style="margin-top:0;font-size:16px;">{esc(org['name'])}</h2>
+      <form method="post" action="/org/settings">
+        <label for="icon_url" style="margin-top:4px;">Organisation Logo</label>
+        <p style="font-size:12px;color:var(--jag-muted);margin:4px 0 10px;">
+          Paste a publicly accessible image URL. The image must be reachable by anyone
+          — private links won't display for your athletes.
+        </p>
+        {preview_html}
+        <input type="url" id="icon_url" name="icon_url" value="{cur_url}"
+               placeholder="https://…"
+               oninput="
+                 var u=this.value.trim();
+                 var w=document.getElementById('logo-preview-wrap');
+                 var img=document.getElementById('logo-preview');
+                 if(u){{
+                   img.src=u;
+                   w.style.display='block';
+                 }} else {{
+                   w.style.display='none';
+                   img.src='';
+                 }}" />
+        <div class="card" style="margin-top:14px;padding:14px 16px;background:var(--jag-surface2,#f8f8f9);border:1px solid var(--jag-border);">
+          <p style="margin:0 0 8px;font-size:13px;font-weight:700;">Using Google Drive?</p>
+          <p style="margin:0 0 6px;font-size:12px;color:var(--jag-muted);">
+            Standard Google Drive share links don't work as direct image URLs.
+            Convert yours with these steps:
+          </p>
+          <ol style="margin:0 0 6px;padding-left:18px;font-size:12px;color:var(--jag-muted);">
+            <li>In Google Drive, right-click your logo file → <strong>Share</strong> → set to <em>Anyone with the link</em></li>
+            <li>Copy the sharing URL — it looks like:<br>
+              <code style="font-size:11px;">drive.google.com/file/d/<strong>FILE_ID</strong>/view</code></li>
+            <li>Change it to a direct image URL:<br>
+              <code style="font-size:11px;">drive.google.com/uc?id=<strong>FILE_ID</strong></code></li>
+          </ol>
+          <p style="margin:0;font-size:12px;color:var(--jag-muted);">
+            Alternatively, upload your logo to any public image host (e.g. <em>Imgur</em>,
+            <em>Cloudinary free tier</em>) and paste that URL directly.
+          </p>
+        </div>
+        <button type="submit" class="btn btn-primary btn-block" style="margin-top:18px;">Save Logo</button>
+      </form>
+    </div>"""
+    return layout("Organisation Settings", body, user=user, active_nav="org_settings")
+
+
 def _gdrive_thumbnail(url):
     """Return a thumbnail URL for a Google Drive file link, or None if not GDrive."""
     if not url:
@@ -8661,6 +8734,7 @@ def edit_resource_page(user, resource, folders, selected_game_keys=None,
       </div>
     </div>"""
 
+    from constants import CARD_TAXONOMY
     _cur_slug = resource.get('card_slug') or ''
     _edit_slug_opts = '<option value="">— None —</option>' + "".join(
         f'<option value="{esc(s)}"{"  selected" if s == _cur_slug else ""}>{esc(s)}</option>'
