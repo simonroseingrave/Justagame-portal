@@ -1861,8 +1861,8 @@ def close_testing_round(conn, round_id):
     """
     from constants import (
         XP_GAME_CONFIG, CORE_AAP_GAMES,
-        ROUND_XP_BASELINE_PER_GAME, ROUND_XP_COMPLETION_BONUS,
-        ROUND_XP_IMPROVEMENT_FACTOR, ROUND_XP_IMPROVEMENT_CAP,
+        ROUND_XP_LEVEL_TIERS, ROUND_XP_COMPLETION_BONUS,
+        ROUND_XP_BASELINE_PER_GAME, ROUND_XP_IMPROVEMENT_FACTOR, ROUND_XP_IMPROVEMENT_CAP,
     )
     rnd = conn.execute("SELECT * FROM testing_rounds WHERE id = ?", (round_id,)).fetchone()
     if not rnd:
@@ -1886,6 +1886,13 @@ def close_testing_round(conn, round_id):
             "JOIN round_scores rs ON rs.athlete_id = u.id WHERE rs.round_id = ?",
             (round_id,),
         ).fetchall()
+
+    # Resolve the AXP tier for this round's level (fallback to L1 defaults)
+    round_level = rnd.get("level") or 1
+    _tier        = ROUND_XP_LEVEL_TIERS.get(round_level, ROUND_XP_LEVEL_TIERS.get(1, {}))
+    _factor      = _tier.get("factor",      ROUND_XP_IMPROVEMENT_FACTOR)
+    _cap         = _tier.get("cap",         ROUND_XP_IMPROVEMENT_CAP)
+    _baseline_xp = _tier.get("baseline_xp", ROUND_XP_BASELINE_PER_GAME)
 
     summaries = []
     for athlete in athletes:
@@ -1913,7 +1920,7 @@ def close_testing_round(conn, round_id):
             games_scored += 1
 
             if is_baseline:
-                xp = ROUND_XP_BASELINE_PER_GAME
+                xp = _baseline_xp
                 conn.execute(
                     "INSERT INTO round_xp_awards (round_id, athlete_id, game_key, "
                     "improvement_pct, xp_awarded, award_type, awarded_at) VALUES (?,?,?,NULL,?,?,?)",
@@ -1941,7 +1948,7 @@ def close_testing_round(conn, round_id):
                 else:
                     improvement_pct = max(0.0, (score_prev - score_this) / score_prev * 100)
 
-                xp = min(int(improvement_pct * ROUND_XP_IMPROVEMENT_FACTOR), ROUND_XP_IMPROVEMENT_CAP)
+                xp = min(int(improvement_pct * _factor), _cap)
                 conn.execute(
                     "INSERT INTO round_xp_awards (round_id, athlete_id, game_key, "
                     "improvement_pct, xp_awarded, award_type, awarded_at) VALUES (?,?,?,?,?,?,?)",

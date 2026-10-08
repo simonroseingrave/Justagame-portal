@@ -338,13 +338,28 @@ XP_GAME_CONFIG = {
     },
 }
 
-# AXP per testing round (see db.py award_round_xp)
-# Baseline round: flat participation AXP per game completed + completion bonus
-ROUND_XP_BASELINE_PER_GAME = 25    # per game recorded in a baseline round
-ROUND_XP_COMPLETION_BONUS   = 50   # bonus for completing all 8 core games in a round
-# Re-test round: improvement % × ROUND_XP_IMPROVEMENT_FACTOR per game, capped at max
-ROUND_XP_IMPROVEMENT_FACTOR = 6    # improvement_pct × 6 AXP per game
-ROUND_XP_IMPROVEMENT_CAP    = 150  # max AXP per game per re-test round
+# AXP per testing round (see db.py close_testing_round)
+# Completion bonus is flat regardless of level — it rewards full participation.
+ROUND_XP_COMPLETION_BONUS = 50   # bonus for completing all 8 core games in a round
+
+# Per-level AXP tiers — exponential scaling so higher-level achievements earn more.
+#   factor      : AXP awarded per 1 % improvement (re-test rounds)
+#   cap         : maximum AXP per game per re-test round
+#   baseline_xp : AXP per game recorded in a baseline round at this level
+#
+# Example: 5 % improvement at L1 = 30 AXP; at L5 = 160 AXP (~5× more).
+ROUND_XP_LEVEL_TIERS = {
+    1: {"factor":  6, "cap": 100, "baseline_xp": 25},
+    2: {"factor": 10, "cap": 160, "baseline_xp": 35},
+    3: {"factor": 15, "cap": 240, "baseline_xp": 50},
+    4: {"factor": 22, "cap": 360, "baseline_xp": 70},
+    5: {"factor": 32, "cap": 520, "baseline_xp": 100},
+}
+
+# Legacy flat constants — kept so any direct references outside close_testing_round don't crash.
+ROUND_XP_BASELINE_PER_GAME  = 25   # superseded by ROUND_XP_LEVEL_TIERS[level]["baseline_xp"]
+ROUND_XP_IMPROVEMENT_FACTOR = 6    # superseded by ROUND_XP_LEVEL_TIERS[level]["factor"]
+ROUND_XP_IMPROVEMENT_CAP    = 150  # superseded by ROUND_XP_LEVEL_TIERS[level]["cap"]
 
 # Kept as empty dict so legacy imports in db.py / views.py don't crash.
 # Automatic level-up XP from session recording is disabled — levels are now
