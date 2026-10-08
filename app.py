@@ -2634,6 +2634,7 @@ def resource_edit_post(req, resource_id):
     folder_id = req.form_get("folder_id").strip() or None
     level_range = req.form_get("level_range").strip() or "multi_level"
     space_requirement = req.form_get("space_requirement").strip() or "unspecified"
+    card_slug = req.form_get("card_slug").strip() or None
     game_keys = [g.strip() for g in req.form_get_list("game_keys") if g.strip()]
     # Collect taxonomy multi-select dimensions
     taxonomy_tags = {}
@@ -2663,10 +2664,31 @@ def resource_edit_post(req, resource_id):
     try:
         db.update_resource(conn, resource_id, name, description, url, folder_id,
                            self_organisation=self_organisation, level_range=level_range,
-                           space_requirement=space_requirement)
-        db.set_resource_game_keys(conn, resource_id, game_keys)
-        db.set_resource_taxonomy_tags(conn, resource_id, taxonomy_tags)
+                           space_requirement=space_requirement, card_slug=card_slug)
+        # If a card_slug was set, auto-sync taxonomy from CARD_TAXONOMY
+        if card_slug:
+            db.sync_card_taxonomy(conn, resource_id=resource_id)
+        else:
+            db.set_resource_game_keys(conn, resource_id, game_keys)
+            db.set_resource_taxonomy_tags(conn, resource_id, taxonomy_tags)
         return flash_redirect("/coach/resources", f'"{name}" updated.')
+    finally:
+        conn.close()
+
+
+@router.post("/admin/sync-card-taxonomy")
+def admin_sync_card_taxonomy(req):
+    """Bulk-sync taxonomy tags for all resources that have a card_slug set."""
+    coach = require_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        updated, skipped, errors = db.sync_card_taxonomy(conn)
+        msg = f"Card taxonomy synced: {updated} updated"
+        if skipped:
+            msg += f", {skipped} skipped (unknown slug)"
+        return flash_redirect("/coach/resources", msg)
     finally:
         conn.close()
 

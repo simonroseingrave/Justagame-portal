@@ -399,6 +399,7 @@ def init_db():
         "ALTER TABLE session_events ADD COLUMN is_open INTEGER NOT NULL DEFAULT 0",
         "ALTER TABLE session_events ADD COLUMN opened_at TEXT",
         "ALTER TABLE users ADD COLUMN onboarding_seen INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE resources ADD COLUMN card_slug TEXT",
     ]:
         try:
             conn.execute(sql)
@@ -1249,13 +1250,13 @@ def move_resource(conn, resource_id, folder_id):
 
 def update_resource(conn, resource_id, name, description, url, folder_id,
                     self_organisation=None, level_range="multi_level",
-                    space_requirement="unspecified"):
+                    space_requirement="unspecified", card_slug=None):
     conn.execute(
         "UPDATE resources SET name = ?, description = ?, url = ?, folder_id = ?, "
-        "self_organisation = ?, level_range = ?, space_requirement = ? WHERE id = ?",
+        "self_organisation = ?, level_range = ?, space_requirement = ?, card_slug = ? WHERE id = ?",
         (name, description or None, url, folder_id or None,
          self_organisation or None, level_range or "multi_level",
-         space_requirement or "unspecified", resource_id),
+         space_requirement or "unspecified", card_slug or None, resource_id),
     )
     conn.commit()
 
@@ -1324,6 +1325,42 @@ def set_resource_game_keys(conn, resource_id, game_keys):
                 (resource_id, gk),
             )
     conn.commit()
+
+
+def sync_card_taxonomy(conn, resource_id=None):
+    """Apply CARD_TAXONOMY tags to resources that have a card_slug set.
+
+    If resource_id is given, only that resource is synced.
+    Returns (updated, skipped, errors) tuple.
+    """
+    from constants import CARD_TAXONOMY
+    if resource_id:
+        rows = conn.execute(
+            "SELECT id, card_slug FROM resources WHERE id = ? AND card_slug IS NOT NULL",
+            (resource_id,),
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT id, card_slug FROM resources WHERE card_slug IS NOT NULL"
+        ).fetchall()
+    updated, skipped, errors = 0, 0, []
+    for row in rows:
+        rid = row["id"]
+        slug = row["card_slug"]
+        taxonomy = CARD_TAXONOMY.get(slug)
+        if not taxonomy:
+            skipped += 1
+            errors.append(f"No CARD_TAXONOMY entry for slug '{slug}' (resource {rid})")
+            continue
+        try:
+            game_keys = taxonomy.get("game_keys", [])
+            dim_tags = {k: v for k, v in taxonomy.items() if k != "game_keys"}
+            set_resource_game_keys(conn, rid, game_keys)
+            set_resource_taxonomy_tags(conn, rid, dim_tags)
+            updated += 1
+        except Exception as exc:
+            errors.append(f"Error syncing resource {rid}: {exc}")
+    return updated, skipped, errors
 
 
 def get_resource_taxonomy_tags(conn, resource_id):
