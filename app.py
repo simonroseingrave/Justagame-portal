@@ -4016,6 +4016,22 @@ def admin_run_migrations(req):
     return redirect("/coach/admin/hub?flash=Migrations+applied")
 
 
+@router.get("/coach/admin/sync-taxonomy")
+def admin_sync_taxonomy(req):
+    """Bulk-apply CARD_TAXONOMY D1–D9 tags to every resource that has a card_slug set."""
+    coach = require_system_admin(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    updated, skipped, errors = db.sync_card_taxonomy(conn)
+    conn.commit()
+    conn.close()
+    msg = f"Taxonomy+synced%3A+{updated}+updated"
+    if skipped:
+        msg += f"%2C+{skipped}+skipped+%28unknown+slug%29"
+    return redirect(f"/coach/admin/hub?flash={msg}")
+
+
 @router.get("/coach/admin/hub")
 def admin_hub_get(req):
     """System admin hub — all admin links in one place."""
