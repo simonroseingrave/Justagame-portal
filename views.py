@@ -5891,6 +5891,12 @@ def reports_landing_page(coach, groups, orgs=None, sports=None, active_windows=N
       {_report_card("🏅", "Engagement & AXP Journey",
           "Per-athlete snapshot: total AXP, current rank, rounds completed, attendance, self-directed sessions, streaks. Flags at-risk athletes with low engagement. Sorted by AXP descending.",
           "engagement")}
+      {_report_card("📄", "Testing Round Summary",
+          "Printable evidence document for any closed testing round — athlete scores, AXP earned, and improvement vs baseline. Ideal for sharing with athletes, parents, or school leadership.",
+          "round-list", "Select Round")}
+      {_report_card("🔄", "Round Readiness",
+          "Per-group view of completed testing rounds and what is available to open next. Quickly see where each group sits in their programme pathway.",
+          "round-readiness")}
     </div>
 
     <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--jag-muted);margin-bottom:16px;">Live Statistics</h2>
@@ -5912,8 +5918,7 @@ def reports_landing_page(coach, groups, orgs=None, sports=None, active_windows=N
       else if (org) params.push('org_id=' + org);
       if (sport) params.push('sport=' + encodeURIComponent(sport));
       var url = '/coach/reports/' + type + '?' + params.join('&');
-      if (type === 'completion') {{ window.location = url; }}
-      else if (type === 'cohort-improvement') {{ window.open(url, '_blank'); }}
+      if (type === 'completion' || type === 'round-list') {{ window.location = url; }}
       else {{ window.open(url, '_blank'); }}
     }}
     </script>
@@ -6811,6 +6816,351 @@ def engagement_report_page(coach, athletes_data, scope_label, today=None):
             f'<thead>{header}</thead><tbody>{rows_html}</tbody></table></div>')
 
     return _report_html_shell("Engagement & AXP Journey", scope_label, scope_label, body, today)
+
+
+def round_report_page(coach, data, today=None):
+    """Printable Testing Round Summary — per-round evidence document.
+    data: dict from db.get_round_report_data()
+    """
+    import datetime as _dt
+    from constants import find_any_game
+
+    if today is None:
+        today = _dt.date.today().strftime("%d %B %Y")
+
+    if not data:
+        body = '<p style="color:#888">Round not found.</p>'
+        return _report_html_shell("Testing Round Summary", "", "", body, today)
+
+    rnd        = data["rnd"]
+    group_name = data["group_name"]
+    athletes   = data["athletes"]
+    games_tested = data["games_tested"]
+    prev_round = data["prev_round"]
+
+    is_baseline = (rnd["round_type"] == "baseline")
+    seq = rnd.get("retest_sequence") or 1
+    level_label = f"Level {rnd['level']}"
+    round_label = (f"{level_label} Baseline" if is_baseline
+                   else f"{level_label} Re-Test" + (f" #{seq}" if seq > 1 else ""))
+
+    opened_str = (rnd.get("opened_at") or "")[:10] or "—"
+    closed_str = (rnd.get("closed_at") or "")[:10] or "—"
+
+    n_athletes = len(athletes)
+    total_axp  = sum(a["total_xp"] for a in athletes)
+    avg_axp    = round(total_axp / n_athletes) if n_athletes else 0
+
+    LEVEL_COLOURS = {1: "#1EBE8B", 2: "#F0A82E", 3: "#3B6BC4", 4: "#D4622F", 5: "#8B5CF6"}
+    accent = LEVEL_COLOURS.get(rnd.get("level", 1), "#1B2A3B")
+
+    # ── Hero ────────────────────────────────────────────────────────────────
+    hero = f'''
+    <div style="display:flex;flex-wrap:wrap;gap:14px;margin-bottom:24px;">
+      <div style="background:#1B2A3B;border-radius:10px;padding:16px 22px;color:#fff;flex:1;min-width:110px;text-align:center;">
+        <div style="font-size:26px;font-weight:800;">{n_athletes}</div>
+        <div style="font-size:10px;opacity:0.7;text-transform:uppercase;letter-spacing:0.05em;margin-top:3px;">Athletes Tested</div>
+      </div>
+      <div style="background:#F0A82E;border-radius:10px;padding:16px 22px;color:#1B2A3B;flex:1;min-width:110px;text-align:center;">
+        <div style="font-size:26px;font-weight:800;">{total_axp:,}</div>
+        <div style="font-size:10px;opacity:0.7;text-transform:uppercase;letter-spacing:0.05em;margin-top:3px;">Total AXP Awarded</div>
+      </div>
+      <div style="background:#E8F5E9;border-radius:10px;padding:16px 22px;color:#1B2A3B;flex:1;min-width:110px;text-align:center;">
+        <div style="font-size:26px;font-weight:800;">{avg_axp:,}</div>
+        <div style="font-size:10px;opacity:0.7;text-transform:uppercase;letter-spacing:0.05em;margin-top:3px;">Avg AXP / Athlete</div>
+      </div>
+      <div style="background:#F3F4F6;border-radius:10px;padding:16px 22px;color:#1B2A3B;flex:1;min-width:110px;text-align:center;">
+        <div style="font-size:26px;font-weight:800;">{len(games_tested)}</div>
+        <div style="font-size:10px;opacity:0.7;text-transform:uppercase;letter-spacing:0.05em;margin-top:3px;">Games Tested</div>
+      </div>
+    </div>'''
+
+    # ── Round meta ──────────────────────────────────────────────────────────
+    prev_info = ""
+    if prev_round:
+        prev_label = (f"Level {prev_round['level']} Baseline"
+                      if prev_round["round_type"] == "baseline"
+                      else f"Level {prev_round['level']} Re-Test #{prev_round.get('retest_sequence') or 1}")
+        prev_info = (f'<tr><td style="font-weight:600;padding:5px 12px;">Compared to</td>'
+                     f'<td style="padding:5px 12px;">{prev_label}'
+                     f' (closed {(prev_round.get("closed_at") or "")[:10]})</td></tr>')
+    notes_row = ""
+    if rnd.get("notes"):
+        notes_row = (f'<tr><td style="font-weight:600;padding:5px 12px;">Notes</td>'
+                     f'<td style="padding:5px 12px;">{esc(rnd["notes"])}</td></tr>')
+
+    meta = f'''
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:24px;background:#F9FAFB;border-radius:8px;overflow:hidden;">
+      <tr><td style="font-weight:600;padding:5px 12px;width:150px;">Group</td><td style="padding:5px 12px;">{esc(group_name)}</td></tr>
+      <tr style="background:#F3F4F6;"><td style="font-weight:600;padding:5px 12px;">Round</td><td style="padding:5px 12px;">{esc(round_label)}</td></tr>
+      <tr><td style="font-weight:600;padding:5px 12px;">Opened</td><td style="padding:5px 12px;">{opened_str}</td></tr>
+      <tr style="background:#F3F4F6;"><td style="font-weight:600;padding:5px 12px;">Closed</td><td style="padding:5px 12px;">{closed_str}</td></tr>
+      {prev_info}{notes_row}
+    </table>'''
+
+    # ── AXP summary table ───────────────────────────────────────────────────
+    axp_hdr = ('<tr style="background:#1B2A3B;color:#fff;">'
+               '<th style="padding:7px 12px;text-align:left;font-size:11px;">#</th>'
+               '<th style="padding:7px 12px;text-align:left;font-size:11px;">Athlete</th>'
+               '<th style="padding:7px 12px;text-align:right;font-size:11px;">Games&nbsp;Scored</th>')
+    if not is_baseline:
+        axp_hdr += '<th style="padding:7px 12px;text-align:right;font-size:11px;">Avg&nbsp;Improvement</th>'
+    axp_hdr += '<th style="padding:7px 12px;text-align:right;font-size:11px;">AXP&nbsp;Earned</th></tr>'
+
+    axp_rows = ""
+    for i, a in enumerate(athletes):
+        bg = "#fff" if i % 2 == 0 else "#F9FAFB"
+        games_scored = sum(1 for g in games_tested if a["scores"].get(g))
+        num_str  = esc(str(a.get("athlete_number") or ""))
+        name_str = esc(a["name"])
+        sport_txt = (f'<span style="font-size:10px;color:#6B7280;margin-left:6px;">{esc(a["sport"])}</span>'
+                     if a.get("sport") else "")
+        imp_cell = ""
+        if not is_baseline:
+            imp_pcts = [x["improvement_pct"] for x in a["xp_awards"]
+                        if x.get("award_type") == "improvement"
+                        and x.get("improvement_pct") is not None]
+            if imp_pcts:
+                avg_imp = sum(imp_pcts) / len(imp_pcts)
+                colour  = "#1EBE8B" if avg_imp >= 0 else "#EF4444"
+                sign    = "+" if avg_imp >= 0 else ""
+                imp_cell = (f'<td style="padding:7px 12px;text-align:right;font-size:12px;'
+                            f'font-weight:700;color:{colour};">{sign}{avg_imp:.1f}%</td>')
+            else:
+                imp_cell = '<td style="padding:7px 12px;text-align:right;color:#9CA3AF;">—</td>'
+        axp_rows += (f'<tr style="background:{bg};">'
+                     f'<td style="padding:7px 12px;font-size:11px;color:#6B7280;">{num_str}</td>'
+                     f'<td style="padding:7px 12px;font-size:13px;font-weight:600;">{name_str}{sport_txt}</td>'
+                     f'<td style="padding:7px 12px;text-align:right;font-size:12px;">'
+                     f'{games_scored}/{len(games_tested)}</td>'
+                     f'{imp_cell}'
+                     f'<td style="padding:7px 12px;text-align:right;font-size:13px;'
+                     f'font-weight:700;color:#F0A82E;">{a["total_xp"]:,}</td></tr>')
+
+    axp_section = (f'<h3 style="font-size:13px;font-weight:700;text-transform:uppercase;'
+                   f'letter-spacing:0.05em;color:#6B7280;margin:0 0 8px;">AXP Summary</h3>'
+                   f'<div style="overflow-x:auto;margin-bottom:26px;">'
+                   f'<table style="width:100%;border-collapse:collapse;">'
+                   f'<thead>{axp_hdr}</thead><tbody>{axp_rows}</tbody></table></div>')
+
+    # ── Per-game detail ─────────────────────────────────────────────────────
+    game_sections = ""
+    for gk in games_tested:
+        game_def = find_any_game(gk)
+        game_name = game_def["name"] if game_def else gk.replace("_", " ").title()
+        fields    = game_def.get("fields", []) if game_def else []
+        visible   = [f for f in fields if not f.get("hidden")]
+        if not visible:
+            all_keys = set()
+            for a in athletes:
+                all_keys.update(a["scores"].get(gk, {}).keys())
+            visible = [{"key": k, "label": k.replace("_", " ").title()} for k in sorted(all_keys)]
+        if not visible:
+            continue
+
+        g_hdr = '<tr style="background:#F3F4F6;"><th style="padding:5px 10px;text-align:left;font-size:11px;color:#374151;">Athlete</th>'
+        for fld in visible:
+            lbl = esc(fld.get("label", fld["key"]))
+            suffix = "" if is_baseline else " (prev → now)"
+            g_hdr += f'<th style="padding:5px 10px;text-align:right;font-size:11px;color:#374151;">{lbl}{suffix}</th>'
+        g_hdr += "</tr>"
+
+        g_rows = ""
+        for i, a in enumerate(athletes):
+            if gk not in a["scores"]:
+                continue
+            bg = "#fff" if i % 2 == 0 else "#FAFAFA"
+            cells = ""
+            for fld in visible:
+                fk       = fld["key"]
+                curr_val = a["scores"].get(gk, {}).get(fk)
+                if curr_val is None:
+                    cells += '<td style="padding:5px 10px;text-align:right;color:#9CA3AF;">—</td>'
+                    continue
+                if is_baseline:
+                    cells += f'<td style="padding:5px 10px;text-align:right;font-size:12px;">{curr_val}</td>'
+                else:
+                    prev_val = a["prev_scores"].get(gk, {}).get(fk)
+                    prev_str = str(prev_val) if prev_val is not None else "—"
+                    delta = ""
+                    if prev_val is not None:
+                        try:
+                            p, c = float(prev_val), float(curr_val)
+                            if p != 0:
+                                pct   = ((c - p) / abs(p)) * 100
+                                col2  = "#1EBE8B" if pct >= 0 else "#EF4444"
+                                sign2 = "+" if pct >= 0 else ""
+                                delta = (f' <span style="color:{col2};font-size:10px;'
+                                         f'font-weight:700;">({sign2}{pct:.1f}%)</span>')
+                        except (ValueError, TypeError):
+                            pass
+                    cells += (f'<td style="padding:5px 10px;text-align:right;font-size:12px;">'
+                               f'{prev_str} → <strong>{curr_val}</strong>{delta}</td>')
+            g_rows += (f'<tr style="background:{bg};">'
+                       f'<td style="padding:5px 10px;font-size:12px;font-weight:600;">{esc(a["name"])}</td>'
+                       f'{cells}</tr>')
+
+        if not g_rows:
+            continue
+        game_sections += (f'<div style="margin-bottom:18px;border-left:4px solid {accent};padding-left:10px;">'
+                          f'<h4 style="margin:0 0 6px;font-size:13px;font-weight:700;color:#1B2A3B;">'
+                          f'{esc(game_name)}</h4>'
+                          f'<div style="overflow-x:auto;">'
+                          f'<table style="width:100%;border-collapse:collapse;">'
+                          f'<thead>{g_hdr}</thead><tbody>{g_rows}</tbody></table></div></div>')
+
+    detail_title = "Baseline Scores by Game" if is_baseline else "Score Comparison by Game"
+    detail_note  = ""
+    if not is_baseline:
+        detail_note = '<p style="font-size:12px;color:#6B7280;margin-bottom:14px;">Showing previous → current score per field. Improvement % calculated per field.</p>'
+    detail_section = (f'<h3 style="font-size:13px;font-weight:700;text-transform:uppercase;'
+                      f'letter-spacing:0.05em;color:#6B7280;margin:26px 0 8px;">{detail_title}</h3>'
+                      f'{detail_note}'
+                      + (game_sections if game_sections
+                         else '<p style="color:#888;">No detailed score data recorded for this round.</p>'))
+
+    body = meta + hero + axp_section + detail_section
+    return _report_html_shell("Testing Round Summary",
+                              f"{round_label} — {group_name}", group_name, body, today)
+
+
+def round_readiness_page(coach, groups_data, scope_label, today=None):
+    """Printable Round Readiness — per-group testing history and next-step status."""
+    import datetime as _dt
+    if today is None:
+        today = _dt.date.today().strftime("%d %B %Y")
+
+    if not groups_data:
+        body = '<p style="color:#888;margin-top:20px;">No groups found for this scope.</p>'
+        return _report_html_shell("Round Readiness", scope_label, scope_label, body, today)
+
+    LEVEL_COLOURS = {1: "#1EBE8B", 2: "#F0A82E", 3: "#3B6BC4", 4: "#D4622F", 5: "#8B5CF6"}
+
+    def _badge(level, round_type, seq=None):
+        col   = LEVEL_COLOURS.get(level, "#6B7280")
+        lbl   = f"L{level} " + ("Baseline" if round_type == "baseline"
+                                 else f"Re-Test{f' #{seq}' if seq and seq > 1 else ''}")
+        return (f'<span style="font-size:10px;font-weight:700;color:#fff;background:{col};'
+                f'border-radius:4px;padding:2px 7px;white-space:nowrap;">{esc(lbl)}</span>')
+
+    cards_html = ""
+    for gd in groups_data:
+        closed     = gd["closed_rounds"]
+        open_round = gd["open_round"]
+        next_opts  = gd["next_options"]
+
+        # History
+        hist_rows = ""
+        for i, r in enumerate(closed):
+            bg  = "#fff" if i % 2 == 0 else "#F9FAFB"
+            seq = r.get("retest_sequence")
+            date_str    = (r.get("closed_at") or "")[:10]
+            participants = r.get("participant_count", 0)
+            hist_rows += (f'<tr style="background:{bg};">'
+                          f'<td style="padding:5px 10px;">{_badge(r["level"], r["round_type"], seq)}</td>'
+                          f'<td style="padding:5px 10px;font-size:12px;color:#6B7280;">{date_str}</td>'
+                          f'<td style="padding:5px 10px;font-size:12px;text-align:right;">{participants} athletes</td>'
+                          f'</tr>')
+
+        if hist_rows:
+            hist_html = (f'<table style="width:100%;border-collapse:collapse;margin-bottom:8px;">'
+                         f'<thead><tr style="background:#F3F4F6;">'
+                         f'<th style="padding:4px 10px;text-align:left;font-size:11px;color:#374151;">Round</th>'
+                         f'<th style="padding:4px 10px;text-align:left;font-size:11px;color:#374151;">Closed</th>'
+                         f'<th style="padding:4px 10px;text-align:right;font-size:11px;color:#374151;">Athletes</th>'
+                         f'</tr></thead><tbody>{hist_rows}</tbody></table>')
+        else:
+            hist_html = '<p style="font-size:12px;color:#9CA3AF;margin:0 0 8px;">No rounds completed yet.</p>'
+
+        # Open round callout
+        open_html = ""
+        if open_round:
+            seq = open_round.get("retest_sequence")
+            opened_str = (open_round.get("opened_at") or "")[:10]
+            open_html = (f'<div style="background:#FEF3C7;border-radius:6px;padding:9px 12px;'
+                         f'margin-bottom:10px;border-left:4px solid #F59E0B;">'
+                         f'<span style="font-size:10px;font-weight:700;color:#92400E;">OPEN NOW</span>'
+                         f'<div style="margin-top:3px;">'
+                         f'{_badge(open_round["level"], open_round["round_type"], seq)}'
+                         f' <span style="font-size:11px;color:#78350F;">opened {opened_str}</span>'
+                         f'</div></div>')
+
+        # Next options
+        if next_opts:
+            pills = " ".join(
+                f'<span style="background:#1EBE8B;color:#fff;font-size:10px;font-weight:700;'
+                f'border-radius:4px;padding:3px 9px;">{esc(o["label"])}</span>'
+                for o in next_opts
+            )
+            next_html = (f'<div style="margin-top:8px;">'
+                         f'<span style="font-size:11px;font-weight:600;color:#374151;">Ready to open:</span>'
+                         f'<div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:6px;">{pills}</div></div>')
+        elif open_round:
+            next_html = ('<p style="font-size:11px;color:#6B7280;margin-top:6px;">'
+                         'Close the current open round to unlock next steps.</p>')
+        elif not closed:
+            next_html = ('<p style="font-size:11px;color:#6B7280;margin-top:6px;">'
+                         'Open a Level 1 Baseline to begin the programme.</p>')
+        else:
+            next_html = ('<p style="font-size:11px;color:#6B7280;margin-top:6px;">'
+                         'All available rounds completed — programme finished!</p>')
+
+        cards_html += (f'<div style="border:1px solid #E5E7EB;border-radius:10px;'
+                       f'padding:16px;margin-bottom:14px;">'
+                       f'<h3 style="margin:0 0 12px;font-size:15px;font-weight:700;color:#1B2A3B;">'
+                       f'{esc(gd["group_name"])}</h3>'
+                       f'{open_html}'
+                       f'<h4 style="margin:0 0 6px;font-size:10px;font-weight:700;'
+                       f'text-transform:uppercase;letter-spacing:0.05em;color:#9CA3AF;">Completed Rounds</h4>'
+                       f'{hist_html}{next_html}</div>')
+
+    return _report_html_shell("Round Readiness", scope_label, scope_label, cards_html, today)
+
+
+def round_list_page(coach, rounds_by_group, scope_label):
+    """Portal page: lists all closed rounds for a scope; links to each printable Round Summary."""
+    if not rounds_by_group:
+        content = '<p style="color:var(--jag-muted);padding:20px;">No closed testing rounds found for this scope.</p>'
+    else:
+        rows_html = ""
+        for gname, rounds in rounds_by_group:
+            for r in rounds:
+                seq = r.get("retest_sequence")
+                level_label = f"Level {r['level']}"
+                round_label = (f"{level_label} Baseline" if r["round_type"] == "baseline"
+                               else f"{level_label} Re-Test" + (f" #{seq}" if seq and seq > 1 else ""))
+                closed_str   = (r.get("closed_at") or "")[:10]
+                participants = r.get("participant_count", 0)
+                rows_html += (f'<tr>'
+                              f'<td style="padding:11px 16px;font-weight:600;">{esc(gname)}</td>'
+                              f'<td style="padding:11px 16px;">{esc(round_label)}</td>'
+                              f'<td style="padding:11px 16px;color:var(--jag-muted);">{closed_str}</td>'
+                              f'<td style="padding:11px 16px;color:var(--jag-muted);">{participants} athletes</td>'
+                              f'<td style="padding:11px 16px;">'
+                              f'<a href="/coach/reports/round/{r["id"]}" target="_blank" '
+                              f'style="background:#F0A82E;color:#1B2A3B;padding:5px 13px;border-radius:6px;'
+                              f'font-size:12px;font-weight:700;text-decoration:none;">View Report ↗</a>'
+                              f'</td></tr>')
+        content = (f'<div style="overflow-x:auto;">'
+                   f'<table style="width:100%;border-collapse:collapse;font-size:13px;">'
+                   f'<thead><tr style="background:var(--jag-card);border-bottom:2px solid var(--jag-border);">'
+                   f'<th style="padding:9px 16px;text-align:left;">Group</th>'
+                   f'<th style="padding:9px 16px;text-align:left;">Round</th>'
+                   f'<th style="padding:9px 16px;text-align:left;">Closed</th>'
+                   f'<th style="padding:9px 16px;text-align:left;">Athletes</th>'
+                   f'<th style="padding:9px 16px;text-align:left;">Report</th>'
+                   f'</tr></thead><tbody>{rows_html}</tbody></table></div>')
+
+    body = (f'<div class="page-head">'
+            f'<div><h1>Testing Round Summary</h1>'
+            f'<p class="muted">Select a closed round below to open its printable evidence document.</p></div>'
+            f'</div>'
+            f'<div style="background:var(--jag-card);border:1px solid var(--jag-border);'
+            f'border-radius:12px;overflow:hidden;margin-bottom:16px;">{content}</div>'
+            f'<a href="/coach/reports" style="color:var(--jag-accent);font-size:13px;'
+            f'text-decoration:none;">← Back to Reports</a>')
+
+    return layout("Testing Round Summary", body, user=coach, active_nav="progress")
 
 
 def group_session_page(coach, participants, groups=None, session_types=None):
@@ -13302,6 +13652,23 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
     # Build a pool: cycle through gap areas (2x), then fill with strength/mixed
     focus_pool = (gap_areas * 2) + mixed_areas + strength_areas
     # Each session: primary focus area + one complementary (strength or mixed)
+    # Define FAMILY_META here (before game_card closure) so the closure can
+    # access it when called — Python cell-var scoping requires assignment to
+    # precede any call that references the name as a free variable.
+    FAMILY_META = {
+        "Balance & Postural Control": {"icon": "&#9651;", "colour": "#3B6BC4",
+                                       "plain": "Balance and Postural Control",
+                                       "tag": "staying steady under pressure"},
+        "Explosive & Landing":        {"icon": "&#9650;", "colour": "#F0A82E",
+                                       "plain": "Explosive & Landing",
+                                       "tag": "power, force and safe landing"},
+        "Dynamic Locomotor":          {"icon": "&#9654;", "colour": "#1EBE8B",
+                                       "plain": "Dynamic Locomotor",
+                                       "tag": "speed and efficient movement"},
+        "Perceptual-Motor Speed":     {"icon": "&#9673;", "colour": "#D4622F",
+                                       "plain": "Perceptual-Motor Speed",
+                                       "tag": "reading the game and reacting"},
+    }
     FAMILY_COLOURS = {
         "Balance & Postural Control": "#6366F1",
         "Explosive & Landing":        "#F59E0B",
@@ -13431,20 +13798,6 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
         plan_html = '<div class="card"><p class="muted">No measurement data or thresholds set yet — complete a testing round to generate a session plan.</p></div>'
 
     # ── Family summary cards ──────────────────────────────────────────────────
-    FAMILY_META = {
-        "Balance & Postural Control": {"icon": "&#9651;", "colour": "#3B6BC4",
-                                       "plain": "Balance and Postural Control",
-                                       "tag": "staying steady under pressure"},
-        "Explosive & Landing":        {"icon": "&#9650;", "colour": "#F0A82E",
-                                       "plain": "Explosive & Landing",
-                                       "tag": "power, force and safe landing"},
-        "Dynamic Locomotor":          {"icon": "&#9654;", "colour": "#1EBE8B",
-                                       "plain": "Dynamic Locomotor",
-                                       "tag": "speed and efficient movement"},
-        "Perceptual-Motor Speed":     {"icon": "&#9673;", "colour": "#D4622F",
-                                       "plain": "Perceptual-Motor Speed",
-                                       "tag": "reading the game and reacting"},
-    }
     family_buckets = {}
     for a in area_analysis:
         fam = a["family"]
