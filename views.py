@@ -5888,6 +5888,9 @@ def reports_landing_page(coach, groups, orgs=None, sports=None, active_windows=N
       {_report_card("📊", "Cohort Improvement Report",
           "Average % improvement per game across all closed testing rounds, grouped by level. The evidence doc for programme effectiveness — share with school leadership or organisations.",
           "cohort-improvement")}
+      {_report_card("🏅", "Engagement & AXP Journey",
+          "Per-athlete snapshot: total AXP, current rank, rounds completed, attendance, self-directed sessions, streaks. Flags at-risk athletes with low engagement. Sorted by AXP descending.",
+          "engagement")}
     </div>
 
     <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--jag-muted);margin-bottom:16px;">Live Statistics</h2>
@@ -6651,6 +6654,163 @@ def cohort_improvement_page(coach, by_level, scope_label, today=None):
 
     body = hero + note + sections_html
     return _report_html_shell("Cohort Improvement Report", scope_label, scope_label, body, today)
+
+
+def engagement_report_page(coach, athletes_data, scope_label, today=None):
+    """Printable Engagement & AXP Journey report.
+    athletes_data: list of dicts from db.get_engagement_report_data(), sorted by total_xp desc.
+    """
+    from constants import get_athlete_rank_tier, XP_RANK_TIERS
+    if today is None:
+        today = _dt.date.today().strftime("%d %B %Y")
+
+    if not athletes_data:
+        body = '<p style="color:#888;margin-top:20px;">No athletes found for this scope.</p>'
+        return _report_html_shell("Engagement & AXP Journey", scope_label, scope_label, body, today)
+
+    # ── Enrich with rank tier ─────────────────────────────────────────────────
+    for a in athletes_data:
+        a["tier"] = get_athlete_rank_tier(a["total_xp"] or 0)
+
+    # ── Hero stats ────────────────────────────────────────────────────────────
+    total_athletes = len(athletes_data)
+    total_axp      = sum(a["total_xp"] or 0 for a in athletes_data)
+    avg_axp        = total_axp // total_athletes if total_athletes else 0
+    avg_rounds     = sum(a["rounds_count"] or 0 for a in athletes_data) / total_athletes if total_athletes else 0
+    avg_attend     = sum(a["attendance_count"] or 0 for a in athletes_data) / total_athletes if total_athletes else 0
+
+    # Rank distribution
+    rank_counts = {}
+    for a in athletes_data:
+        lbl = a["tier"]["label"]
+        rank_counts[lbl] = rank_counts.get(lbl, 0) + 1
+
+    rank_pills = ""
+    for tier in XP_RANK_TIERS:
+        lbl = tier["label"]
+        col = tier["colour"]
+        cnt = rank_counts.get(lbl, 0)
+        if cnt == 0:
+            continue
+        rank_pills += (f'<span style="background:{col};color:#fff;font-size:11px;font-weight:700;'
+                       f'border-radius:999px;padding:3px 12px;margin-right:6px;">'
+                       f'{esc(lbl)} &times;{cnt}</span>')
+
+    def _hero_stat(label, value, col="#2D323B", bg="#F3F4F6"):
+        return (f'<div style="flex:1;min-width:110px;text-align:center;padding:14px 16px;'
+                f'background:{bg};border-radius:10px;">'
+                f'<div style="font-size:10px;font-weight:700;text-transform:uppercase;'
+                f'letter-spacing:0.06em;color:#6B7280;margin-bottom:5px;">{label}</div>'
+                f'<div style="font-size:26px;font-weight:900;color:{col};">{value}</div></div>')
+
+    hero = f"""
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;">
+      {_hero_stat("Athletes", total_athletes)}
+      {_hero_stat("Total AXP", f"{total_axp:,}", "#2D323B", "#F0F9FF")}
+      {_hero_stat("Avg AXP", f"{avg_axp:,}", "#065F46", "#D1FAE5")}
+      {_hero_stat("Avg Rounds", f"{avg_rounds:.1f}")}
+      {_hero_stat("Avg Attendance", f"{avg_attend:.1f}")}
+    </div>
+    <div style="margin-bottom:24px;">
+      <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;
+                  color:#6B7280;margin-bottom:8px;">Rank Distribution</div>
+      {rank_pills if rank_pills else '<span style="font-size:12px;color:#9CA3AF;">No AXP earned yet.</span>'}
+    </div>"""
+
+    # ── Status helper ─────────────────────────────────────────────────────────
+    def _status(a):
+        rounds = a["rounds_count"] or 0
+        attend = a["attendance_count"] or 0
+        if rounds == 0 and attend < 3:
+            return ("At Risk",    "#9B1C1C", "#FEE2E2")
+        if rounds > 0 and attend >= 3:
+            return ("Engaged",    "#065F46", "#D1FAE5")
+        return     ("Active",     "#1e40af", "#DBEAFE")
+
+    # ── Athlete table ─────────────────────────────────────────────────────────
+    header = """
+    <tr style="background:#2D323B;">
+      <th style="text-align:left;padding:7px 10px;font-size:10px;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:0.05em;">#</th>
+      <th style="text-align:left;padding:7px 10px;font-size:10px;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:0.05em;">Athlete</th>
+      <th style="text-align:center;padding:7px 10px;font-size:10px;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:0.05em;">Total AXP</th>
+      <th style="text-align:center;padding:7px 10px;font-size:10px;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:0.05em;">Rank</th>
+      <th style="text-align:center;padding:7px 10px;font-size:10px;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:0.05em;">Rounds</th>
+      <th style="text-align:center;padding:7px 10px;font-size:10px;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:0.05em;">Attendance</th>
+      <th style="text-align:center;padding:7px 10px;font-size:10px;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:0.05em;">Self-Test</th>
+      <th style="text-align:center;padding:7px 10px;font-size:10px;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:0.05em;">Streaks</th>
+      <th style="text-align:center;padding:7px 10px;font-size:10px;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:0.05em;">Last Round</th>
+      <th style="text-align:center;padding:7px 10px;font-size:10px;color:rgba(255,255,255,0.8);text-transform:uppercase;letter-spacing:0.05em;">Status</th>
+    </tr>"""
+
+    rows_html = ""
+    for i, a in enumerate(athletes_data):
+        tier    = a["tier"]
+        tc      = tier["colour"]
+        status_label, status_fg, status_bg = _status(a)
+        num     = esc(a.get("athlete_number") or str(i + 1))
+        name    = esc(a["name"])
+        sport   = esc(a.get("sport") or "")
+        sport_s = f'<div style="font-size:9px;color:#9CA3AF;">{sport}</div>' if sport else ""
+        axp     = f'{int(a["total_xp"] or 0):,}'
+        r_axp   = int(a["round_axp"] or 0)
+        axp_note = (f'<div style="font-size:9px;color:#9CA3AF;margin-top:1px;">'
+                    f'{r_axp:,} from rounds</div>') if r_axp else ""
+
+        # Last round
+        lr_date = (a.get("last_round_date") or "")[:10] or "—"
+        lr_lvl  = a.get("last_round_level")
+        lr_type = a.get("last_round_type") or ""
+        lr_str  = f'L{lr_lvl} {lr_type[:4]}' if lr_lvl else "—"
+        lr_cell = (f'{esc(lr_str)}'
+                   f'<div style="font-size:9px;color:#9CA3AF;margin-top:1px;">{esc(lr_date)}</div>'
+                   if lr_lvl else "—")
+
+        row_bg = "#FEF2F2" if status_label == "At Risk" else ("#F0FDF4" if status_label == "Engaged" else "#fff")
+        rows_html += f"""
+        <tr style="background:{row_bg};border-bottom:1px solid #E5E7EB;">
+          <td style="padding:6px 10px;font-size:11px;color:#9CA3AF;">{num}</td>
+          <td style="padding:6px 10px;font-size:12px;font-weight:600;">{name}{sport_s}</td>
+          <td style="padding:6px 10px;text-align:center;">
+            <span style="font-size:13px;font-weight:800;color:#2D323B;">{axp}</span>{axp_note}
+          </td>
+          <td style="padding:6px 10px;text-align:center;">
+            <span style="background:{tc};color:#fff;font-size:10px;font-weight:700;
+                         border-radius:999px;padding:2px 9px;">{esc(tier['label'])}</span>
+          </td>
+          <td style="padding:6px 10px;text-align:center;font-size:12px;">{int(a['rounds_count'] or 0)}</td>
+          <td style="padding:6px 10px;text-align:center;font-size:12px;">{int(a['attendance_count'] or 0)}</td>
+          <td style="padding:6px 10px;text-align:center;font-size:12px;">{int(a['self_directed_count'] or 0)}</td>
+          <td style="padding:6px 10px;text-align:center;font-size:12px;">{int(a['streak_count'] or 0)}</td>
+          <td style="padding:6px 10px;text-align:center;font-size:11px;">{lr_cell}</td>
+          <td style="padding:6px 10px;text-align:center;">
+            <span style="background:{status_bg};color:{status_fg};font-size:10px;font-weight:700;
+                         border-radius:999px;padding:2px 9px;">{esc(status_label)}</span>
+          </td>
+        </tr>"""
+
+    # ── At-risk callout ───────────────────────────────────────────────────────
+    at_risk = [a for a in athletes_data if _status(a)[0] == "At Risk"]
+    at_risk_html = ""
+    if at_risk:
+        names = ", ".join(esc(a["name"]) for a in at_risk)
+        at_risk_html = (
+            f'<div style="background:#FEF2F2;border-left:4px solid #EF4444;border-radius:6px;'
+            f'padding:10px 14px;font-size:12px;color:#991B1B;margin-bottom:16px;">'
+            f'<strong>⚠ At-Risk Athletes ({len(at_risk)}):</strong> {names} — '
+            f'no completed testing rounds and fewer than 3 attendance marks. Consider following up.</div>'
+        )
+
+    note = ('<p style="font-size:11px;color:#888;margin-bottom:12px;">'
+            'AXP total includes all sources: testing rounds, session attendance, streaks, and self-directed play. '
+            '"Rounds" = closed testing rounds the athlete was scored in. '
+            'Status: <strong style="color:#065F46;">Engaged</strong> = 1+ rounds &amp; 3+ attendance; '
+            '<strong style="color:#9B1C1C;">At Risk</strong> = 0 rounds &amp; &lt;3 attendance.</p>')
+
+    body = (hero + at_risk_html + note +
+            f'<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;">'
+            f'<thead>{header}</thead><tbody>{rows_html}</tbody></table></div>')
+
+    return _report_html_shell("Engagement & AXP Journey", scope_label, scope_label, body, today)
 
 
 def group_session_page(coach, participants, groups=None, session_types=None):

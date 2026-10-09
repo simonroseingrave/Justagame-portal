@@ -1997,6 +1997,61 @@ def get_round_xp_summary(conn, round_id, athlete_id):
     ).fetchall()
 
 
+def get_engagement_report_data(conn, athlete_ids):
+    """Per-athlete engagement summary for the Engagement & AXP Journey report.
+
+    Returns list of dicts (sorted total_xp desc), each containing:
+        id, name, athlete_number, sport,
+        total_xp, attendance_count, rounds_count, self_directed_count,
+        streak_count, round_axp, last_round_date, last_round_level, last_round_type
+    """
+    if not athlete_ids:
+        return []
+    ph = ",".join("?" * len(athlete_ids))
+    rows = conn.execute(
+        f"""
+        SELECT
+            u.id, u.name, u.athlete_number, u.sport,
+            COALESCE(SUM(xe.amount), 0)                               AS total_xp,
+            (SELECT COUNT(*)
+             FROM session_attendance sa WHERE sa.participant_id = u.id) AS attendance_count,
+            (SELECT COUNT(DISTINCT rs.round_id)
+             FROM round_scores rs WHERE rs.athlete_id = u.id)          AS rounds_count,
+            (SELECT COUNT(*)
+             FROM measurement_sessions ms
+             WHERE ms.participant_id = u.id
+               AND ms.session_type = 'self_directed')                  AS self_directed_count,
+            (SELECT COUNT(*)
+             FROM xp_events xe2
+             WHERE xe2.participant_id = u.id
+               AND xe2.xp_type IN ('streak_3','streak_5'))             AS streak_count,
+            (SELECT COALESCE(SUM(rxa.xp_awarded), 0)
+             FROM round_xp_awards rxa WHERE rxa.athlete_id = u.id)    AS round_axp,
+            (SELECT MAX(tr.closed_at)
+             FROM testing_rounds tr
+             JOIN round_scores rs3 ON rs3.round_id = tr.id
+             WHERE rs3.athlete_id = u.id AND tr.status = 'closed')    AS last_round_date,
+            (SELECT tr2.level
+             FROM testing_rounds tr2
+             JOIN round_scores rs4 ON rs4.round_id = tr2.id
+             WHERE rs4.athlete_id = u.id AND tr2.status = 'closed'
+             ORDER BY tr2.closed_at DESC LIMIT 1)                      AS last_round_level,
+            (SELECT tr3.round_type
+             FROM testing_rounds tr3
+             JOIN round_scores rs5 ON rs5.round_id = tr3.id
+             WHERE rs5.athlete_id = u.id AND tr3.status = 'closed'
+             ORDER BY tr3.closed_at DESC LIMIT 1)                      AS last_round_type
+        FROM users u
+        LEFT JOIN xp_events xe ON xe.participant_id = u.id
+        WHERE u.id IN ({ph})
+        GROUP BY u.id
+        ORDER BY total_xp DESC
+        """,
+        athlete_ids,
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_cohort_improvement_data(conn, group_ids):
     """Aggregate testing-round improvement data for the Cohort Improvement Report.
 

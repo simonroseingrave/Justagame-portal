@@ -814,6 +814,23 @@ def reports_progress(req):
     ))
 
 
+@router.get("/coach/reports/engagement")
+def reports_engagement(req):
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        athletes, label, scope = _resolve_report_scope(req, conn)
+        if athletes is None:
+            return flash_redirect("/coach/reports", "Please select an organisation or group.")
+        athlete_ids = [a["id"] for a in athletes]
+        athletes_data = db.get_engagement_report_data(conn, athlete_ids)
+    finally:
+        conn.close()
+    return Response(views.engagement_report_page(coach, athletes_data, label))
+
+
 @router.get("/coach/reports/cohort-improvement")
 def reports_cohort_improvement(req):
     coach = require_staff(req)
