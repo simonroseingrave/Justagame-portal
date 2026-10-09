@@ -1997,6 +1997,118 @@ def get_round_xp_summary(conn, round_id, athlete_id):
     ).fetchall()
 
 
+def get_round_report_data(conn, round_id):
+    """Comprehensive data for the Testing Round Summary printable report.
+
+    Returns dict with:
+        rnd            – the testing_rounds row (as dict)
+        group_name     – name of the group
+        prev_round     – comparison round (baseline or previous retest), or None
+        athletes       – list of dicts: id, name, athlete_number, sport,
+                         scores {game_key: {field_key: value}},
+                         prev_scores {game_key: {field_key: value}},
+                         xp_awards [dicts], total_xp int
+        games_tested   – ordered list of unique game_keys that have scores
+    """
+    rnd = conn.execute("SELECT * FROM testing_rounds WHERE id = ?", (round_id,)).fetchone()
+    if not rnd:
+        return None
+
+    group = conn.execute(
+        "SELECT name FROM participant_groups WHERE id = ?", (rnd["group_id"],)
+    ).fetchone()
+    group_name = group["name"] if group else "Unknown Group"
+
+    prev_round = get_previous_round_for_comparison(conn, round_id)
+
+    # Athletes with at least one score in this round, sorted by name
+    athlete_rows = conn.execute(
+        "SELECT DISTINCT u.id, u.name, u.athlete_number, u.sport "
+        "FROM round_scores rs JOIN users u ON u.id = rs.athlete_id "
+        "WHERE rs.round_id = ? ORDER BY u.name",
+        (round_id,),
+    ).fetchall()
+
+    # Unique game_keys that appear in this round's scores
+    game_key_rows = conn.execute(
+        "SELECT DISTINCT game_key FROM round_scores WHERE round_id = ? ORDER BY game_key",
+        (round_id,),
+    ).fetchall()
+    games_tested = [r["game_key"] for r in game_key_rows]
+
+    athletes = []
+    for ar in athlete_rows:
+        aid = ar["id"]
+        scores      = get_athlete_round_scores(conn, round_id, aid)
+        prev_scores = {} if not prev_round else get_athlete_round_scores(conn, prev_round["id"], aid)
+        xp_awards   = get_round_xp_summary(conn, round_id, aid)
+        total_xp    = sum(row["xp_awarded"] or 0 for row in xp_awards)
+        athletes.append({
+            "id":             aid,
+            "name":           ar["name"],
+            "athlete_number": ar["athlete_number"],
+            "sport":          ar["sport"],
+            "scores":         scores,
+            "prev_scores":    prev_scores,
+            "xp_awards":      [dict(x) for x in xp_awards],
+            "total_xp":       total_xp,
+        })
+
+    return {
+        "rnd":         dict(rnd),
+        "group_name":  group_name,
+        "prev_round":  dict(prev_round) if prev_round else None,
+        "athletes":    athletes,
+        "games_tested": games_tested,
+    }
+
+
+def get_round_readiness_data(conn, group_ids):
+    """Per-group round history and next-available options.
+
+    Returns list of dicts (one per group_id that exists):
+        group_id, group_name,
+        closed_rounds  – [{id, level, round_type, retest_sequence,
+                           opened_at, closed_at, participant_count}]
+        open_round     – {id, level, round_type, retest_sequence, opened_at} or None
+        next_options   – list from get_available_round_options()
+    """
+    result = []
+    for gid in group_ids:
+        group = conn.execute(
+            "SELECT name FROM participant_groups WHERE id = ?", (gid,)
+        ).fetchone()
+        if not group:
+            continue
+
+        closed = conn.execute(
+            """SELECT tr.id, tr.level, tr.round_type, tr.retest_sequence,
+                      tr.opened_at, tr.closed_at,
+                      (SELECT COUNT(DISTINCT rs.athlete_id)
+                       FROM round_scores rs WHERE rs.round_id = tr.id) AS participant_count
+               FROM testing_rounds tr
+               WHERE tr.group_id = ? AND tr.status = 'closed'
+               ORDER BY tr.id""",
+            (gid,),
+        ).fetchall()
+
+        open_round = conn.execute(
+            "SELECT id, level, round_type, retest_sequence, opened_at "
+            "FROM testing_rounds WHERE group_id = ? AND status = 'open'",
+            (gid,),
+        ).fetchone()
+
+        result.append({
+            "group_id":     gid,
+            "group_name":   group["name"],
+            "closed_rounds": [dict(r) for r in closed],
+            "open_round":   dict(open_round) if open_round else None,
+            "next_options": get_available_round_options(conn, gid),
+        })
+
+    return result
+
+
 def get_engagement_report_data(conn, athlete_ids):
     """Per-athlete engagement summary for the Engagement & AXP Journey report.
 

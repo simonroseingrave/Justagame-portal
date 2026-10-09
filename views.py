@@ -180,7 +180,7 @@ def layout(title, body, user=None, flash=None, active_nav=None):
                     _drop_item("/coach/participants/new", "Add Participant",   "+") +
                     _drop_item("/coach/coaches",          "Practitioners",     "◉") +
                     _drop_item("/coach/organisations",    "Organisations",     "▣") +
-                    _drop_item("/org/settings",           "Org Logo Settings", "🖼")
+                    _drop_item("/org/settings",           "Org Logo Settings", "◧")
                 )
                 if is_sys:
                     dropdown_links += (
@@ -1451,6 +1451,9 @@ def athlete_resources_page(athlete, folder_groups, ungrouped, all_tags=None, tag
 
     body = f"""
     <div style="max-width:900px;padding-top:28px;">
+      <div style="margin-bottom:16px;">
+        <a href="/athlete/dashboard" style="font-size:13px;color:#6E737B;text-decoration:none;">&larr; Dashboard</a>
+      </div>
       <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 16px;">Resources</h2>
       {filter_bar}
       {content_html}
@@ -1914,6 +1917,11 @@ def getting_started_page(coach):
             </h1>
           </div>
           <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+            <a href="/coach" style="font-size:13px;font-weight:600;color:rgba(255,255,255,0.70);
+               text-decoration:none;padding:6px 14px;border-radius:8px;
+               border:1px solid rgba(255,255,255,0.20);background:rgba(255,255,255,0.08);"
+               onmouseover="this.style.background='rgba(255,255,255,0.15)'"
+               onmouseout="this.style.background='rgba(255,255,255,0.08)'">&larr; Dashboard</a>
             <button class="gs-print-btn" onclick="window.print()"
                     style="font-size:13px;font-weight:700;background:rgba(255,255,255,0.10);
                            color:#FFFFFF;border:1.5px solid rgba(255,255,255,0.25);
@@ -4765,7 +4773,7 @@ def group_testing_page(coach, groups, selected_group_id=None, selected_label=Non
         </div>"""
 
     body = f"""
-    <div class="page-head"><h1>Group Testing</h1></div>
+    <div class="page-head"><h1>Group Testing</h1><a class="btn btn-ghost" href="/coach">&larr; Dashboard</a></div>
     <p class="muted" style="margin-bottom:20px;">Select a group, phase, and game to enter results for all athletes at once.</p>
     <div class="card form-card">{selector_form}</div>
     {matrix_html}
@@ -5574,6 +5582,7 @@ def group_hub_page(coach, groups, selected_group_id=None, selected_label=None,
         <h1>Group Hub</h1>
         <p class="muted">Completion overview · results entry · session sheet — all in one place.</p>
       </div>
+      <a class="btn btn-ghost" href="/coach">&larr; Dashboard</a>
     </div>
     <div class="card form-card" style="margin-bottom:20px;">
       <div style="font-size:11px;font-weight:700;color:#6E737B;text-transform:uppercase;
@@ -10067,6 +10076,12 @@ def game_thresholds_page(coach, thresholds, scoring_areas, xp_game_config, thres
           </div>
         </div>
         <!-- Utility actions: secondary, embedded in hero -->
+        <a href="/coach/admin/hub" style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.65);
+           text-decoration:none;padding:5px 12px;border-radius:20px;
+           border:1px solid rgba(255,255,255,0.20);background:rgba(255,255,255,0.08);
+           white-space:nowrap;align-self:flex-start;"
+           onmouseover="this.style.background='rgba(255,255,255,0.15)'"
+           onmouseout="this.style.background='rgba(255,255,255,0.08)'">&larr; Admin Hub</a>
         <div style="display:flex;gap:8px;flex-wrap:wrap;">
           <form method="post" action="/coach/admin/xp-retroactive"
                 onsubmit="return confirm('Run retroactive AXP pass over ALL existing sessions? This is safe to run multiple times but may take a moment.')">
@@ -10167,7 +10182,14 @@ def attendance_list_page(coach, events):
             </div>
           </div>
         </div>
-        <a href="/coach/attendance/new" class="btn btn-primary">+ New Session</a>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <a href="/coach" style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.65);
+             text-decoration:none;padding:5px 12px;border-radius:20px;
+             border:1px solid rgba(255,255,255,0.20);background:rgba(255,255,255,0.08);white-space:nowrap;"
+             onmouseover="this.style.background='rgba(255,255,255,0.15)'"
+             onmouseout="this.style.background='rgba(255,255,255,0.08)'">&larr; Dashboard</a>
+          <a href="/coach/attendance/new" class="btn btn-primary">+ New Session</a>
+        </div>
       </div>
       <div style="border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;background:#fff;">
         <table style="width:100%;border-collapse:collapse;">
@@ -10482,6 +10504,11 @@ def attendance_view_page(coach, event, attendees, submitted_ids=None):
             <div style="margin-top:10px;">{status_badge}</div>
           </div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+            <a href="/coach/attendance" style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.65);
+               text-decoration:none;padding:5px 12px;border-radius:20px;
+               border:1px solid rgba(255,255,255,0.20);background:rgba(255,255,255,0.08);white-space:nowrap;"
+               onmouseover="this.style.background='rgba(255,255,255,0.15)'"
+               onmouseout="this.style.background='rgba(255,255,255,0.08)'">&larr; Attendance</a>
             {session_ctrl}
             <a href="/coach/attendance/{event_id}/roll-call"
                style="font-size:12px;font-weight:700;color:#2D323B;background:#F0A82E;
@@ -10563,6 +10590,9 @@ def self_directed_home_page(athlete, pending_events, completed_sessions):
 
     body = f"""
     <div class="container" style="max-width:680px;">
+      <div style="margin-bottom:12px;">
+        <a href="/athlete/dashboard" style="font-size:13px;color:#6E737B;text-decoration:none;">&larr; Dashboard</a>
+      </div>
       <!-- Hero -->
       <div style="background:linear-gradient(135deg,#2D323B 0%,#3d4350 100%);border-radius:16px;
                   padding:24px 28px;margin-bottom:28px;">
@@ -11147,6 +11177,9 @@ def athlete_leaderboard_page(athlete, ranked_athletes, group_name=""):
     group_label = f" — {esc(group_name)}" if group_name else ""
     body = f"""
     <div style="max-width:680px;padding-top:28px;">
+      <div style="margin-bottom:14px;">
+        <a href="/athlete/dashboard" style="font-size:13px;color:#6E737B;text-decoration:none;">&larr; Dashboard</a>
+      </div>
       <h2 style="font-size:22px;font-weight:700;color:#2D323B;margin:0 0 4px;">
         Group Leaderboard{group_label}
       </h2>
@@ -11335,6 +11368,11 @@ def score_distribution_page(coach, distributions):
           </div>
         </div>
       </div>
+      <a href="/coach/admin/hub" style="font-size:12px;font-weight:600;color:rgba(255,255,255,0.65);
+         text-decoration:none;padding:5px 12px;border-radius:20px;
+         border:1px solid rgba(255,255,255,0.20);background:rgba(255,255,255,0.08);white-space:nowrap;align-self:flex-start;"
+         onmouseover="this.style.background='rgba(255,255,255,0.15)'"
+         onmouseout="this.style.background='rgba(255,255,255,0.08)'">&larr; Admin Hub</a>
     </div>
 
     <!-- Reading guide -->
@@ -12254,6 +12292,9 @@ def athlete_round_page(athlete, rnd, games, existing_scores):
 
     body = f"""
     <div style="max-width:560px;margin:0 auto;">
+      <div style="margin-bottom:14px;">
+        <a href="/athlete/dashboard" style="font-size:13px;color:#6E737B;text-decoration:none;">&larr; Dashboard</a>
+      </div>
       {callout}
       {score_cards}
       <div style="margin-top:8px;padding:14px;background:#EEF3F5;border-radius:12px;
@@ -13576,19 +13617,10 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
         else:
             tag = '<span style="font-size:10px;font-weight:700;color:#7A5800;background:rgba(240,168,46,0.14);border:1px solid rgba(240,168,46,0.32);border-radius:999px;padding:1px 8px;">Mixed</span>'
 
-        lvl_chips = "".join(
-            f'<span title="{esc(nm)}" style="font-size:10px;background:#F3F4F6;border-radius:999px;padding:1px 7px;color:#374151;">L{lvl}</span>'
-            for nm, num, lvl in a["athlete_levels"]
-        )
-
         snapshot_rows += f"""
         <tr style="border-bottom:1px solid #F3F4F6;">
           <td style="padding:10px 12px;font-size:13px;font-weight:600;color:#2D323B;">{esc(a['display'])}</td>
           <td style="padding:10px 12px;">{tag}</td>
-          <td style="padding:10px 12px;">
-            <div style="display:flex;flex-wrap:wrap;gap:4px;">{lvl_chips}</div>
-            {area_bar(pct)}
-          </td>
         </tr>"""
 
     snapshot_html = f"""
@@ -13601,7 +13633,6 @@ def group_next_steps_page(coach, group, athletes_with_levels, thresholds_raw, ga
             <tr style="background:#F9FAFB;border-bottom:1px solid #E5E7EB;">
               <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6B7280;font-weight:600;">Area</th>
               <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6B7280;font-weight:600;">Status</th>
-              <th style="padding:10px 12px;text-align:left;font-size:11px;color:#6B7280;font-weight:600;">Athlete levels (hover for name)</th>
             </tr>
           </thead>
           <tbody>{snapshot_rows}</tbody>
@@ -13938,7 +13969,7 @@ def axp_projection_page(coach):
     body = f"""
     <div class="page-head">
       <h1>AXP Projection Calibration</h1>
-      <span style="font-size:13px;color:var(--jag-muted);">System Admin only</span>
+      <a class="btn btn-ghost" href="/coach/admin/hub">&larr; Admin Hub</a>
     </div>
 
     <div class="card" style="padding:20px;margin-bottom:20px;">
