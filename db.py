@@ -1997,6 +1997,58 @@ def get_round_xp_summary(conn, round_id, athlete_id):
     ).fetchall()
 
 
+def get_cohort_improvement_data(conn, group_ids):
+    """Aggregate testing-round improvement data for the Cohort Improvement Report.
+
+    Returns a dict keyed by level (int), each value:
+        {
+          "baselines": [round_dict, ...],   # closed baseline rounds (with participant_count)
+          "retests":   [round_dict, ...],   # closed retest rounds (with game_stats list)
+        }
+
+    game_stats per retest round:
+        {"game_key", "game_name", "avg_improvement", "athlete_count", "improved_count"}
+    """
+    if not group_ids:
+        return {}
+    ph = ",".join("?" * len(group_ids))
+    rounds = conn.execute(
+        f"SELECT tr.*, pg.name AS group_name, "
+        f"(SELECT COUNT(DISTINCT rs.athlete_id) FROM round_scores rs WHERE rs.round_id = tr.id) AS participant_count "
+        f"FROM testing_rounds tr "
+        f"JOIN participant_groups pg ON pg.id = tr.group_id "
+        f"WHERE tr.group_id IN ({ph}) AND tr.status = 'closed' "
+        f"ORDER BY tr.level, tr.round_type, tr.id",
+        group_ids,
+    ).fetchall()
+
+    by_level = {}
+    for rnd in rounds:
+        rnd = dict(rnd)
+        lvl = rnd["level"]
+        by_level.setdefault(lvl, {"baselines": [], "retests": []})
+        bucket = "retests" if rnd["round_type"] == "retest" else "baselines"
+        by_level[lvl][bucket].append(rnd)
+
+    # For each retest round, pull per-game improvement stats from round_xp_awards
+    for lvl, data in by_level.items():
+        for rnd in data["retests"]:
+            rows = conn.execute(
+                "SELECT game_key, "
+                "AVG(improvement_pct) AS avg_improvement, "
+                "COUNT(DISTINCT athlete_id) AS athlete_count, "
+                "SUM(CASE WHEN improvement_pct > 0 THEN 1 ELSE 0 END) AS improved_count "
+                "FROM round_xp_awards "
+                "WHERE round_id = ? AND award_type = 'improvement' "
+                "AND improvement_pct IS NOT NULL AND game_key IS NOT NULL "
+                "GROUP BY game_key ORDER BY avg_improvement DESC",
+                (rnd["id"],),
+            ).fetchall()
+            rnd["game_stats"] = [dict(r) for r in rows]
+
+    return by_level
+
+
 def get_athlete_testing_history(conn, athlete_id, group_id=None):
     """Return all closed rounds an athlete has scores in, with total XP earned per round."""
     q = (

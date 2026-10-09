@@ -814,6 +814,41 @@ def reports_progress(req):
     ))
 
 
+@router.get("/coach/reports/cohort-improvement")
+def reports_cohort_improvement(req):
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        group_id_raw = req.query.get("group_id", [""])[0].strip()
+        org_id_raw   = req.query.get("org_id",   [""])[0].strip()
+        group_id = int(group_id_raw) if group_id_raw.isdigit() else None
+        org_id   = int(org_id_raw)   if org_id_raw.isdigit()   else None
+
+        if group_id:
+            group = conn.execute("SELECT * FROM participant_groups WHERE id=?", (group_id,)).fetchone()
+            if not group:
+                return flash_redirect("/coach/reports", "Group not found.")
+            group_ids = [group_id]
+            label = group["name"]
+        elif org_id:
+            org = conn.execute("SELECT * FROM organisations WHERE id=?", (org_id,)).fetchone()
+            if not org:
+                return flash_redirect("/coach/reports", "Organisation not found.")
+            group_ids = [r["id"] for r in conn.execute(
+                "SELECT id FROM participant_groups WHERE organisation_id=?", (org_id,)
+            ).fetchall()]
+            label = org["name"]
+        else:
+            return flash_redirect("/coach/reports", "Please select a group or organisation.")
+
+        by_level = db.get_cohort_improvement_data(conn, group_ids)
+    finally:
+        conn.close()
+    return Response(views.cohort_improvement_page(coach, by_level, label))
+
+
 @router.get("/coach/reports/completion")
 def reports_completion(req):
     coach = require_staff(req)

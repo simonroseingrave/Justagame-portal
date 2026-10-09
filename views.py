@@ -5880,11 +5880,14 @@ def reports_landing_page(coach, groups, orgs=None, sports=None, active_windows=N
           "All athletes in the selected scope with their Round 1 (baseline) scores. Print and share at the start of a programme.",
           "baseline")}
       {_report_card("📈", "Athlete Progress Report",
-          "Baseline vs latest session scores with % improvement and AAP Level for each athlete. Colour-coded green/red. Only athletes with 2+ sessions appear.",
+          "Baseline vs latest session scores with % improvement and AXP rank for each athlete. Colour-coded green/red. Only athletes with 2+ sessions appear.",
           "progress")}
       {_report_card("✅", "Test Completion Sheet",
           "At-a-glance view of which measurement tests each athlete has completed across all active games. Shows a fraction (e.g. 4/6 fields) per game. Batch-printable by group or org.",
           "completion")}
+      {_report_card("📊", "Cohort Improvement Report",
+          "Average % improvement per game across all closed testing rounds, grouped by level. The evidence doc for programme effectiveness — share with school leadership or organisations.",
+          "cohort-improvement")}
     </div>
 
     <h2 style="font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:var(--jag-muted);margin-bottom:16px;">Live Statistics</h2>
@@ -5907,6 +5910,7 @@ def reports_landing_page(coach, groups, orgs=None, sports=None, active_windows=N
       if (sport) params.push('sport=' + encodeURIComponent(sport));
       var url = '/coach/reports/' + type + '?' + params.join('&');
       if (type === 'completion') {{ window.location = url; }}
+      else if (type === 'cohort-improvement') {{ window.open(url, '_blank'); }}
       else {{ window.open(url, '_blank'); }}
     }}
     </script>
@@ -6502,6 +6506,151 @@ def progress_report_page(coach, group, athletes_data, resources=None, axp_by_ath
     <div style="overflow-x:auto;"><table><thead>{header}</thead><tbody>{rows}</tbody></table></div>"""
 
     return _report_html_shell("Athlete Progress Report", group_name, group_name, body_content, today)
+
+
+def cohort_improvement_page(coach, by_level, scope_label, today=None):
+    """Printable cohort improvement report.
+    by_level: dict from db.get_cohort_improvement_data() keyed by level int.
+    scope_label: group or org name for the report header.
+    """
+    from constants import find_any_game
+    if today is None:
+        today = _dt.date.today().strftime("%d %B %Y")
+
+    if not by_level:
+        body = '<p style="color:#888;margin-top:20px;">No closed testing rounds found for this scope. Open and close a testing round to generate cohort improvement data.</p>'
+        return _report_html_shell("Cohort Improvement Report", scope_label, scope_label, body, today)
+
+    # ── Hero stats ────────────────────────────────────────────────────────────
+    all_imps = []
+    total_retest_rounds = 0
+    max_athletes = 0
+    best_game_name, best_imp = None, None
+
+    for lvl, data in sorted(by_level.items()):
+        for rnd in data["retests"]:
+            total_retest_rounds += 1
+            if rnd.get("participant_count", 0) > max_athletes:
+                max_athletes = rnd["participant_count"]
+            for gs in rnd.get("game_stats", []):
+                if gs["avg_improvement"] is not None:
+                    all_imps.append(gs["avg_improvement"])
+                    if best_imp is None or gs["avg_improvement"] > best_imp:
+                        best_imp = gs["avg_improvement"]
+                        g = find_any_game(gs["game_key"])
+                        best_game_name = g["name"] if g else gs["game_key"]
+
+    overall_avg = sum(all_imps) / len(all_imps) if all_imps else None
+    oa_str = (f'{"+" if overall_avg >= 0 else ""}{overall_avg:.1f}%') if overall_avg is not None else "—"
+    oa_col = "#065F46" if (overall_avg or 0) >= 0 else "#9B1C1C"
+    oa_bg  = "#D1FAE5" if (overall_avg or 0) >= 0 else "#FEE2E2"
+    best_str = f'+{best_imp:.1f}%' if best_imp is not None else "—"
+
+    def _hero_stat(label, value, col="#2D323B", bg="#F3F4F6"):
+        return (f'<div style="flex:1;min-width:130px;text-align:center;padding:16px 20px;'
+                f'background:{bg};border-radius:10px;">'
+                f'<div style="font-size:10px;font-weight:700;text-transform:uppercase;'
+                f'letter-spacing:0.06em;color:#6B7280;margin-bottom:6px;">{label}</div>'
+                f'<div style="font-size:28px;font-weight:900;color:{col};">{value}</div></div>')
+
+    hero = f"""
+    <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px;">
+      {_hero_stat("Retest Rounds", total_retest_rounds)}
+      {_hero_stat("Peak Athletes", max_athletes)}
+      {_hero_stat("Overall Avg Improvement", oa_str, oa_col, oa_bg)}
+      {_hero_stat("Best Game", (best_game_name or "—"), "#2D323B")}
+      {_hero_stat("Best Game Avg", best_str, "#065F46", "#D1FAE5")}
+    </div>"""
+
+    # ── Per-level sections ────────────────────────────────────────────────────
+    def _imp_cell(avg, count, improved):
+        if avg is None:
+            return '<td style="color:#9CA3AF;text-align:center;">—</td>'
+        sign = "+" if avg >= 0 else ""
+        col  = "#065F46" if avg >= 0 else "#9B1C1C"
+        bg   = "#D1FAE5" if avg >= 0 else "#FEE2E2"
+        pct_impr = f"{int(improved)}/{int(count)} improved" if count else ""
+        return (f'<td style="text-align:center;background:{bg};font-weight:700;color:{col};">'
+                f'{sign}{avg:.1f}%'
+                f'<div style="font-size:9px;font-weight:400;color:#6B7280;margin-top:2px;">{pct_impr}</div></td>')
+
+    LEVEL_COLOURS = {1:"#1EBE8B", 2:"#F0A82E", 3:"#3B6BC4", 4:"#D4622F", 5:"#8B5CF6"}
+
+    sections_html = ""
+    for lvl in sorted(by_level.keys()):
+        data      = by_level[lvl]
+        lc        = LEVEL_COLOURS.get(lvl, "#2D323B")
+        retests   = data["retests"]
+        baselines = data["baselines"]
+
+        b_count = sum(r.get("participant_count", 0) for r in baselines)
+        b_dates = ", ".join(r["closed_at"][:10] for r in baselines if r.get("closed_at"))
+
+        retest_sections = ""
+        for seq_idx, rnd in enumerate(retests, 1):
+            seq_label = f"Retest {rnd.get('retest_sequence') or seq_idx}"
+            r_date  = rnd["closed_at"][:10] if rnd.get("closed_at") else "—"
+            r_count = rnd.get("participant_count", 0)
+            stats   = rnd.get("game_stats", [])
+
+            if not stats:
+                retest_sections += f'<p style="color:#9CA3AF;font-size:12px;margin:8px 0 16px;">{seq_label}: no improvement data recorded.</p>'
+                continue
+
+            rows_html = ""
+            for gs in stats:
+                g     = find_any_game(gs["game_key"])
+                gname = g["name"] if g else gs["game_key"]
+                rows_html += (
+                    f'<tr><td style="font-weight:600;font-size:12px;padding:6px 10px;">{esc(gname)}</td>'
+                    + _imp_cell(gs["avg_improvement"], gs["athlete_count"], gs["improved_count"])
+                    + f'<td style="text-align:center;font-size:11px;color:#6B7280;padding:6px 10px;">{int(gs["athlete_count"])}</td>'
+                    + '</tr>'
+                )
+
+            retest_sections += f"""
+            <div style="margin-bottom:20px;">
+              <div style="font-size:11px;font-weight:700;color:#6B7280;margin-bottom:6px;
+                          text-transform:uppercase;letter-spacing:0.05em;">
+                {esc(seq_label)} &nbsp;·&nbsp; Closed {esc(r_date)} &nbsp;·&nbsp; {r_count} athletes
+              </div>
+              <table style="width:100%;border-collapse:collapse;">
+                <thead>
+                  <tr style="background:#2D323B;">
+                    <th style="text-align:left;padding:7px 10px;font-size:10px;color:rgba(255,255,255,0.8);
+                                text-transform:uppercase;letter-spacing:0.05em;">Game</th>
+                    <th style="text-align:center;padding:7px 10px;font-size:10px;color:rgba(255,255,255,0.8);
+                                text-transform:uppercase;letter-spacing:0.05em;">Avg Improvement</th>
+                    <th style="text-align:center;padding:7px 10px;font-size:10px;color:rgba(255,255,255,0.8);
+                                text-transform:uppercase;letter-spacing:0.05em;">Athletes Tested</th>
+                  </tr>
+                </thead>
+                <tbody>{rows_html}</tbody>
+              </table>
+            </div>"""
+
+        baseline_note = ""
+        if b_count or b_dates:
+            baseline_note = (f'<div style="font-size:11px;color:#6B7280;margin-bottom:12px;">'
+                             f'Baseline closed: {esc(b_dates) or "—"} &nbsp;·&nbsp; {b_count} athletes tested</div>')
+
+        sections_html += f"""
+        <div style="margin-bottom:32px;border-left:4px solid {lc};padding-left:16px;">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;">
+            <span style="background:{lc};color:#fff;font-size:11px;font-weight:800;padding:3px 12px;
+                         border-radius:999px;letter-spacing:0.06em;text-transform:uppercase;">Level {lvl}</span>
+          </div>
+          {baseline_note}
+          {retest_sections if retest_sections else
+           '<p style="color:#9CA3AF;font-size:12px;">No retest data for this level yet.</p>'}
+        </div>"""
+
+    note = ('<p style="font-size:11px;color:#888;margin-bottom:20px;">'
+            'Improvement figures are direction-corrected (positive = better) and averaged across all athletes '
+            'scored in that game for each retest round. Sourced from closed testing rounds only.</p>')
+
+    body = hero + note + sections_html
+    return _report_html_shell("Cohort Improvement Report", scope_label, scope_label, body, today)
 
 
 def group_session_page(coach, participants, groups=None, session_types=None):
