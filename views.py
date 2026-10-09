@@ -9827,46 +9827,52 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
         _ach = total >= _t["min_xp"]
         _cur = _t["label"] == tier_label
         if _cur:
-            _ds = ('width:14px;height:14px;background:#fff;'
-                   f'border:2px solid rgba(0,0,0,0.2);'
-                   'box-shadow:0 0 0 3px rgba(255,255,255,0.3);top:-4px;')
+            _ds = ('width:16px;height:16px;background:#F0A82E;'
+                   'border:3px solid #fff;'
+                   'box-shadow:0 0 0 2px #F0A82E;top:-4px;')
         elif _ach:
-            _ds = 'width:10px;height:10px;background:#fff;top:-2px;'
+            _ds = 'width:10px;height:10px;background:#F0A82E;top:-1px;'
         else:
-            _ds = ('width:10px;height:10px;background:rgba(255,255,255,0.2);'
-                   'border:1.5px solid rgba(255,255,255,0.4);top:-2px;')
+            _ds = ('width:10px;height:10px;background:#fff;'
+                   'border:1.5px solid #D1D5DB;top:-1px;')
         _dots += (f'<div style="position:absolute;left:{_p:.1f}%;transform:translateX(-50%);'
                   f'{_ds}border-radius:50%;z-index:2;"></div>')
-        _fw = "700" if _cur else "400"
-        _op = "1" if _ach else "0.45"
+        _fw = "700" if (_cur or _ach) else "500"
+        _col = "#2D323B" if _ach else "#6E737B"
         _lbls += (f'<div style="position:absolute;left:{_p:.1f}%;transform:translateX(-50%);'
-                  f'text-align:center;width:52px;margin-left:-26px;">'
-                  f'<div style="font-size:10px;font-weight:{_fw};color:rgba(255,255,255,{_op});white-space:nowrap;">'
+                  f'text-align:center;width:64px;margin-left:-32px;">'
+                  f'<div style="font-size:10px;font-weight:{_fw};color:{_col};white-space:nowrap;">'
                   f'{esc(_t["label"])}</div>'
-                  f'<div style="font-size:9px;color:rgba(255,255,255,0.45);">{_t["min_xp"]:,}</div>'
+                  f'<div style="font-size:9px;color:#9CA3AF;">{_t["min_xp"]:,}</div>'
                   f'</div>')
 
     if next_tier:
         xp_to_next = next_tier["min_xp"] - total
-        _next_note = (f'<div style="text-align:right;font-size:12px;color:rgba(255,255,255,0.8);margin-top:2px;">'
-                      f'{xp_to_next:,} AXP to {esc(next_tier["label"])}</div>')
+        _next_note = (f'<div style="display:flex;justify-content:space-between;align-items:center;'
+                      f'margin-top:10px;padding-top:10px;border-top:1px solid #E5E7EB;">'
+                      f'<span style="font-size:12px;font-weight:600;color:#2D323B;">{esc(tier_label)}</span>'
+                      f'<span style="font-size:12px;color:#6E737B;">'
+                      f'<strong style="color:#F0A82E;">{xp_to_next:,} AXP</strong> to {esc(next_tier["label"])}'
+                      f'</span></div>')
     else:
-        _next_note = '<div style="text-align:center;font-size:12px;color:rgba(255,255,255,0.85);margin-top:2px;">Maximum rank achieved — keep earning AXP!</div>'
+        _next_note = (f'<div style="text-align:center;margin-top:10px;padding-top:10px;'
+                      f'border-top:1px solid #E5E7EB;font-size:12px;font-weight:700;color:#1EBE8B;">'
+                      f'Maximum rank achieved — keep earning AXP!</div>')
 
     _journey = f"""
-      <div style="margin-top:18px;background:rgba(16,185,129,0.15);
-                  border:1.5px solid rgba(16,185,129,0.5);border-radius:14px;
-                  padding:14px 16px 6px;">
+      <div style="margin-top:18px;background:#FFFFFF;border-radius:14px;padding:16px 18px 14px;">
         <div style="font-size:11px;font-weight:700;text-transform:uppercase;
-                    letter-spacing:0.07em;color:#6EE7B7;margin-bottom:10px;">AXP Journey</div>
-        <div style="position:relative;padding-bottom:36px;">
-          <div style="position:relative;height:6px;background:rgba(255,255,255,0.2);border-radius:999px;">
-            <div style="width:{_fill:.1f}%;height:100%;background:#fff;border-radius:999px;
-                        position:absolute;top:0;left:0;transition:width 0.8s ease;"></div>
-            {_dots}
-          </div>
-          <div style="position:relative;height:32px;margin-top:9px;">
-            {_lbls}
+                    letter-spacing:0.07em;color:#2D323B;margin-bottom:14px;">AXP Journey</div>
+        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch;">
+          <div style="min-width:420px;position:relative;padding-bottom:36px;">
+            <div style="position:relative;height:8px;background:#E5E7EB;border-radius:999px;">
+              <div style="width:{_fill:.1f}%;height:100%;background:#F0A82E;border-radius:999px;
+                          position:absolute;top:0;left:0;"></div>
+              {_dots}
+            </div>
+            <div style="position:relative;height:34px;margin-top:8px;">
+              {_lbls}
+            </div>
           </div>
         </div>
         {_next_note}
