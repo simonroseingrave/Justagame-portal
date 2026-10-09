@@ -450,6 +450,22 @@ def init_db():
     conn.close()
 
 
+def init_db_migrations(conn):
+    """Run only the ALTER TABLE column migrations (safe to call at any time)."""
+    for sql in [
+        "ALTER TABLE resources ADD COLUMN card_slug TEXT",
+        "ALTER TABLE users ADD COLUMN onboarding_seen INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE session_events ADD COLUMN is_open INTEGER NOT NULL DEFAULT 0",
+        "ALTER TABLE session_events ADD COLUMN opened_at TEXT",
+        "ALTER TABLE participant_groups ADD COLUMN show_leaderboard INTEGER NOT NULL DEFAULT 0",
+    ]:
+        try:
+            conn.execute(sql)
+            conn.commit()
+        except Exception:
+            pass  # column already exists
+
+
 def _migrate_level_tables(conn):
     """Rebuild level_achievements and game_level_thresholds to add field_key column
     and update UNIQUE constraints to include it.

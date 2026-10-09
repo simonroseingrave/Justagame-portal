@@ -866,6 +866,112 @@ def reports_cohort_improvement(req):
     return Response(views.cohort_improvement_page(coach, by_level, label))
 
 
+@router.get("/coach/reports/round-list")
+def reports_round_list(req):
+    """Portal page: lists closed rounds for a group/org, links to individual round reports."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        group_id_raw = req.query.get("group_id", [""])[0].strip()
+        org_id_raw   = req.query.get("org_id",   [""])[0].strip()
+        group_id = int(group_id_raw) if group_id_raw.isdigit() else None
+        org_id   = int(org_id_raw)   if org_id_raw.isdigit()   else None
+
+        if group_id:
+            group = conn.execute("SELECT * FROM participant_groups WHERE id=?", (group_id,)).fetchone()
+            if not group:
+                return flash_redirect("/coach/reports", "Group not found.")
+            group_ids   = [group_id]
+            group_names = {group_id: group["name"]}
+            label       = group["name"]
+        elif org_id:
+            org = conn.execute("SELECT * FROM organisations WHERE id=?", (org_id,)).fetchone()
+            if not org:
+                return flash_redirect("/coach/reports", "Organisation not found.")
+            rows        = conn.execute("SELECT id, name FROM participant_groups WHERE organisation_id=?", (org_id,)).fetchall()
+            group_ids   = [r["id"] for r in rows]
+            group_names = {r["id"]: r["name"] for r in rows}
+            label       = org["name"]
+        else:
+            return flash_redirect("/coach/reports", "Please select a group or organisation.")
+
+        rounds_by_group = []
+        for gid in group_ids:
+            rounds = conn.execute(
+                """SELECT tr.id, tr.level, tr.round_type, tr.retest_sequence,
+                          tr.opened_at, tr.closed_at,
+                          (SELECT COUNT(DISTINCT rs.athlete_id)
+                           FROM round_scores rs WHERE rs.round_id = tr.id) AS participant_count
+                   FROM testing_rounds tr
+                   WHERE tr.group_id = ? AND tr.status = 'closed'
+                   ORDER BY tr.id DESC""",
+                (gid,),
+            ).fetchall()
+            if rounds:
+                rounds_by_group.append((group_names[gid], [dict(r) for r in rounds]))
+    finally:
+        conn.close()
+    return Response(views.round_list_page(coach, rounds_by_group, label))
+
+
+@router.get("/coach/reports/round/<round_id>")
+def reports_round_detail(req, round_id):
+    """Printable Testing Round Summary for a specific closed round."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    try:
+        round_id_int = int(round_id)
+    except (ValueError, TypeError):
+        return flash_redirect("/coach/reports", "Invalid round ID.")
+    conn = db.get_conn()
+    try:
+        data = db.get_round_report_data(conn, round_id_int)
+    finally:
+        conn.close()
+    if not data:
+        return flash_redirect("/coach/reports", "Round not found.")
+    return Response(views.round_report_page(coach, data))
+
+
+@router.get("/coach/reports/round-readiness")
+def reports_round_readiness(req):
+    """Printable Round Readiness — per-group testing history and next available steps."""
+    coach = require_staff(req)
+    if not coach:
+        return redirect("/login")
+    conn = db.get_conn()
+    try:
+        group_id_raw = req.query.get("group_id", [""])[0].strip()
+        org_id_raw   = req.query.get("org_id",   [""])[0].strip()
+        group_id = int(group_id_raw) if group_id_raw.isdigit() else None
+        org_id   = int(org_id_raw)   if org_id_raw.isdigit()   else None
+
+        if group_id:
+            group = conn.execute("SELECT * FROM participant_groups WHERE id=?", (group_id,)).fetchone()
+            if not group:
+                return flash_redirect("/coach/reports", "Group not found.")
+            group_ids = [group_id]
+            label     = group["name"]
+        elif org_id:
+            org = conn.execute("SELECT * FROM organisations WHERE id=?", (org_id,)).fetchone()
+            if not org:
+                return flash_redirect("/coach/reports", "Organisation not found.")
+            group_ids = [r["id"] for r in conn.execute(
+                "SELECT id FROM participant_groups WHERE organisation_id=?", (org_id,)
+            ).fetchall()]
+            label = org["name"]
+        else:
+            return flash_redirect("/coach/reports", "Please select a group or organisation.")
+
+        groups_data = db.get_round_readiness_data(conn, group_ids)
+    finally:
+        conn.close()
+    return Response(views.round_readiness_page(coach, groups_data, label))
+
+
 @router.get("/coach/reports/completion")
 def reports_completion(req):
     coach = require_staff(req)
@@ -3897,6 +4003,17 @@ def coach_participant_xp(req, participant_id):
     finally:
         conn.close()
     return Response(views.athlete_xp_page(dict(participant), xp_data, levels, coach=dict(coach)))
+
+
+@router.get("/coach/admin/run-migrations")
+def admin_run_migrations(req):
+    """One-off: run any pending DB column migrations and redirect back to hub."""
+    coach = require_system_admin(req)
+    if not coach:
+        return redirect("/login")
+    with db.get_conn() as conn:
+        db.init_db_migrations(conn)
+    return redirect("/coach/admin/hub?flash=Migrations+applied")
 
 
 @router.get("/coach/admin/hub")
