@@ -9904,31 +9904,6 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
       {_journey}
     </div>"""
 
-    # ── Level achievements grid ───────────────────────────────────────────────
-    level_chips = ""
-    for game_key, display in _GAME_DISPLAY_NAMES.items():
-        lvl = levels.get(game_key, 0)
-        bg, fg = _LEVEL_COLOURS.get(lvl, ("#E5E7EB", "#6E737B")) if lvl else ("#F3F4F5", "#9CA3AF")
-        label_text = f"L{lvl}" if lvl else "—"
-        level_chips += f"""
-        <div style="display:flex;align-items:center;justify-content:space-between;
-          padding:10px 14px;background:#fff;border-radius:10px;border:1px solid #E5E7EB;">
-          <span style="font-size:13px;color:#2D323B;font-weight:600;">{esc(display)}</span>
-          <span style="font-size:12px;font-weight:700;padding:3px 10px;border-radius:999px;
-            background:{bg};color:{fg};">{label_text}</span>
-        </div>"""
-
-    levels_section = f"""
-    <div style="margin-bottom:32px;">
-      <div style="display:flex;align-items:center;gap:0;margin-bottom:14px;">
-        <div style="width:3px;height:16px;background:#F0A82E;border-radius:2px;margin-right:10px;"></div>
-        <span style="font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:0.07em;color:#2D323B;">Level Achievements</span>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;">
-        {level_chips}
-      </div>
-    </div>"""
-
     # ── Recent XP events ──────────────────────────────────────────────────────
     rows = "".join(_xp_event_row(e, i) for i, e in enumerate(events))
     if not rows:
@@ -9964,7 +9939,6 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
     body = f"""
     <div class="container" style="max-width:860px;">
       {hero}
-      {levels_section}
       {events_section}
     </div>"""
 
