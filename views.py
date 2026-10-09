@@ -9725,7 +9725,6 @@ _XP_TYPE_LABELS = {
     "pb_self":            "Personal best (self-directed)",
     "ingame_formal":      "In-game score",
     "ingame_self":        "In-game score (self-directed)",
-    "level_achievement":  "Level achieved",
     "breadth_first_game": "First time playing",
     "welcome_bonus":      "Welcome bonus",
     "streak_3":           "3-session streak",
@@ -9911,6 +9910,9 @@ def athlete_xp_page(athlete, xp_data, levels, coach=None):
     </div>"""
 
     # ── Recent XP events ──────────────────────────────────────────────────────
+    # Filter out legacy level-system events (levels no longer exist)
+    _HIDDEN_XP_TYPES = {"level_achievement", "all_8_l1"}
+    events = [e for e in events if e.get("xp_type") not in _HIDDEN_XP_TYPES]
     rows = "".join(_xp_event_row(e, i) for i, e in enumerate(events))
     if not rows:
         rows = '<tr><td colspan="3" style="padding:20px;text-align:center;color:#9CA3AF;font-size:13px;">No AXP earned yet — complete a measurement session to get started.</td></tr>'
