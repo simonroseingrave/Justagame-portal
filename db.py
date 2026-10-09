@@ -9,6 +9,9 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATA_DIR = os.path.join(BASE_DIR, "data")
 DB_PATH = os.path.join(DATA_DIR, "justagame.db")
 
+# Run critical column migrations once per process on first connection
+_MIGRATIONS_APPLIED = False
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS organisations (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -281,10 +284,25 @@ CREATE TABLE IF NOT EXISTS round_xp_awards (
 
 
 def get_conn():
+    global _MIGRATIONS_APPLIED
     os.makedirs(DATA_DIR, exist_ok=True)
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = lambda cur, row: dict(zip([d[0] for d in cur.description], row))
     conn.execute("PRAGMA foreign_keys = ON")
+    if not _MIGRATIONS_APPLIED:
+        _MIGRATIONS_APPLIED = True
+        for sql in [
+            "ALTER TABLE resources ADD COLUMN card_slug TEXT",
+            "ALTER TABLE users ADD COLUMN onboarding_seen INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE session_events ADD COLUMN is_open INTEGER NOT NULL DEFAULT 0",
+            "ALTER TABLE session_events ADD COLUMN opened_at TEXT",
+            "ALTER TABLE participant_groups ADD COLUMN show_leaderboard INTEGER NOT NULL DEFAULT 0",
+        ]:
+            try:
+                conn.execute(sql)
+                conn.commit()
+            except Exception:
+                pass  # column already exists
     return conn
 
 
